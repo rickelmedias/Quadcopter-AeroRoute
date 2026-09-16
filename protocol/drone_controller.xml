@@ -1,0 +1,145 @@
+<?xml version="1.0"?>
+<mavlink>
+  <include>common.xml</include>
+  <dialect>201</dialect>
+
+  <enums>
+    <enum name="DRONE_ACTION">
+      <description>Atomic guidance action executed by the flight controller.</description>
+      <entry value="0" name="DRONE_ACTION_ROTATE_RELATIVE"/>
+      <entry value="1" name="DRONE_ACTION_TRANSLATE_RELATIVE"/>
+      <entry value="2" name="DRONE_ACTION_GOTO_LOCAL"/>
+      <entry value="3" name="DRONE_ACTION_TAKEOFF_RELATIVE"/>
+      <entry value="4" name="DRONE_ACTION_HOLD"/>
+      <entry value="5" name="DRONE_ACTION_LAND"/>
+    </enum>
+
+    <enum name="DRONE_FAILURE_REASON">
+      <description>Machine-readable reason for rejecting or failing a DroneLink operation.</description>
+      <entry value="0" name="DRONE_FAILURE_NONE"/>
+      <entry value="1" name="DRONE_FAILURE_BAD_STATE"/>
+      <entry value="2" name="DRONE_FAILURE_SENSOR_UNHEALTHY"/>
+      <entry value="3" name="DRONE_FAILURE_OUT_OF_BOUNDS"/>
+      <entry value="4" name="DRONE_FAILURE_BATTERY_LOW"/>
+      <entry value="5" name="DRONE_FAILURE_BUSY"/>
+      <entry value="6" name="DRONE_FAILURE_STALE_BOOT"/>
+      <entry value="7" name="DRONE_FAILURE_SEQUENCE_ERROR"/>
+      <entry value="8" name="DRONE_FAILURE_INVALID_NUMBER"/>
+      <entry value="9" name="DRONE_FAILURE_ID_COLLISION"/>
+      <entry value="10" name="DRONE_FAILURE_NOT_IMPLEMENTED"/>
+      <entry value="11" name="DRONE_FAILURE_OPERATOR_LEASE_LOST"/>
+      <entry value="12" name="DRONE_FAILURE_LINK_LOST"/>
+      <entry value="13" name="DRONE_FAILURE_TIMEOUT"/>
+      <entry value="14" name="DRONE_FAILURE_WRONG_TARGET"/>
+      <entry value="15" name="DRONE_FAILURE_CANCELLED"/>
+    </enum>
+
+    <enum name="DRONE_FLIGHT_STATE">
+      <description>Safety-relevant state of the STM32 flight controller.</description>
+      <entry value="0" name="DRONE_FLIGHT_STATE_BOOT"/>
+      <entry value="1" name="DRONE_FLIGHT_STATE_SELF_TEST"/>
+      <entry value="2" name="DRONE_FLIGHT_STATE_STANDBY"/>
+      <entry value="3" name="DRONE_FLIGHT_STATE_PREARM"/>
+      <entry value="4" name="DRONE_FLIGHT_STATE_ARMED"/>
+      <entry value="5" name="DRONE_FLIGHT_STATE_TAKEOFF"/>
+      <entry value="6" name="DRONE_FLIGHT_STATE_HOLD"/>
+      <entry value="7" name="DRONE_FLIGHT_STATE_EXECUTING_LEG"/>
+      <entry value="8" name="DRONE_FLIGHT_STATE_LAND"/>
+      <entry value="9" name="DRONE_FLIGHT_STATE_FAILSAFE"/>
+      <entry value="10" name="DRONE_FLIGHT_STATE_FLIGHT_TERMINATION"/>
+    </enum>
+
+    <enum name="DRONE_PROTOCOL_CAPABILITY" bitmask="true">
+      <description>Capabilities implemented by a DroneLink flight controller.</description>
+      <entry value="1" name="DRONE_PROTOCOL_CAPABILITY_MAVLINK2"/>
+      <entry value="2" name="DRONE_PROTOCOL_CAPABILITY_TRANSACTIONAL_LEGS"/>
+      <entry value="4" name="DRONE_PROTOCOL_CAPABILITY_OPERATOR_LEASE"/>
+      <entry value="8" name="DRONE_PROTOCOL_CAPABILITY_PERSISTENT_BOOT_ID"/>
+      <entry value="16" name="DRONE_PROTOCOL_CAPABILITY_LOCAL_POSITION"/>
+      <entry value="32" name="DRONE_PROTOCOL_CAPABILITY_ACTUATION"/>
+    </enum>
+
+    <enum name="DRONE_LEG_FLAG" bitmask="true">
+      <description>Optional behavior flags for a guidance leg.</description>
+      <entry value="1" name="DRONE_LEG_FLAG_REQUIRE_OPERATOR_LEASE"/>
+    </enum>
+
+    <enum name="DRONE_LEASE_FLAG" bitmask="true">
+      <description>State carried by the operator control lease.</description>
+      <entry value="1" name="DRONE_LEASE_FLAG_ACTIVE"/>
+    </enum>
+  </enums>
+
+  <messages>
+    <message id="51000" name="DRONE_PROTOCOL_INFO">
+      <description>DroneLink version, boot identity, capabilities and current flight state.</description>
+      <field type="uint32_t" name="boot_id">Monotonic STM32 boot identity. Zero is invalid for movement.</field>
+      <field type="uint32_t" name="capabilities" enum="DRONE_PROTOCOL_CAPABILITY">Implemented capabilities.</field>
+      <field type="uint32_t" name="max_leg_timeout_ms" units="ms">Largest accepted leg timeout.</field>
+      <field type="uint8_t" name="protocol_major">DroneLink major version.</field>
+      <field type="uint8_t" name="protocol_minor">DroneLink minor version.</field>
+      <field type="uint8_t" name="flight_state" enum="DRONE_FLIGHT_STATE">Current flight state.</field>
+      <field type="uint8_t" name="target_system">Intended recipient system, zero for broadcast.</field>
+      <field type="uint8_t" name="target_component">Intended recipient component, zero for broadcast.</field>
+    </message>
+
+    <message id="51001" name="DRONE_LEG_COMMAND">
+      <description>Idempotent request to execute one bounded guidance leg.</description>
+      <field type="uint32_t" name="boot_id">Expected STM32 boot identity.</field>
+      <field type="uint32_t" name="mission_id">Persistent mission identity.</field>
+      <field type="uint32_t" name="command_id">Monotonic command identity within the mission.</field>
+      <field type="uint32_t" name="timeout_ms" units="ms">Absolute execution timeout.</field>
+      <field type="float" name="x" units="m">X objective in the selected frame.</field>
+      <field type="float" name="y" units="m">Y objective in the selected frame.</field>
+      <field type="float" name="z" units="m">Z objective in the selected frame.</field>
+      <field type="float" name="yaw" units="rad">Yaw objective or relative delta.</field>
+      <field type="float" name="speed" units="m/s">Maximum translational speed.</field>
+      <field type="float" name="acceleration" units="m/s/s">Maximum translational acceleration.</field>
+      <field type="float" name="position_tolerance" units="m">Position completion tolerance.</field>
+      <field type="float" name="yaw_tolerance" units="rad">Yaw completion tolerance.</field>
+      <field type="uint16_t" name="leg_index">Monotonic leg index in the compiled route.</field>
+      <field type="uint16_t" name="flags" enum="DRONE_LEG_FLAG">Requested behavior flags.</field>
+      <field type="uint8_t" name="action" enum="DRONE_ACTION">Guidance action.</field>
+      <field type="uint8_t" name="frame" enum="MAV_FRAME">Coordinate frame.</field>
+      <field type="uint8_t" name="target_system">System that must execute the command.</field>
+      <field type="uint8_t" name="target_component">Component that must execute the command.</field>
+    </message>
+
+    <message id="51002" name="DRONE_LEG_ACK">
+      <description>Application acknowledgement and progress for one exact leg transaction.</description>
+      <field type="uint32_t" name="boot_id">STM32 boot identity echoed from the command.</field>
+      <field type="uint32_t" name="mission_id">Mission identity echoed from the command.</field>
+      <field type="uint32_t" name="command_id">Command identity echoed from the command.</field>
+      <field type="uint32_t" name="eta_ms" units="ms">Estimated remaining execution time, UINT32_MAX if unknown.</field>
+      <field type="float" name="remaining_distance" units="m">Estimated remaining distance, NaN if unknown.</field>
+      <field type="uint16_t" name="leg_index">Leg index echoed from the command.</field>
+      <field type="uint16_t" name="reason" enum="DRONE_FAILURE_REASON">Failure or rejection reason.</field>
+      <field type="uint8_t" name="result" enum="MAV_RESULT">Command result.</field>
+      <field type="uint8_t" name="progress" units="%">Progress from 0 to 100, 255 if unknown.</field>
+      <field type="uint8_t" name="flight_state" enum="DRONE_FLIGHT_STATE">Current flight state.</field>
+      <field type="uint8_t" name="target_system">Intended recipient system.</field>
+      <field type="uint8_t" name="target_component">Intended recipient component.</field>
+    </message>
+
+    <message id="51003" name="DRONE_LEG_CANCEL">
+      <description>Idempotent cancellation of one exact leg transaction.</description>
+      <field type="uint32_t" name="boot_id">Expected STM32 boot identity.</field>
+      <field type="uint32_t" name="mission_id">Mission identity.</field>
+      <field type="uint32_t" name="command_id">Command identity being cancelled.</field>
+      <field type="uint16_t" name="leg_index">Leg index being cancelled.</field>
+      <field type="uint8_t" name="target_system">System that must process the cancellation.</field>
+      <field type="uint8_t" name="target_component">Component that must process the cancellation.</field>
+    </message>
+
+    <message id="51004" name="DRONE_CONTROL_LEASE">
+      <description>Renewable authorization proving that an operator session supervises the mission.</description>
+      <field type="uint32_t" name="boot_id">STM32 boot identity observed by the Pi.</field>
+      <field type="uint32_t" name="mission_id">Mission currently supervised, zero when none.</field>
+      <field type="uint32_t" name="lease_id">Identity changed whenever a new operator lease is acquired.</field>
+      <field type="uint16_t" name="timeout_ms" units="ms">Validity measured from local receipt time.</field>
+      <field type="uint8_t" name="flags" enum="DRONE_LEASE_FLAG">Lease state flags.</field>
+      <field type="uint8_t" name="target_system">System that validates the lease.</field>
+      <field type="uint8_t" name="target_component">Component that validates the lease.</field>
+    </message>
+  </messages>
+</mavlink>

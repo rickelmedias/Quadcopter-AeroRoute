@@ -1,0 +1,62 @@
+# Saídas de compilação -------------------------------------------------------
+# O CubeIDE recria Debug/ e Release/. tools/build.py recria build/.
+/Debug/
+/Release/
+/build/
+
+# Dependências e artefatos locais de Python ---------------------------------
+__pycache__/
+*.py[cod]
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Ensaios locais -------------------------------------------------------------
+# Capturas binárias e CSVs são grandes e podem conter dados ainda não
+# revisados. Publique ensaios escolhidos como artefatos de uma Release.
+/captures/*
+!/captures/README.md
+
+# Conversas completas usadas como referência são arquivos locais. Os
+# documentos consolidados e revisados continuam em docs/.
+/docs/references/*
+!/docs/references/README.md
+
+# Arquivos temporários de revisão e saídas de bancada -----------------------
+/tmp/
+/logs/
+*.log
+*.trace
+*.tmp
+*.temp
+*.bak
+*.orig
+*.rej
+*~
+
+# Configurações locais de IDE e sistema operacional -------------------------
+# .project, .cproject, .mxproject e .settings/ são mantidos no Git porque são
+# necessários para importar o projeto de forma consistente no CubeIDE. O
+# detector de toolchain abaixo contém cache específico da instalação local.
+.settings/language.settings.xml
+*.launch
+.metadata/
+.idea/
+.vscode/
+.vs/
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Relatórios intermediários que podem aparecer fora das pastas de build -----
+*.o
+*.obj
+*.d
+*.su
+*.cyclo
+*.gcda
+*.gcno
+*.gcov
