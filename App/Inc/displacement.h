@@ -71,6 +71,15 @@ typedef struct {
   uint32_t samples;
   /** Frames rejeitados pelos filtros de validade; sempre 0 no estimador RAW. */
   uint32_t rejected;
+  /** Meia largura da célula de quantização da velocidade, por eixo do
+      referencial local. Zero quando o eixo não veio quantizado como zero. */
+  float quant_half_width[2];
+  /** Yaw que define o referencial local desde o primeiro frame aceito. */
+  float yaw_origin;
+  /** O referencial local já foi ancorado. */
+  bool yaw_origin_set;
+  /** Estado da histerese de qualidade da imagem. */
+  bool quality_usable;
 } disp_state_t;
 
 /**
@@ -88,6 +97,8 @@ typedef struct {
   float gyro_x;
   /** Velocidade angular Y do corpo, em rad/s, no mesmo instante. */
   float gyro_y;
+  /** Velocidade angular Z média do corpo, em rad/s, no mesmo intervalo. */
+  float gyro_z;
   /** Atitude w,x,y,z no mesmo instante. */
   float q[4];
   /** Distância medida no eixo do sensor, em m. */
@@ -110,6 +121,11 @@ typedef struct {
  * 168 mm/s, e movimentos mais lentos que isso ficam praticamente invisíveis.
  */
 #define DISP_FLOW_LSB_RAD_S 0.2F
+
+/** Atraso inicial entre o intervalo óptico e a recepção do frame. Nas duas
+ * capturas reais, 10 ms eliminou falhas de cobertura BNO que ocorriam usando
+ * o instante de execução da task. Deve ser recalibrado com captura dedicada. */
+#define DISP_MTF_DELAY_US 10000U
 
 /**
  * @brief Maior aceleração horizontal que um frame pode sugerir antes de ser
@@ -207,6 +223,10 @@ typedef struct {
   float flow_scale_x;
   /** Correção de escala do eixo Y (1.0 = nenhuma). */
   float flow_scale_y;
+  /** Termos fora da diagonal da matriz de alinhamento 2x2. Zero mantém a
+      calibração diagonal histórica. */
+  float flow_cross_xy;
+  float flow_cross_yx;
   /**
    * Sinal do termo do giroscópio no eixo X: +1 ou -1.
    *
@@ -231,6 +251,8 @@ typedef struct {
    * zero que o sensor reportou. Mantida só para experimentos.
    */
   float deadband_rad_s;
+  /** Posição do ponto focal do MTF em relação ao centro do veículo, em m. */
+  float sensor_offset_m[3];
 } disp_config_t;
 
 /**
@@ -251,10 +273,10 @@ void disp_raw_update(disp_state_t *s, const disp_input_t *in, const disp_config_
  *        integra no referencial do mundo.
  *
  * Rejeita o frame (e soma em @c rejected) se: @c range_valid for falso,
- * qualidade menor que 20, inclinação maior que ~37 graus, distância fora de
+ * qualidade não passar pela histerese 30/15, inclinação maior que ~37 graus, distância fora de
  * 0,08..8 m, @c dt_s fora de 0,001..0,25 s, ou fluxo não finito ou acima de
- * 4,2 rad/s. Num eixo em que o fluxo bruto foi quantizado a zero, a
- * translação é considerada zero.
+ * 4,2 rad/s. A meia célula de quantização é publicada para o EKF aumentar a
+ * incerteza da medida sem criar uma zona morta de correção.
  *
  * @param[in,out] s    Estado acumulado.
  * @param[in]     in   Frame de entrada.
@@ -309,6 +331,12 @@ typedef struct {
       sensor) ou o intervalo era longo demais para integrar. Contagem
       subindo indica enlace ruim com o sensor, não movimento. */
   uint32_t clock_resyncs;
+  /** Frames descartados porque o histórico do BNO não cobria o intervalo. */
+  uint32_t imu_alignment_rejects;
+  /** Leituras de alcance rejeitadas pelo filtro. */
+  uint32_t range_rejects;
+  /** Mudanças persistentes de alcance aceitas como um novo patamar. */
+  uint32_t range_reanchors;
   /** O único indicador em que um controlador deve se basear. Igual a
       disp_health(...) == ::DISP_HEALTH_OK. */
   bool valid;
@@ -383,6 +411,12 @@ void displacement_reset(void);
  * @param[in] scale_y  Fator do eixo Y; valores não finitos ou <= 0 são ignorados.
  */
 void displacement_set_flow_scale(float scale_x, float scale_y);
+
+/** Define a matriz 2x2 sensor->corpo: [xx xy; yx yy]. */
+void displacement_set_flow_matrix(float xx, float xy, float yx, float yy);
+
+/** Define o braço do ponto focal do MTF em relação ao centro do veículo. */
+void displacement_set_sensor_offset(float x_m, float y_m, float z_m);
 
 /**
  * @brief Lê a correção de escala do eixo X em uso.

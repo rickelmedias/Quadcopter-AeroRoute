@@ -166,4 +166,16 @@ void flow_ekf_predict(flow_ekf_t *f, float ax, float ay, float dt,
  */
 bool flow_ekf_update(flow_ekf_t *f, float vx, float vy, float range_m,
                      const flow_ekf_config_t *cfg);
+
+/** Correção com célula de quantização por eixo.
+ *
+ * A meia largura soma variância uniforme (h²/3) à medida, sem criar uma zona
+ * morta de inovação. @p quality é mantido no contrato e na captura, mas só o
+ * gate com histerese do estimador o usa enquanto não houver calibração que
+ * relacione a escala 0..255 a uma variância física.
+ */
+bool flow_ekf_update_observation(flow_ekf_t *f, float vx, float vy,
+                                 float range_m, uint8_t quality,
+                                 float half_width_x, float half_width_y,
+                                 const flow_ekf_config_t *cfg);
 #endif

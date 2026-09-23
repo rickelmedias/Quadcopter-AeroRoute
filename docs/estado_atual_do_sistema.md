@@ -391,10 +391,10 @@ banda de USB.
 | `LOG_BNO_STATUS` | 0 | online, fault, endereço, firmware, `probe_ms`, resets |
 | `LOG_BNO_DATA` | 0 | quatérnio, giroscópio, aceleração linear, contadores por relatório |
 | `LOG_MTF` | 0 | fluxo bruto, alcance, contadores de frame/CRC/UART |
-| `LOG_ATTITUDE` | 1 | ângulos de Euler e quatérnio |
-| `LOG_HEIGHT` | 1 | alcance, altura corrigida por inclinação, `v_lsb_mm_s` |
-| `LOG_POSITION` | 1 | deslocamento acumulado dos três estimadores |
-| `LOG_POSITION_D` | 1 | incremento por frame, velocidades, saúde do filtro |
+| `LOG_ATTITUDE` | 0 | ângulos de Euler e quatérnio |
+| `LOG_HEIGHT` | 0 | alcance, altura corrigida por inclinação, `v_lsb_mm_s` |
+| `LOG_POSITION` | 1 | `DESLOCAMENTO_MM x,y` do EKF com validade e contadores de rejeição |
+| `LOG_POSITION_D` | 0 | incremento por frame, velocidades, saúde do filtro |
 | `LOG_CALIBRATION` | 0 | progresso do calibrador (usar com `DISP_CALIBRATE_FLOW`) |
 | `LOG_SYS` | 0 | heap livre, descartes de link e de log |
 

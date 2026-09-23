@@ -38,7 +38,9 @@ import tempfile
 #: Raiz do projeto.
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 #: Fontes de estimação ligados ao gerador e ao replay.
-ESTIMATOR_SRC = ['App/Src/disp_estimator.c', 'App/Src/flow_ekf.c', 'App/Src/attitude.c']
+ESTIMATOR_SRC = ['App/Src/disp_estimator.c', 'App/Src/flow_ekf.c', 'App/Src/attitude.c',
+                 'App/Src/bno_history.c']
+ESTIMATOR_SRC.append('App/Src/range_filter.c')
 #: Opções de compilação (com ASan/UBSan).
 CFLAGS = ['-std=c11', '-Wall', '-Wextra', '-Werror', '-fsanitize=address,undefined',
           '-fno-omit-frame-pointer', '-IApp/Inc']

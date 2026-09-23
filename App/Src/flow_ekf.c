@@ -168,8 +168,10 @@ static void fuse_axis(flow_ekf_axis_t *a, float innov, float R) {
 }
 
 /** @brief Etapa de correção (ver flow_ekf.h). */
-bool flow_ekf_update(flow_ekf_t *f, float vx, float vy, float range_m,
-                     const flow_ekf_config_t *cfg) {
+bool flow_ekf_update_observation(flow_ekf_t *f, float vx, float vy,
+                                 float range_m, uint8_t quality,
+                                 float half_width_x, float half_width_y,
+                                 const flow_ekf_config_t *cfg) {
   ensure_initialized(f);
   if (!isfinite(vx) || !isfinite(vy) || !isfinite(range_m) || range_m <= 0.0F) {
     ++f->rejected;
@@ -177,13 +179,23 @@ bool flow_ekf_update(flow_ekf_t *f, float vx, float vy, float range_m,
   }
   /* O mesmo erro angular é um erro de velocidade maior quanto mais alto se
      está, então o ruído da medida precisa crescer com a distância. */
+  /* A qualidade continua sendo usada pelo gate com histerese antes de esta
+     função. Ainda não há calibração que converta o número 0..255 do MTF em
+     variância; escalá-la por 1/sqrt(quality) piorou as capturas reais. */
+  (void)quality;
   const float sigma = cfg->flow_noise_rad_s * range_m;
-  const float R = sigma*sigma;
 
   const float z[2] = {vx, vy};
   float ratio[2];
+  const float half[2]={fmaxf(half_width_x,0.0F),fmaxf(half_width_y,0.0F)};
+  float R_axis[2];
   for (int i = 0; i < 2; ++i) {
-    ratio[i] = axis_test_ratio(&f->axis[i], z[i], R, cfg->gate_sigma, &f->innov[i]);
+    /* A quantização aumenta a incerteza, mas a leitura continua centrada em
+       z. Tratar toda a célula como zona de inovação zero deixa pequenos
+       vieses do acelerômetro integrarem livremente; em uma captura parada
+       isso transformou 3,8 mm em 763 mm de deriva. */
+    R_axis[i]=sigma*sigma+half[i]*half[i]/3.0F;
+    ratio[i] = axis_test_ratio(&f->axis[i], z[i], R_axis[i], cfg->gate_sigma, &f->innov[i]);
     f->test_ratio[i] = ratio[i];
   }
 
@@ -196,7 +208,7 @@ bool flow_ekf_update(flow_ekf_t *f, float vx, float vy, float range_m,
     /* Discordância persistente: acreditar no sensor, não em nós mesmos. */
     for (int i = 0; i < 2; ++i) {
       f->axis[i].v = z[i];
-      f->axis[i].P11 = R;
+      f->axis[i].P11 = R_axis[i];
       f->axis[i].P01 = 0.0F;
     }
     f->reject_run = 0;
@@ -205,8 +217,13 @@ bool flow_ekf_update(flow_ekf_t *f, float vx, float vy, float range_m,
     return true;
   }
   f->reject_run = 0;
-  for (int i = 0; i < 2; ++i) fuse_axis(&f->axis[i], f->innov[i], R);
+  for (int i = 0; i < 2; ++i) fuse_axis(&f->axis[i], f->innov[i], R_axis[i]);
   ++f->updates;
   update_converged(f);
   return true;
+}
+
+bool flow_ekf_update(flow_ekf_t *f,float vx,float vy,float range_m,
+                     const flow_ekf_config_t *cfg) {
+  return flow_ekf_update_observation(f,vx,vy,range_m,255U,0.0F,0.0F,cfg);
 }

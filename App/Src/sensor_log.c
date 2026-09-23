@@ -124,14 +124,17 @@ static void log_task(void *argument) {
 #endif
 
 #if LOG_POSITION
-    APPEND("POS raw_mm=%ld,%ld fused_mm=%ld,%ld ekf_mm=%ld,%ld n=%lu,%lu rej=%lu valid=%u health=%u age_ms=%lu corr_age_ms=%lu resync=%lu\r\n",
-      (long)(d.raw.x*1000), (long)(d.raw.y*1000),
-      (long)(d.fused.x*1000), (long)(d.fused.y*1000),
+    /* Uma única linha continua simples de acompanhar, mas não esconde por que
+       a posição parou: valid/health, idade, alinhamento e alcance permitem
+       distinguir repouso de sensor rejeitado. */
+    APPEND("DESLOCAMENTO_MM %ld,%ld height_mm=%ld valid=%u health=%u corr_age=%lu "
+           "imu_align_rej=%lu range_rej=%lu range_reanchor=%lu ekf_rej=%lu\r\n",
       (long)(d.ekf.axis[0].p*1000), (long)(d.ekf.axis[1].p*1000),
-      (unsigned long)d.raw.samples, (unsigned long)d.fused.samples,
-      (unsigned long)d.fused.rejected,
-      d.valid, (unsigned)d.health, (unsigned long)d.age_ms,
-      (unsigned long)d.correction_age_ms, (unsigned long)d.clock_resyncs);
+      (long)(d.height_m*1000), d.valid, (unsigned)d.health,
+      (unsigned long)d.correction_age_ms,
+      (unsigned long)d.imu_alignment_rejects,
+      (unsigned long)d.range_rejects, (unsigned long)d.range_reanchors,
+      (unsigned long)d.ekf.rejected);
 #endif
 
 #if LOG_POSITION_D

@@ -557,18 +557,20 @@ grave. Um grupo desligado é compilado fora: não gasta CPU nem banda de USB.
 #define LOG_BNO_STATUS  0 /* online, fault, address, firmware, probe_ms, resets   */
 #define LOG_BNO_DATA    0 /* quaternion, gyro, accel, per-report counters and gaps */
 #define LOG_MTF         0 /* raw flow, range, frame/CRC/UART counters              */
-#define LOG_ATTITUDE    1 /* euler angles and quaternion - yaw drives the fused path */
-#define LOG_HEIGHT      1 /* range along the sensor axis and tilt-corrected height */
-#define LOG_POSITION    1 /* accumulated displacement, all three estimators        */
-#define LOG_POSITION_D  1 /* per-frame increment, velocities, and filter health    */
+#define LOG_ATTITUDE    0 /* ângulos de Euler e quatérnio                           */
+#define LOG_HEIGHT      0 /* alcance e altura corrigida pela inclinação             */
+#define LOG_POSITION    1 /* DESLOCAMENTO_MM x,y do EKF e diagnóstico compacto       */
+#define LOG_POSITION_D  0 /* incremento por frame, velocidades e saúde do filtro    */
 #define LOG_CALIBRATION 0 /* flow_calibrator.h live progress - see DISP_CALIBRATE_FLOW below */
 #define LOG_SYS         0 /* free heap, link drops, dropped log lines              */
 ```
 
-O padrão atual é o perfil de ensaio de deslocamento: atitude, altura e posição
-(cru/fundido/EKF). `LOG_CALIBRATION` só faz sentido junto com
-`DISP_CALIBRATE_FLOW` - ver "Calibrar a escala do fluxo contra o giroscopio"
-acima.
+O padrão atual é o perfil visual simples de deslocamento: somente
+`LOG_POSITION`, que imprime `DESLOCAMENTO_MM x,y` a partir do EKF, seguido de
+validade, idade e contadores de rejeição na mesma linha.
+Atitude, altura, incrementos e diagnósticos continuam disponíveis pelas outras
+chaves. `LOG_CALIBRATION` só faz sentido junto com `DISP_CALIBRATE_FLOW` - ver
+"Calibrar a escala do fluxo contra o giroscopio" acima.
 
 Com todos os grupos ligados a linha chega a 1656 bytes no pior caso, contra um
 buffer de 2048. Se você adicionar campos, confira essa margem: o log é um
@@ -577,7 +579,10 @@ buffer de 2048. Se você adicionar campos, confira essa margem: o log é um
 ### Interpretar a saída
 
 - `HEIGHT range_mm`: alcance bruto no eixo do sensor. `height_mm` é o mesmo valor corrigido pela inclinação (`range * cos(tilt)`), que é a altura real. Os dois só coincidem com a placa nivelada; `tilt_mdeg` mostra rolagem e arfagem em milidegraus.
-- `POS raw_mm` / `fused_mm`: deslocamento acumulado em X,Y. `raw` é o método cru (sem compensação), `fused` é o compensado. `n=a,b` são as amostras integradas por cada um e `rej` as rejeitadas pelos gates.
+- `DESLOCAMENTO_MM x,y`: deslocamento horizontal acumulado pelo EKF
+  FUSED, em milímetros. Começa em `0,0` a cada boot; X e Y seguem a orientação
+  física do sensor. Os campos comparativos RAW/EKF só aparecem na captura ou
+  quando um perfil de diagnóstico próprio é habilitado.
 - `POS_D raw_d_um` / `fused_d_um`: **o incremento que o último quadro somou** ao acumulado, em micrômetros (é pequeno: 5 mm/quadro já é 5000). `*_v_mm_s` é a velocidade instantânea e `dt_ms` o intervalo daquele quadro. Multiplicar velocidade por `dt` reproduz o incremento.
 - `CAL scalar_x1000`: fator de correção que `displacement_set_flow_scale()` aplicaria agora, ×1000. Só significa algo com `running=1` e `valid=1`; ver "Calibrar a escala do fluxo contra o giroscopio" para o procedimento completo.
 - `BNO online=1`: os três reports chegaram recentemente. `acc` informa qualidade 0..3 por report, separada da presença de dados; online não significa calibração suficiente para voo.

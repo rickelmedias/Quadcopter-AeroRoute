@@ -99,6 +99,7 @@ static void mtf_task(void *argument) {
          este é o único lugar que vê todos os frames, com o relógio do sensor
          ainda separado do nosso tick de recepção. */
       if (mtf_parser_byte(&parser, bytes[i], HAL_GetTick())) {
+        parser.sample.received_us = HAL_GetTick()*1000U;
         capture_mtf(parser.sample.flow_x, parser.sample.flow_y,
                     parser.sample.distance_mm, parser.sample.quality,
                     parser.sample.distance_status, parser.sample.strength,

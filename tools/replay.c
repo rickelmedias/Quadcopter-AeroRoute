@@ -45,6 +45,8 @@
 #include "displacement.h"
 #include "flow_ekf.h"
 #include "attitude.h"
+#include "bno_history.h"
+#include "range_filter.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -145,6 +147,8 @@ typedef struct {
   uint32_t distance_mm;
   /** Relógio do sensor no frame observado, em ms. */
   uint32_t sensor_ms;
+  /** Horário de recepção do frame MTF no STM32, em us. */
+  uint32_t received_us;
   /** ID do frame observado. */
   uint32_t frames;
   /** Distância válida na observação. */
@@ -175,6 +179,7 @@ typedef struct {
   disp_state_t fused;
   /** Filtro de Kalman (mesmo tipo do firmware). */
   flow_ekf_t ekf;
+  range_filter_t range_filter;
   /** Calibração lida da SESSION. */
   disp_config_t cfg;
   /** Parâmetros do filtro lidos da SESSION. */
@@ -201,6 +206,8 @@ typedef struct {
   uint32_t id;
   /** Relógio do sensor, em ms. */
   uint32_t sensor_ms;
+  /** Horário do registro MTF, equivalente a mtf_sample_t.received_us. */
+  uint32_t received_us;
   /** Distância, em mm. */
   uint32_t distance_mm;
   /** Fluxo X, em cm/s a 1 m. */
@@ -225,12 +232,16 @@ typedef struct {
   uint32_t id;
   /** Os quatro valores gravados. */
   float v[4];
-} bno_history_t;
+  /** Timestamp SH-2 na linha de tempo do STM32. */
+  uint32_t time_us;
+} captured_bno_history_t;
 
 /** Histórico de frames do MTF, indexado por ID módulo ::HISTORY. */
 static mtf_history_t mtf_history[HISTORY];
 /** Históricos do BNO (rotação, giro, aceleração), indexados por ID. */
-static bno_history_t bno_history[3][HISTORY];
+static captured_bno_history_t captured_bno[3][HISTORY];
+/** Mesmo histórico temporal puro usado pelo firmware. */
+static bno_history_t imu_history;
 /** Uma observação com intervalo utilizável aguarda o seu STEP. */
 static bool observation_pending;
 /** ID do frame da observação pendente. */
@@ -249,7 +260,7 @@ static uint32_t observation_gap;
  */
 static bool select_bno(unsigned kind, uint32_t id, float *out, unsigned n) {
   if (!id) { for (unsigned i=0; i<n; ++i) out[i]=0; return true; }
-  const bno_history_t *h = &bno_history[kind][id % HISTORY];
+  const captured_bno_history_t *h = &captured_bno[kind][id % HISTORY];
   if (!h->present || h->id != id) return false;
   for (unsigned i=0; i<n; ++i) out[i]=h->v[i];
   return true;
@@ -271,6 +282,8 @@ typedef struct {
   float worst;
   /** Nome do campo com o maior desvio. */
   const char *worst_field;
+  /** Passos sem cobertura temporal suficiente no histórico do BNO. */
+  unsigned alignment_fail;
 } tally_t;
 
 /**
@@ -308,7 +321,8 @@ static void note(tally_t *t, const char *field, float got, float want) {
  * @param t    Contadores.
  * @param seq  Número de sequência do registro, para as mensagens.
  */
-static void do_step(replay_t *s, rd_t *r, tally_t *t, uint16_t seq) {
+static void do_step(replay_t *s, rd_t *r, tally_t *t, uint16_t seq,
+                    uint32_t step_ms) {
   const uint32_t used_frames = rd_u32(r);
   const uint32_t used_rot = rd_u32(r), used_gyro = rd_u32(r), used_accel = rd_u32(r);
   const float rec_dt = rd_f32(r);
@@ -340,6 +354,24 @@ static void do_step(replay_t *s, rd_t *r, tally_t *t, uint16_t seq) {
   }
   observation_pending = false;
 
+  /* O STEP identifica as amostras disponíveis, mas o valor consumido agora é
+     a associação temporal calculada com o mesmo histórico do firmware. */
+  bno_aligned_sample_t aligned;
+  (void)step_ms;
+  const bool imu_aligned = imu_online && bno_history_align(
+      &imu_history, s->received_us-DISP_MTF_DELAY_US,
+      observation_gap*1000U, &aligned);
+  if (!imu_aligned) ++t->alignment_fail;
+  if (imu_aligned) {
+    memcpy(s->q, aligned.q, sizeof aligned.q);
+    memcpy(s->gyro, aligned.gyro, sizeof aligned.gyro);
+    memcpy(s->lin_accel, aligned.accel, sizeof aligned.accel);
+  } else {
+    memset(s->q, 0, sizeof s->q);
+    memset(s->gyro, 0, sizeof s->gyro);
+    memset(s->lin_accel, 0, sizeof s->lin_accel);
+  }
+
   /* Mesma montagem de App/Src/displacement.c, campo a campo. */
   const uint32_t gap_ms = observation_gap;
   disp_input_t in = {0};
@@ -347,23 +379,31 @@ static void do_step(replay_t *s, rd_t *r, tally_t *t, uint16_t seq) {
   in.flow_y = (float)s->flow_y * FLOW_CM_S_AT_1M_TO_RAD_S;
   in.gyro_x = s->gyro[0];
   in.gyro_y = s->gyro[1];
+  in.gyro_z = s->gyro[2];
   for (int i = 0; i < 4; ++i) in.q[i] = s->q[i];
-  in.range_m = (float)s->distance_mm * 0.001F;
   in.dt_s = (float)gap_ms * 0.001F;
+  float filtered_range=0.0F;
+  const bool range_filtered=range_filter_update(&s->range_filter,
+      (float)s->distance_mm*0.001F,in.dt_s,s->range_valid,&filtered_range);
+  in.range_m=range_filtered?filtered_range:(float)s->distance_mm*0.001F;
   in.quality = s->quality;
-  in.range_valid = s->range_valid && s->flow_valid && imu_online;
+  in.range_valid = range_filtered && s->flow_valid && imu_aligned;
 
   note(t, "dt_s", in.dt_s, rec_dt);
 
   disp_raw_update(&s->raw, &in, &s->cfg);
   const bool fused_ok = disp_fused_update(&s->fused, &in, &s->cfg);
 
-  float accel_world[2] = {0.0F, 0.0F};
-  if (imu_online) attitude_rotate_to_world(in.q, s->lin_accel, accel_world);
-  flow_ekf_predict(&s->ekf, accel_world[0], accel_world[1], in.dt_s, &s->ekf_cfg);
+  float accel_local[2] = {0.0F, 0.0F};
+  if (imu_aligned && s->fused.yaw_origin_set)
+    attitude_rotate_to_local(in.q, s->fused.yaw_origin,
+                             s->lin_accel, accel_local);
+  flow_ekf_predict(&s->ekf, accel_local[0], accel_local[1], in.dt_s, &s->ekf_cfg);
   bool ekf_ok = false;
-  if (fused_ok && flow_ekf_update(&s->ekf, s->fused.vx, s->fused.vy,
-                                  in.range_m, &s->ekf_cfg)) {
+  if (fused_ok && flow_ekf_update_observation(
+      &s->ekf, s->fused.vx, s->fused.vy, in.range_m, in.quality,
+      s->fused.quant_half_width[0], s->fused.quant_half_width[1],
+      &s->ekf_cfg)) {
     ekf_ok = true;
   }
 
@@ -441,6 +481,9 @@ int main(int argc, char **argv) {
     const uint16_t seq = (uint16_t)(blob[p + 3] | (blob[p + 4] << 8));
     if (last_seq >= 0 && (uint16_t)(seq - (uint16_t)last_seq) != 1U) ++seq_gaps;
     last_seq = seq;
+    const uint32_t record_ms = (uint32_t)blob[p+5] |
+        (uint32_t)blob[p+6]<<8 | (uint32_t)blob[p+7]<<16 |
+        (uint32_t)blob[p+8]<<24;
 
     rd_t r = { blob + p + CAP_HEADER_BYTES, len, 0, false };
     switch (type) {
@@ -500,7 +543,8 @@ int main(int argc, char **argv) {
         /* A aquisição é independente das observações da task. Só guarda, sem
            avançar o carimbo de frame anterior do estimador. */
         mtf_history[frames % HISTORY] = (mtf_history_t){
-          .present=true, .id=frames, .sensor_ms=sensor_ms, .distance_mm=dist,
+          .present=true, .id=frames, .sensor_ms=sensor_ms,
+          .received_us=record_ms*1000U, .distance_mm=dist,
           .fx=fx, .fy=fy, .quality=qual,
           .range_valid=(flags & 1U)!=0, .flow_valid=(flags & 2U)!=0};
         break;
@@ -510,11 +554,15 @@ int main(int argc, char **argv) {
         (void)rd_u8(&r); (void)rd_u8(&r);
         float v[4]; for (int i = 0; i < 4; ++i) v[i] = rd_f32(&r);
         const uint32_t count = rd_u32(&r);
-        (void)rd_u64(&r); (void)rd_u32(&r);
+        const uint64_t sensor_us = rd_u64(&r); (void)rd_u32(&r);
         if (report < 1 || report > 3) STOP_REPLAY("invalid BNO kind");
-        bno_history_t *h = &bno_history[report-1][count % HISTORY];
+        captured_bno_history_t *h = &captured_bno[report-1][count % HISTORY];
         h->present=true; h->id=count;
+        h->time_us=(uint32_t)sensor_us;
         for (unsigned i=0;i<4;++i) h->v[i]=v[i];
+        if (report == 1U) bno_history_push_rotation(&imu_history,(uint32_t)sensor_us,count,v);
+        else if (report == 2U) bno_history_push_gyro(&imu_history,(uint32_t)sensor_us,count,v);
+        else bno_history_push_accel(&imu_history,(uint32_t)sensor_us,count,v);
         break;
       }
       case CAP_TYPE_OBSERVATION: {
@@ -530,6 +578,7 @@ int main(int argc, char **argv) {
         if (usable != ((flags & 2U)!=0)) STOP_REPLAY("gap decision differs");
         s.flow_x=h->fx; s.flow_y=h->fy; s.distance_mm=h->distance_mm;
         s.quality=h->quality; s.frames=id; s.sensor_ms=h->sensor_ms;
+        s.received_us=h->received_us;
         s.range_valid=(flags & 4U)!=0; s.flow_valid=(flags & 8U)!=0;
         s.last_sensor_ms=h->sensor_ms; s.have_previous=true; s.mtf_seen=true;
         observation_frames=id; observation_pending=usable;
@@ -547,7 +596,7 @@ int main(int argc, char **argv) {
                           "numbers is unknown, refusing to guess\n");
           STOP_REPLAY("STEP before SESSION");
         }
-        do_step(&s, &r, &t, seq);
+        do_step(&s, &r, &t, seq, record_ms);
         if (!t.pairing_fail && !t.decision_fail && !t.numeric_fail &&
             !seq_gaps && !skipped && !losses_reported) {
           ++verified_prefix_steps;
@@ -573,9 +622,13 @@ replay_summary:
   }
   printf("pairing mismatches:  %u\n", t.pairing_fail);
   printf("decision mismatches: %u\n", t.decision_fail);
+  printf("BNO alignment failures: %u\n", t.alignment_fail);
   printf("values outside %.0e: %u\n", (double)TOLERANCE, t.numeric_fail);
   printf("worst deviation: %.3e on %s\n", (double)t.worst,
          t.worst_field ? t.worst_field : "-");
+  printf("replayed final position: %.1f,%.1f mm\n",
+         (double)(s.ekf.axis[0].p*1000.0F),
+         (double)(s.ekf.axis[1].p*1000.0F));
 
   const bool ok = t.pairing_fail == 0U && t.decision_fail == 0U && t.numeric_fail == 0U &&
                   !observation_pending && observations != 0 && !stop_reason;

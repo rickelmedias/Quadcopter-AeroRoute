@@ -27,6 +27,8 @@
 #include "displacement.h"
 #include "flow_ekf.h"
 #include "attitude.h"
+#include "bno_history.h"
+#include "range_filter.h"
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -119,6 +121,8 @@ int main(void) {
 
   disp_state_t raw = {0}, fused = {0};
   flow_ekf_t ekf = {0};
+  bno_history_t imu_history = {0};
+  range_filter_t range_filter = {0};
   uint32_t last_sensor_ms = 0, clock_resyncs = 0;
   bool have_previous = false;
   uint32_t rot_count = 0, gyro_count = 0, accel_count = 0;
@@ -192,6 +196,13 @@ int main(void) {
       cap_u64(&w, meas_us + reports[k].off);
       cap_u32(&w, 2500U);
       put(&w);
+      const uint32_t sample_us=(uint32_t)(meas_us+reports[k].off);
+      if (reports[k].r==CAP_BNO_ROTATION)
+        bno_history_push_rotation(&imu_history,sample_us,reports[k].c,reports[k].v);
+      else if (reports[k].r==CAP_BNO_GYRO)
+        bno_history_push_gyro(&imu_history,sample_us,reports[k].c,reports[k].v);
+      else
+        bno_history_push_accel(&imu_history,sample_us,reports[k].c,reports[k].v);
     }
 
     w = begin(CAP_TYPE_MTF, tick);
@@ -221,34 +232,44 @@ int main(void) {
       put(&w);
     } else {
       disp_input_t in = {0};
+      bno_aligned_sample_t aligned = {0};
+      const bool imu_aligned = imu_online && bno_history_align(
+          &imu_history,tick*1000U-DISP_MTF_DELAY_US,gap_ms*1000U,&aligned);
       in.flow_x = (float)flow_x * FLOW_CM_S_AT_1M_TO_RAD_S;
       in.flow_y = (float)flow_y * FLOW_CM_S_AT_1M_TO_RAD_S;
-      in.gyro_x = gyro[0];
-      in.gyro_y = gyro[1];
-      for (int c = 0; c < 4; ++c) in.q[c] = q[c];
-      in.range_m = (float)distance_mm * 0.001F;
+      in.gyro_x = aligned.gyro[0];
+      in.gyro_y = aligned.gyro[1];
+      in.gyro_z = aligned.gyro[2];
+      for (int c = 0; c < 4; ++c) in.q[c] = aligned.q[c];
       in.dt_s = (float)gap_ms * 0.001F;
+      float filtered_range=0.0F;
+      const bool range_filtered=range_filter_update(&range_filter,
+          (float)distance_mm*0.001F,in.dt_s,range_valid,&filtered_range);
+      in.range_m=range_filtered?filtered_range:(float)distance_mm*0.001F;
       in.quality = quality;
-      in.range_valid = range_valid && true && imu_online;
+      in.range_valid = range_filtered && true && imu_aligned;
 
       disp_raw_update(&raw, &in, &cfg);
       const bool fused_ok = disp_fused_update(&fused, &in, &cfg);
 
-      float accel_world[2] = {0.0F, 0.0F};
-      if (imu_online) attitude_rotate_to_world(in.q, lin_accel, accel_world);
-      flow_ekf_predict(&ekf, accel_world[0], accel_world[1], in.dt_s, &ekf_cfg);
+      float accel_local[2] = {0.0F, 0.0F};
+      if (imu_aligned && fused.yaw_origin_set)
+        attitude_rotate_to_local(in.q, fused.yaw_origin, aligned.accel, accel_local);
+      flow_ekf_predict(&ekf, accel_local[0], accel_local[1], in.dt_s, &ekf_cfg);
       bool ekf_ok = false;
-      if (fused_ok && flow_ekf_update(&ekf, fused.vx, fused.vy,
-                                      in.range_m, &ekf_cfg)) {
+      if (fused_ok && flow_ekf_update_observation(
+          &ekf, fused.vx, fused.vy, in.range_m, in.quality,
+          fused.quant_half_width[0], fused.quant_half_width[1], &ekf_cfg)) {
         ekf_ok = true;
       }
 
       w = begin(CAP_TYPE_STEP, tick);
       cap_u32(&w, i + 1U);
-      cap_u32(&w, rot_count); cap_u32(&w, gyro_count); cap_u32(&w, accel_count);
+      cap_u32(&w, aligned.rotation_id); cap_u32(&w, aligned.gyro_id);
+      cap_u32(&w, aligned.accel_id);
       cap_f32(&w, in.dt_s);
       cap_u8(&w, (uint8_t)((fused_ok ? 1U : 0U) | (ekf_ok ? 2U : 0U) |
-                           (imu_online ? 4U : 0U)));
+                           (imu_aligned ? 4U : 0U)));
       cap_f32(&w, raw.x); cap_f32(&w, raw.y);
       cap_f32(&w, fused.vx); cap_f32(&w, fused.vy);
       cap_f32(&w, ekf.axis[0].v); cap_f32(&w, ekf.axis[1].v);

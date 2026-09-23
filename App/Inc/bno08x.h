@@ -8,6 +8,8 @@
  */
 #ifndef BNO08X_H
 #define BNO08X_H
+#include "attitude.h"
+#include "bno_history.h"
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -62,8 +64,17 @@ typedef struct {
 typedef struct {
   /** Vetor de rotação w,x,y,z, normalizado. */
   float q[4];
-  /** Velocidade angular calibrada, em rad/s, eixos do sensor. */
+  /** Velocidade angular calibrada p,q,r, em rad/s, eixos do corpo. Estes são
+      os estados angulares usuais do modelo linearizado no hover; não são, em
+      geral, iguais a roll_dot,pitch_dot,yaw_dot. */
   float gyro[3];
+  /** Interface em Euler destinada a logs, comandos e ao futuro LQR. O
+      quatérnio acima permanece como representação interna para matemática de
+      atitude. */
+  attitude_euler_state_t euler;
+  /** Verdadeiro quando ::euler, inclusive suas derivadas, foi calculado sem
+      singularidade e a partir de relatórios de rotação e gyro já vistos. */
+  bool euler_valid;
   /** Aceleração linear, em m/s^2, eixos do sensor, com a gravidade já removida
       pela fusão do próprio sensor (SH2_LINEAR_ACCELERATION). Pegar assim, em
       vez de subtrair a gravidade aqui, evita adivinhar as convenções de sinal
@@ -121,4 +132,8 @@ bool bno_start(void);
  * @param[out] out  Destino da cópia.
  */
 void bno_get_sample(bno_sample_t *out);
+
+/** Alinha atitude, giro e aceleração ao intervalo do frame MTF. */
+bool bno_get_aligned(uint32_t end_us, uint32_t interval_us,
+                     bno_aligned_sample_t *out);
 #endif

@@ -7,6 +7,7 @@
 #include "sensor_log.h"
 #include "sensors.h"
 #include "capture.h"
+#include "range_filter.h"
 #include "FreeRTOS.h"
 #include "task.h"
 #include <math.h>
@@ -27,6 +28,8 @@ static disp_state_t raw_state;
 static disp_state_t fused_state;
 /** Filtro de Kalman; alterado só pela task (e por displacement_reset()). */
 static flow_ekf_t ekf_state;
+/** Alcance filtrado usado como escala do fluxo. */
+static range_filter_t range_filter;
 /** Parâmetros do filtro em uso. */
 static const flow_ekf_config_t *ekf_cfg = &FLOW_EKF_DEFAULTS;
 /** Relatório publicado; protegido por seção crítica. */
@@ -41,6 +44,8 @@ static disp_config_t cfg = {
      Confie neste número, não naquele. */
   .flow_scale_x = 0.944F,
   .flow_scale_y = 0.942F,
+  .flow_cross_xy = 0.0F,
+  .flow_cross_yx = 0.0F,
   /* Os dois eram -1,0, o palpite inicial de bancada de antes de haver um jeito
      rigoroso de conferir. Testes isolados por eixo (ver disp_estimator.c)
      mostraram que os eixos discordam de sinal nesta placa: X invertido, Y
@@ -48,6 +53,7 @@ static disp_config_t cfg = {
   .gyro_sign_x = 1.0F,
   .gyro_sign_y = -1.0F,
   .deadband_rad_s = 0.0F,
+  .sensor_offset_m = {0.0F, 0.0F, 0.0F},
 };
 /** Acumuladores da calibração ao vivo; protegidos por seção crítica. */
 static flow_calibrator_t calibrator;
@@ -55,6 +61,8 @@ static flow_calibrator_t calibrator;
 static volatile bool calibrating = false;
 /** Frames descartados por intervalo de relógio do sensor inutilizável. */
 static uint32_t clock_resyncs;
+/** Frames cujo intervalo não pôde ser coberto pelo histórico do BNO. */
+static uint32_t imu_alignment_rejects;
 /** Tick do último frame realmente integrado. */
 static uint32_t last_integrated_ms;
 /** Tick da última correção que o filtro ACEITOU. */
@@ -85,6 +93,9 @@ static void apply_staleness_locked(uint32_t now) {
   report.age_ms = frame_age;
   report.correction_age_ms = corr_age;
   report.clock_resyncs = clock_resyncs;
+  report.imu_alignment_rejects = imu_alignment_rejects;
+  report.range_rejects = range_filter.rejected;
+  report.range_reanchors = range_filter.reanchors;
   report.health = health;
   report.valid = (health == DISP_HEALTH_OK);
 }
@@ -254,23 +265,37 @@ static void displacement_task(void *argument) {
       if (!gap_usable) { ++clock_resyncs; capture_diag(clock_resyncs); }
       if (gap_usable) {
         disp_input_t in = {0};
+        bno_aligned_sample_t aligned = {0};
+        /* O frame chega depois do intervalo óptico que representa. Usar o
+           horário da task apontava para o futuro do histórico BNO e fazia
+           28/101 descartes nas capturas reais. */
+        const uint32_t flow_end_us = m.received_us - DISP_MTF_DELAY_US;
+        const bool imu_aligned = b.online &&
+            bno_get_aligned(flow_end_us, gap_ms*1000U, &aligned);
+        if (!imu_aligned) ++imu_alignment_rejects;
         in.flow_x = (float)m.flow_x * FLOW_CM_S_AT_1M_TO_RAD_S;
         in.flow_y = (float)m.flow_y * FLOW_CM_S_AT_1M_TO_RAD_S;
-        in.gyro_x = b.gyro[0];
-        in.gyro_y = b.gyro[1];
-        in.q[0] = b.q[0]; in.q[1] = b.q[1]; in.q[2] = b.q[2]; in.q[3] = b.q[3];
-        in.range_m = (float)m.distance_mm * 0.001F;
+        in.gyro_x = aligned.gyro[0];
+        in.gyro_y = aligned.gyro[1];
+        in.gyro_z = aligned.gyro[2];
+        in.q[0] = aligned.q[0]; in.q[1] = aligned.q[1];
+        in.q[2] = aligned.q[2]; in.q[3] = aligned.q[3];
         in.dt_s = (float)gap_ms * 0.001F;
+        float filtered_range=0.0F;
+        const bool range_filtered=range_filter_update(
+            &range_filter,(float)m.distance_mm*0.001F,in.dt_s,m.range_valid,
+            &filtered_range);
+        in.range_m = range_filtered ? filtered_range : (float)m.distance_mm*0.001F;
         in.quality = m.quality;
         /* O caminho FUSED precisa de uma atitude confiável, então uma IMU
            offline desqualifica o frame mesmo que o fluxo pareça bom. */
-        in.range_valid = m.range_valid && m.flow_valid && b.online;
+        in.range_valid = range_filtered && m.flow_valid && imu_aligned;
 
         taskENTER_CRITICAL();
         disp_config_t snapshot = cfg;
         taskEXIT_CRITICAL();
 
-        calibrate_sample(&in, b.gyro[2]);
+        calibrate_sample(&in, in.gyro_z);
 
         disp_raw_update(&raw_state, &in, &snapshot);
         const bool fused_ok = disp_fused_update(&fused_state, &in, &snapshot);
@@ -280,16 +305,20 @@ static void displacement_task(void *argument) {
            predição acontece em todo frame, mesmo quando a medida não serve:
            seguir por inércia com incerteza crescente é a resposta honesta, e
            é o que impede uma rejeição de enviesar o resultado. */
-        float accel_world[2] = {0.0F, 0.0F};
-        if (b.online) attitude_rotate_to_world(in.q, b.lin_accel, accel_world);
-        flow_ekf_predict(&ekf_state, accel_world[0], accel_world[1], in.dt_s, ekf_cfg);
+        float accel_local[2] = {0.0F, 0.0F};
+        if (imu_aligned && fused_state.yaw_origin_set)
+          attitude_rotate_to_local(in.q, fused_state.yaw_origin,
+                                   aligned.accel, accel_local);
+        flow_ekf_predict(&ekf_state, accel_local[0], accel_local[1], in.dt_s, ekf_cfg);
         /* Só uma correção aceita reancora a estimativa. Um frame que o FUSED
            rejeitou (IMU offline, distância ruim, qualidade baixa) ou que o
            gate do filtro descartou deixa o estado seguindo por inércia, e não
            pode renovar a idade em que um controlador confia. */
         bool ekf_ok = false;
-        if (fused_ok && flow_ekf_update(&ekf_state, fused_state.vx, fused_state.vy,
-                                        in.range_m, ekf_cfg)) {
+        if (fused_ok && flow_ekf_update_observation(
+            &ekf_state, fused_state.vx, fused_state.vy, in.range_m, in.quality,
+            fused_state.quant_half_width[0], fused_state.quant_half_width[1],
+            ekf_cfg)) {
           last_correction_ms = HAL_GetTick();
           have_correction = true;
           ekf_ok = true;
@@ -297,9 +326,9 @@ static void displacement_task(void *argument) {
         /* Registra exatamente quais amostras este passo usou, para o replay
            provar que reproduziu o mesmo pareamento em vez de supor a
            associação que o firmware fez. */
-        capture_step(m.frames, b.rotation.count, b.angular.count,
-                     b.acceleration.count, in.dt_s, fused_ok, ekf_ok,
-                     b.online, raw_state.x, raw_state.y,
+        capture_step(m.frames, aligned.rotation_id, aligned.gyro_id,
+                     aligned.accel_id, in.dt_s, fused_ok, ekf_ok,
+                     imu_aligned, raw_state.x, raw_state.y,
                      fused_state.vx, fused_state.vy,
                      ekf_state.axis[0].v, ekf_state.axis[1].v,
                      ekf_state.axis[0].p, ekf_state.axis[1].p);
@@ -334,6 +363,8 @@ void displacement_reset(void) {
   raw_state = fused_state = zero;
   report.raw = report.fused = zero;
   flow_ekf_reset(&ekf_state);
+  range_filter_reset(&range_filter);
+  imu_alignment_rejects = 0U;
   report.ekf = ekf_state;
   taskEXIT_CRITICAL();
 }
@@ -343,6 +374,19 @@ void displacement_set_flow_scale(float scale_x, float scale_y) {
   if (!isfinite(scale_x) || scale_x <= 0.0F) return;
   if (!isfinite(scale_y) || scale_y <= 0.0F) return;
   taskENTER_CRITICAL(); cfg.flow_scale_x = scale_x; cfg.flow_scale_y = scale_y; taskEXIT_CRITICAL();
+}
+void displacement_set_flow_matrix(float xx,float xy,float yx,float yy) {
+  if (!isfinite(xx)||!isfinite(xy)||!isfinite(yx)||!isfinite(yy) || xx<=0.0F || yy<=0.0F) return;
+  taskENTER_CRITICAL();
+  cfg.flow_scale_x=xx; cfg.flow_cross_xy=xy;
+  cfg.flow_cross_yx=yx; cfg.flow_scale_y=yy;
+  taskEXIT_CRITICAL();
+}
+void displacement_set_sensor_offset(float x,float y,float z) {
+  if (!isfinite(x)||!isfinite(y)||!isfinite(z)) return;
+  taskENTER_CRITICAL();
+  cfg.sensor_offset_m[0]=x; cfg.sensor_offset_m[1]=y; cfg.sensor_offset_m[2]=z;
+  taskEXIT_CRITICAL();
 }
 /** @brief Escala do eixo X em uso (ver displacement.h). */
 float displacement_get_flow_scale_x(void) { return cfg.flow_scale_x; }

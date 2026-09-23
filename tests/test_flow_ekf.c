@@ -200,6 +200,37 @@ static void test_rejects_nonsense_inputs(void) {
   assert(f.axis[0].p == 0.0F && f.axis[0].v == 0.0F);
 }
 
+/** @brief Quantização aumenta R, mas não cria uma zona sem correção. */
+static void test_quantized_interval_and_quality(void) {
+  flow_ekf_t quantized, exact;
+  flow_ekf_reset(&quantized); flow_ekf_reset(&exact);
+  quantized.axis[0].v=exact.axis[0].v=0.04F;
+  assert(flow_ekf_update_observation(&quantized,0.0F,0.0F,0.84F,90U,
+                                     0.084F,0.084F,&cfg));
+  assert(flow_ekf_update_observation(&exact,0.0F,0.0F,0.84F,90U,0,0,&cfg));
+  assert(NEAR(quantized.innov[0],-0.04F,1e-7F));
+  assert(quantized.axis[0].v < 0.04F);
+  assert(quantized.axis[0].v > exact.axis[0].v);
+
+  /* Sem calibração qualidade->variância, qualidade não muda o ganho aqui;
+     ela já decide a validade no estimador com histerese. */
+  flow_ekf_t good,bad; flow_ekf_reset(&good); flow_ekf_reset(&bad);
+  assert(flow_ekf_update_observation(&good,0.2F,0.0F,RANGE,255U,0,0,&cfg));
+  assert(flow_ekf_update_observation(&bad,0.2F,0.0F,RANGE,30U,0,0,&cfg));
+  assert(NEAR(good.axis[0].v,bad.axis[0].v,1e-7F));
+
+  /* Regressão da bancada: um viés pequeno da IMU não pode caminhar livre
+     dentro da célula de fluxo zero por 30 segundos. */
+  flow_ekf_t still; flow_ekf_reset(&still);
+  for (int i=0;i<3000;++i) {
+    flow_ekf_predict(&still,0.0035F,-0.002F,DT,&cfg);
+    assert(flow_ekf_update_observation(&still,0,0,0.87F,108U,
+                                       0.087F,0.087F,&cfg));
+  }
+  assert(fabsf(still.axis[0].p)<0.02F);
+  assert(fabsf(still.axis[1].p)<0.02F);
+}
+
 /** @brief Roda todos os testes; qualquer falha interrompe pelo assert. */
 int main(void) {
   cfg = FLOW_EKF_DEFAULTS;
@@ -211,6 +242,7 @@ int main(void) {
   test_gate_eventually_admits_real_change();
   test_gate_is_per_measurement_not_per_axis();
   test_rejects_nonsense_inputs();
+  test_quantized_interval_and_quality();
   puts("Flow EKF: stationary, unbiased velocity under rejection, constant velocity,\n"
        "IMU prediction, "
        "outlier gating, recovery from a real change, whole-vector gating and bad input passed");

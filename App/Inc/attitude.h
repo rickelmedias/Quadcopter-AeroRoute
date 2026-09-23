@@ -9,6 +9,8 @@
 #ifndef ATTITUDE_H
 #define ATTITUDE_H
 
+#include <stdbool.h>
+
 /**
  * @brief Ângulos de Euler na convenção ZYX (yaw-pitch-roll).
  */
@@ -22,6 +24,29 @@ typedef struct {
 } euler_t;
 
 /**
+ * @brief Parcela de atitude do vetor de estados de um controlador em Euler.
+ *
+ * Os ângulos seguem a convenção ZYX e ficam em radianos. @c body_rate contém
+ * exatamente o que o giroscópio mede nos eixos do corpo: p, q e r. Esses
+ * valores são os estados usuais de um modelo de quadricóptero linearizado no
+ * hover. @c euler_rate contém as derivadas exatas roll_dot, pitch_dot e
+ * yaw_dot, calculadas a partir de p,q,r para modelos que usam essa outra
+ * definição.
+ *
+ * O quatérnio não aparece nesta interface de controle, mas continua sendo a
+ * fonte interna da orientação e deve ser preservado para interpolação e
+ * rotação de vetores.
+ */
+typedef struct {
+  /** Roll, pitch e yaw ZYX, em radianos. */
+  euler_t angle;
+  /** Velocidades angulares do corpo p, q, r, em rad/s. */
+  float body_rate[3];
+  /** Derivadas dos ângulos de Euler, em rad/s. */
+  float euler_rate[3];
+} attitude_euler_state_t;
+
+/**
  * @brief Converte um quatérnio em ângulos de Euler intrínsecos ZYX.
  *
  * A arfagem satura em +-90 graus, onde rolagem e guinada deixam de ser
@@ -32,6 +57,52 @@ typedef struct {
  * @param[out] out  Ângulos resultantes.
  */
 void attitude_to_euler(const float q[4], euler_t *out);
+
+/**
+ * @brief Monta a parcela de atitude de um vetor de estados em Euler.
+ *
+ * Converte o quatérnio para roll/pitch/yaw, conserva p,q,r sem aproximá-los e
+ * calcula também as derivadas exatas dos ângulos. Perto do hover vale a
+ * aproximação roll_dot ~= p, pitch_dot ~= q e yaw_dot ~= r, mas esta função
+ * não depende dela.
+ *
+ * A conversão de p,q,r para derivadas de Euler é singular em pitch = +-90
+ * graus. Nesse caso, ou se qualquer entrada não for finita, a função zera
+ * @c euler_rate e retorna false. Os ângulos e p,q,r continuam preenchidos
+ * quando são finitos, permitindo diagnóstico sem entregar derivadas
+ * inválidas ao controlador.
+ *
+ * @param[in]  q          Quatérnio w,x,y,z.
+ * @param[in]  body_rate  Velocidades p,q,r, em rad/s.
+ * @param[out] out        Estado resultante.
+ * @return true quando todos os campos, inclusive @c euler_rate, são válidos.
+ */
+bool attitude_build_euler_state(const float q[4], const float body_rate[3],
+                                attitude_euler_state_t *out);
+
+/**
+ * @brief Normaliza um ângulo para o intervalo [-pi, pi).
+ *
+ * Necessário para que, por exemplo, referência -179 graus e medição +179
+ * graus produzam erro +2 graus, e não -358 graus.
+ *
+ * @param[in] angle  Ângulo em radianos.
+ * @return Ângulo normalizado; NaN se a entrada não for finita.
+ */
+float attitude_wrap_pi(float angle);
+
+/**
+ * @brief Calcula referência menos medição para roll, pitch e yaw.
+ *
+ * Cada componente é normalizada por ::attitude_wrap_pi. Essa é a forma que o
+ * futuro LQR/PID deve usar para montar delta-x da atitude.
+ *
+ * @param[in]  reference  Atitude desejada.
+ * @param[in]  measured   Atitude medida.
+ * @param[out] error      Erro angular normalizado.
+ */
+void attitude_euler_error(const euler_t *reference, const euler_t *measured,
+                          euler_t *error);
 
 /**
  * @brief Calcula o cosseno da inclinação em relação à vertical.
@@ -73,6 +144,12 @@ void attitude_yaw_rotate(float yaw, float bx, float by, float *wx, float *wy);
  *                    (o z não é calculado).
  */
 void attitude_rotate_to_world(const float q[4], const float body[3], float world[2]);
+
+/** Gira corpo -> mundo e então expressa o plano horizontal no referencial
+ * local cujo yaw zero é @p yaw_origin. Assim aceleração e fluxo usam os
+ * mesmos eixos mesmo quando o BNO inicia apontando longe do norte. */
+void attitude_rotate_to_local(const float q[4], float yaw_origin,
+                              const float body[3], float local[2]);
 
 /**
  * @brief Converte radianos em graus, para logs e leitura humana.

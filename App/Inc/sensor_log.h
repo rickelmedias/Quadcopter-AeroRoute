@@ -32,13 +32,13 @@
 /** MTF-01: fluxo bruto, distância e contadores de frame/CRC/UART. */
 #define LOG_MTF         0
 /** Ângulos de Euler e quatérnio; o yaw alimenta o caminho FUSED. */
-#define LOG_ATTITUDE    1
+#define LOG_ATTITUDE    0
 /** Distância no eixo do sensor e altura corrigida pela inclinação. */
-#define LOG_HEIGHT      1
-/** Deslocamento acumulado dos três estimadores. */
+#define LOG_HEIGHT      0
+/** Deslocamento EKF e diagnóstico compacto de validade/rejeições. */
 #define LOG_POSITION    1
 /** Incremento por frame, velocidades e saúde do filtro. */
-#define LOG_POSITION_D  1
+#define LOG_POSITION_D  0
 /** Progresso ao vivo da calibração; ver DISP_CALIBRATE_FLOW abaixo. */
 #define LOG_CALIBRATION 0
 /** Heap livre, descartes do enlace e linhas de log descartadas. */

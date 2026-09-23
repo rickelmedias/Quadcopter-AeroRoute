@@ -15,6 +15,7 @@
 #ifndef FLIGHT_COMMAND_API_H
 #define FLIGHT_COMMAND_API_H
 
+#include "attitude.h"
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -158,13 +159,18 @@ typedef struct {
   float vy;
   /** Velocidade Z local, em m/s. */
   float vz;
-  /** Atitude como quatérnio w,x,y,z. */
+  /** Atitude em Euler ZYX, em radianos. É esta representação que o futuro
+      controlador de espaço de estados deve expor e consumir. */
+  euler_t attitude;
+  /** Representação interna equivalente como quatérnio w,x,y,z. Mantida para
+      telemetria MAVLink, interpolação e rotação de vetores; o LQR não precisa
+      consumi-la. */
   float q[4];
-  /** Velocidade angular de rolagem, em rad/s. */
+  /** Velocidade angular p do corpo, em rad/s. Próximo do hover, p ~= roll_dot. */
   float roll_speed;
-  /** Velocidade angular de arfagem, em rad/s. */
+  /** Velocidade angular q do corpo, em rad/s. Próximo do hover, q ~= pitch_dot. */
   float pitch_speed;
-  /** Velocidade angular de guinada, em rad/s. */
+  /** Velocidade angular r do corpo, em rad/s. Próximo do hover, r ~= yaw_dot. */
   float yaw_speed;
 } flight_snapshot_t;
 

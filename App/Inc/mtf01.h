@@ -19,6 +19,8 @@ typedef struct {
   uint32_t time_ms;
   /** Tick do STM32 (ms) em que o frame foi decodificado. */
   uint32_t received_ms;
+  /** Mesmo instante em us, na linha de tempo usada pelo SH-2 (resolução 1 ms). */
+  uint32_t received_us;
   /** Distância medida pelo telêmetro, no eixo do sensor, em mm. */
   uint32_t distance_mm;
   /** Frames válidos decodificados desde o boot. Também serve de identificador

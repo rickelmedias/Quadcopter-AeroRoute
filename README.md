@@ -112,11 +112,13 @@ Os principais arquivos de `App/` são:
 |---|---|
 | `sensors.h/.c` | Ponto único que inicia captura, MTF, BNO e estimação. |
 | `bno08x.h/.c` | Driver do BNO08x, transporte I2C, reset, reconexão e publicação das amostras. |
+| `bno_history.h/.c` | Histórico temporal que integra gyro/aceleração e interpola atitude no intervalo de cada frame MTF. |
 | `mtf01.h/.c` | Recepção do MTF-01 pela USART2 com DMA circular. |
 | `mtf_parser.h/.c` | Decodificação pura dos frames Micolink. |
 | `displacement.h/.c` | Tipos públicos e task que associa as amostras dos sensores. |
 | `disp_estimator.c` | Estimadores cru e compensado por giroscópio. |
 | `flow_ekf.h/.c` | Filtro de Kalman para posição e velocidade horizontais. |
+| `range_filter.h/.c` | Suavização do alcance e rejeição de saltos usados para escalar o fluxo. |
 | `flow_calibrator.h/.c` | Calibração da escala do fluxo contra o giroscópio. |
 | `attitude.h/.c` | Conversões de quatérnio, Euler, inclinação e referencial. |
 | `sensor_log.h/.c` | Seleção dos grupos de log e saída textual pela USB. |
@@ -173,7 +175,7 @@ Em cada captura decodificada:
 | Pasta | Conteúdo |
 |---|---|
 | `tools/` | Build independente, leitura de logs, gravação/decodificação de captura e replay. |
-| `tests/` | Oito suítes C executadas no computador. `run.sh` também testa replay e detecção de sabotagens. |
+| `tests/` | Dez suítes C executadas no computador. `run.sh` também testa replay e detecção de sabotagens. |
 | `build/` | Saída de `tools/build.py`, separada em `Debug`, `Release` e `Capture`. É a saída reproduzível usada nas verificações automatizadas. |
 | `Debug/` e `Release/` | Saída gerada pelo STM32CubeIDE para a configuração ativa. Contém objetos, mapas, ELF e, após o conversor, HEX. Não edite arquivos aqui. |
 | `tmp/` | Scripts e artefatos auxiliares de revisões. Não faz parte do firmware e não deve ser incluído por código de produção. |
@@ -215,6 +217,7 @@ Arquivos de `docs/`:
 | `evolucao_algoritmo_deslocamento.md` | Experimentos e mudanças sucessivas no cálculo de deslocamento. |
 | `captura_replay_v3.md` | Formato binário, sessão DTR, decoder, replay e limitações. |
 | `revisao_tecnica_codex.md` | Achados da revisão de código e correções relacionadas. |
+| `pesquisa_fluxo_optico_e_plano.md` | Comparação com ArduPilot, PX4, INAV, Betaflight e Crazyflie; diagnóstico do erro de fechamento e plano de evolução. |
 
 Arquivos locais de `docs/references/`:
 
@@ -300,6 +303,22 @@ placa. Também é possível usar Tera Term ou outro terminal serial em 115200,
 
 Os grupos exibidos são escolhidos em `App/Inc/sensor_log.h`. Alterar um grupo
 exige recompilar e gravar novamente.
+
+O perfil normal atual mostra o deslocamento horizontal do EKF, em milímetros,
+a cada 500 ms. Ele começa do zero em todo boot e mantém o diagnóstico na mesma
+linha:
+
+```text
+DESLOCAMENTO_MM 0,0 height_mm=301 valid=0 health=2 corr_age=25 imu_align_rej=0 range_rej=0 range_reanchor=0 ekf_rej=0
+DESLOCAMENTO_MM -24,1 height_mm=298 valid=1 health=0 corr_age=4 imu_align_rej=0 range_rej=0 range_reanchor=0 ekf_rej=0
+DESLOCAMENTO_MM -83,0 height_mm=304 valid=1 health=0 corr_age=3 imu_align_rej=0 range_rej=0 range_reanchor=0 ekf_rej=1
+```
+
+O primeiro valor é X e o segundo é Y. `height_mm` é a altura atual filtrada e
+corrigida pela inclinação; ela não é acumulada. `valid=1 health=0` indica
+estimativa utilizável. Os contadores revelam perda de alinhamento temporal,
+rejeições do telêmetro, mudanças persistentes de altura e rejeições do Kalman.
+O sinal depende do sentido dos eixos na montagem do MTF-01.
 
 ### 4. Build independente da IDE
 

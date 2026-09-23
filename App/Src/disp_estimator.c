@@ -13,7 +13,8 @@
 #include <math.h>
 
 /** Qualidade de imagem mínima; abaixo disso a imagem não tem textura utilizável. */
-#define MIN_QUALITY    20U
+#define QUALITY_HIGH   30U
+#define QUALITY_LOW    15U
 /** Cosseno mínimo da inclinação (~37 graus); além disso a distância deixa de
     corresponder à altura. */
 #define MIN_COS_TILT   0.80F
@@ -51,8 +52,13 @@ void disp_raw_update(disp_state_t *s, const disp_input_t *in, const disp_config_
 /** @brief Estimador FUSED (ver displacement.h). */
 bool disp_fused_update(disp_state_t *s, const disp_input_t *in, const disp_config_t *cfg) {
   const float cos_tilt = attitude_cos_tilt(in->q);
+  if (s->quality_usable) {
+    if (in->quality <= QUALITY_LOW) s->quality_usable = false;
+  } else if (in->quality >= QUALITY_HIGH) {
+    s->quality_usable = true;
+  }
   if (!in->range_valid ||
-      in->quality < MIN_QUALITY ||
+      !s->quality_usable ||
       cos_tilt < MIN_COS_TILT ||
       in->range_m < MIN_RANGE_M || in->range_m > MAX_RANGE_M ||
       in->dt_s < MIN_DT_S || in->dt_s > MAX_DT_S ||
@@ -69,8 +75,10 @@ bool disp_fused_update(disp_state_t *s, const disp_input_t *in, const disp_confi
      escala 1.0 (o único valor usado até então) as duas ordens davam o mesmo
      resultado, e por isso o erro passou despercebido até a calibração por
      eixo tornar a ordem importante. */
-  const float scaled_flow_x = in->flow_x * cfg->flow_scale_x;
-  const float scaled_flow_y = in->flow_y * cfg->flow_scale_y;
+  const float scaled_flow_x = in->flow_x * cfg->flow_scale_x +
+                              in->flow_y * cfg->flow_cross_xy;
+  const float scaled_flow_y = in->flow_x * cfg->flow_cross_yx +
+                              in->flow_y * cfg->flow_scale_y;
 
   /* Compensação da rotação do corpo. Uma câmera voltada para baixo com eixos
      alinhados à IMU veria a rolagem varrer a imagem em Y e a arfagem em X
@@ -90,20 +98,9 @@ bool disp_fused_update(disp_state_t *s, const disp_input_t *in, const disp_confi
   float trans_x = scaled_flow_x + cfg->gyro_sign_x * in->gyro_x;
   float trans_y = scaled_flow_y + cfg->gyro_sign_y * in->gyro_y;
 
-  /* Uma leitura que o sensor quantizou para zero significa que ele não viu
-     movimento naquele eixo. O giroscópio resolve muito mais fino, então
-     subtraí-lo desse zero fabrica velocidade a partir de uma medida que disse
-     que nada aconteceu - logs de bancada pegaram frames com fluxo 0,0
-     produzindo ~3 mm de deslocamento inventado cada. Confiar no zero do
-     sensor em vez da opinião do giroscópio sobre ele.
-     A regra usa o fluxo bruto (sem escala), porque reflete o piso real de
-     quantização do sensor, que um fator de calibração não muda. Uma tentativa
-     anterior aplicou o limite de uma contagem inteira à taxa compensada, que
-     cai exatamente na leitura mais comum, e valores minúsculos do giroscópio
-     decidiam ao acaso se a amostra sobrevivia. Isso piorou a deriva parada:
-     49 mm de passeio contra 47 mm sem compensação. */
-  if (fabsf(in->flow_x) < 0.5F * DISP_FLOW_LSB_RAD_S) trans_x = 0.0F;
-  if (fabsf(in->flow_y) < 0.5F * DISP_FLOW_LSB_RAD_S) trans_y = 0.0F;
+  /* Zero é uma célula de quantização, não velocidade exatamente nula. O
+     centro continua aqui para o integrador diagnóstico; a meia largura é
+     entregue ao Kalman, que aplica uma correção censurada por intervalo. */
 
   /* Zona morta extra opcional sobre a taxa compensada, desligada por padrão. */
   if (cfg->deadband_rad_s > 0.0F) {
@@ -114,8 +111,12 @@ bool disp_fused_update(disp_state_t *s, const disp_input_t *in, const disp_confi
   /* Taxa angular vezes distância é uma velocidade linear, nos eixos do
      corpo. O ArduPilot divide pela distância inclinada, e não pela altura
      vertical, então a leitura bruta do telêmetro é o valor certo aqui. */
-  const float vx_body = trans_x * in->range_m;
-  const float vy_body = trans_y * in->range_m;
+  float vx_body = trans_x * in->range_m;
+  float vy_body = trans_y * in->range_m;
+  /* O fluxo mede a velocidade no ponto focal. Remove omega x braço para
+     recuperar a velocidade do centro do veículo. */
+  vx_body -= in->gyro_y*cfg->sensor_offset_m[2] - in->gyro_z*cfg->sensor_offset_m[1];
+  vy_body -= in->gyro_z*cfg->sensor_offset_m[0] - in->gyro_x*cfg->sensor_offset_m[2];
 
   /* Sem filtro de plausibilidade aqui, de propósito. Rejeitar uma amostra de
      uma soma corrente afirma "a velocidade foi zero naquele intervalo", e um
@@ -129,7 +130,21 @@ bool disp_fused_update(disp_state_t *s, const disp_input_t *in, const disp_confi
      deslocamento. */
   euler_t e;
   attitude_to_euler(in->q, &e);
-  attitude_yaw_rotate(e.yaw, vx_body, vy_body, &s->vx, &s->vy);
+  if (!s->yaw_origin_set) { s->yaw_origin=e.yaw; s->yaw_origin_set=true; }
+  const float local_yaw=attitude_wrap_pi(e.yaw-s->yaw_origin);
+  attitude_yaw_rotate(local_yaw, vx_body, vy_body, &s->vx, &s->vy);
+
+  const bool qx=fabsf(in->flow_x)<0.5F*DISP_FLOW_LSB_RAD_S;
+  const bool qy=fabsf(in->flow_y)<0.5F*DISP_FLOW_LSB_RAD_S;
+  const float hx=in->range_m*0.5F*DISP_FLOW_LSB_RAD_S*
+      (qx?fabsf(cfg->flow_scale_x):0.0F) + in->range_m*0.5F*DISP_FLOW_LSB_RAD_S*
+      (qy?fabsf(cfg->flow_cross_xy):0.0F);
+  const float hy=in->range_m*0.5F*DISP_FLOW_LSB_RAD_S*
+      (qx?fabsf(cfg->flow_cross_yx):0.0F) + in->range_m*0.5F*DISP_FLOW_LSB_RAD_S*
+      (qy?fabsf(cfg->flow_scale_y):0.0F);
+  const float c=fabsf(cosf(local_yaw)), sn=fabsf(sinf(local_yaw));
+  s->quant_half_width[0]=c*hx+sn*hy;
+  s->quant_half_width[1]=sn*hx+c*hy;
 
   s->last_dx = s->vx * in->dt_s;
   s->last_dy = s->vy * in->dt_s;

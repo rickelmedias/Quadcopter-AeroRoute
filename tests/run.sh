@@ -15,8 +15,8 @@
 set -e
 cd "$(dirname "$0")/.."
 
-PURE="App/Src/attitude.c App/Src/disp_estimator.c App/Src/flow_ekf.c
-      App/Src/flow_calibrator.c App/Src/mtf_parser.c"
+PURE="App/Src/attitude.c App/Src/bno_history.c App/Src/disp_estimator.c App/Src/flow_ekf.c
+      App/Src/flow_calibrator.c App/Src/mtf_parser.c App/Src/range_filter.c"
 
 CFLAGS="-std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined
         -fno-omit-frame-pointer -g -IApp/Inc -Itests/stubs"

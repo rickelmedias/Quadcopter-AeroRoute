@@ -35,6 +35,8 @@
 static bno_sample_t sample;
 /** Última amostra publicada; protegida por seção crítica. */
 static bno_sample_t published;
+/** Histórico usado para associar cada frame MTF ao mesmo intervalo da IMU. */
+static bno_history_t history;
 /** O SH-2 avisou que o sensor reiniciou. */
 static bool reset_seen;
 /** Uma transferência I2C falhou; a sessão atual precisa ser refeita. */
@@ -48,7 +50,14 @@ static uint16_t address;
  * @brief Copia a amostra em construção para a publicada.
  */
 static void publish(void) {
-  taskENTER_CRITICAL(); published = sample; taskEXIT_CRITICAL();
+  /* A interface externa do futuro controlador é Euler, mas a conversão é
+     derivada aqui do quatérnio normalizado. O quatérnio continua publicado
+     para interpolação temporal e rotação de vetores. Fazer a conversão antes
+     da seção crítica mantém a trava curta. */
+  bno_sample_t next = sample;
+  next.euler_valid = next.rotation.seen && next.angular.seen &&
+      attitude_build_euler_state(next.q, next.gyro, &next.euler);
+  taskENTER_CRITICAL(); published = next; taskEXIT_CRITICAL();
 }
 
 /**
@@ -304,6 +313,10 @@ static void sensor_event(void *cookie, sh2_SensorEvent_t *e) {
     float scale = 1.0F/sqrtf(norm);
     sample.q[0] = q->real*scale; sample.q[1] = q->i*scale;
     sample.q[2] = q->j*scale;    sample.q[3] = q->k*scale;
+    taskENTER_CRITICAL();
+    bno_history_push_rotation(&history, (uint32_t)v.timestamp,
+                              sample.rotation.count, sample.q);
+    taskEXIT_CRITICAL();
     capture_bno(CAP_BNO_ROTATION, sample.q, sample.rotation.accuracy,
                 sample.rotation.sequence, sample.rotation.count,
                 v.timestamp, v.delay);
@@ -312,6 +325,10 @@ static void sensor_event(void *cookie, sh2_SensorEvent_t *e) {
     sample.gyro[0] = v.un.gyroscope.x;
     sample.gyro[1] = v.un.gyroscope.y;
     sample.gyro[2] = v.un.gyroscope.z;
+    taskENTER_CRITICAL();
+    bno_history_push_gyro(&history, (uint32_t)v.timestamp,
+                          sample.angular.count, sample.gyro);
+    taskEXIT_CRITICAL();
     { const float g[4] = {sample.gyro[0], sample.gyro[1], sample.gyro[2], 0.0F};
       capture_bno(CAP_BNO_GYRO, g, sample.angular.accuracy,
                   sample.angular.sequence, sample.angular.count,
@@ -321,6 +338,10 @@ static void sensor_event(void *cookie, sh2_SensorEvent_t *e) {
     sample.lin_accel[0] = v.un.linearAcceleration.x;
     sample.lin_accel[1] = v.un.linearAcceleration.y;
     sample.lin_accel[2] = v.un.linearAcceleration.z;
+    taskENTER_CRITICAL();
+    bno_history_push_accel(&history, (uint32_t)v.timestamp,
+                           sample.acceleration.count, sample.lin_accel);
+    taskEXIT_CRITICAL();
     { const float a[4] = {sample.lin_accel[0], sample.lin_accel[1], sample.lin_accel[2], 0.0F};
       capture_bno(CAP_BNO_ACCEL, a, sample.acceleration.accuracy,
                   sample.acceleration.sequence, sample.acceleration.count,
@@ -373,6 +394,15 @@ void bno_get_sample(bno_sample_t *out) {
   out->online = out->online && !reports_stalled(out, HAL_GetTick(), ONLINE_STALE_MS);
 }
 
+bool bno_get_aligned(uint32_t end_us, uint32_t interval_us,
+                     bno_aligned_sample_t *out) {
+  bool ok;
+  taskENTER_CRITICAL();
+  ok = bno_history_align(&history, end_us, interval_us, out);
+  taskEXIT_CRITICAL();
+  return ok;
+}
+
 /**
  * @brief Task do BNO08x: abre a sessão SH-2, identifica e configura o sensor,
  *        atende os relatórios e refaz tudo após qualquer falha.
@@ -386,6 +416,7 @@ static void bno_task(void *argument) {
     capture_diag_poll(&last_diag_ms, CAP_CLOCK_RESYNCS_UNKNOWN);
     sample.online = false;
     sample.rotation.seen = sample.angular.seen = sample.acceleration.seen = false;
+    taskENTER_CRITICAL(); bno_history_reset(&history); taskEXIT_CRITICAL();
     transport_failed = false;
     reset_seen = false;
     publish();

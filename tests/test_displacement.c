@@ -65,6 +65,44 @@ static void test_attitude(void) {
   float wx, wy;
   attitude_yaw_rotate(PI_F/2, 1.0F, 0.0F, &wx, &wy);
   assert(NEAR(wx, 0.0F, 1e-6F) && NEAR(wy, 1.0F, 1e-6F));
+
+  /* Se a origem local também está a 90 graus, o mesmo +X do corpo volta a
+     ser +X local. Fluxo e aceleração precisam compartilhar esse referencial. */
+  const float body_x[3] = {1.0F, 0.0F, 0.0F};
+  float local[2];
+  attitude_rotate_to_local(yaw90, PI_F/2, body_x, local);
+  assert(NEAR(local[0], 1.0F, 1e-5F) && NEAR(local[1], 0.0F, 1e-5F));
+
+  /* No hover, as derivadas de Euler coincidem com p,q,r. O estado conserva
+     os dois conjuntos para não obrigar o futuro LQR a adivinhar qual deles a
+     matriz usa. */
+  const float pqr[3] = {0.1F, -0.2F, 0.3F};
+  attitude_euler_state_t state;
+  assert(attitude_build_euler_state(level, pqr, &state));
+  assert(NEAR(state.angle.roll, 0.0F, 1e-6F));
+  assert(NEAR(state.body_rate[0], pqr[0], 1e-7F));
+  assert(NEAR(state.body_rate[1], pqr[1], 1e-7F));
+  assert(NEAR(state.body_rate[2], pqr[2], 1e-7F));
+  assert(NEAR(state.euler_rate[0], pqr[0], 1e-6F));
+  assert(NEAR(state.euler_rate[1], pqr[1], 1e-6F));
+  assert(NEAR(state.euler_rate[2], pqr[2], 1e-6F));
+
+  /* A passagem +179 -> -179 graus é uma diferença de +2 graus, não -358. */
+  const euler_t reference = {.roll = 0.0F, .pitch = 0.0F,
+                             .yaw = -179.0F*PI_F/180.0F};
+  const euler_t measured = {.roll = 0.0F, .pitch = 0.0F,
+                            .yaw = 179.0F*PI_F/180.0F};
+  euler_t error;
+  attitude_euler_error(&reference, &measured, &error);
+  assert(NEAR(error.yaw, 2.0F*PI_F/180.0F, 1e-5F));
+  assert(NEAR(attitude_wrap_pi(3.0F*PI_F), -PI_F, 1e-6F));
+
+  /* Em pitch de 90 graus, p,q,r continuam disponíveis, mas derivadas de
+     Euler são singulares e não podem ser entregues como válidas. */
+  const float pitch90[4] = {0.70710678F, 0.0F, 0.70710678F, 0.0F};
+  assert(!attitude_build_euler_state(pitch90, pqr, &state));
+  assert(NEAR(state.body_rate[0], pqr[0], 1e-7F));
+  assert(NEAR(state.euler_rate[0], 0.0F, 1e-7F));
 }
 
 /**
@@ -231,35 +269,23 @@ static void test_wrong_gyro_sign_is_visible(void) {
 }
 
 /**
- * @brief Regressão de um defeito exposto pelo log de bancada: fluxo
- *        quantizado a zero não pode inventar deslocamento.
+ * @brief Fluxo zero conserva sua célula de quantização para o Kalman.
  *
  * O MTF-01 só resolve o fluxo em passos de ::DISP_FLOW_LSB_RAD_S, então uma
- * placa girando mais devagar que isso informa fluxo 0,0 enquanto o
- * giroscópio ainda lê a taxa real. Sem proteção, a compensação lê essa
- * diferença como translação e inventa deslocamento a partir de um sensor que
- * disse que nada se moveu - frames reais produziam ~3 mm cada.
+ * Zero não é uma velocidade exata: é um intervalo de uma contagem. O FUSED
+ * mantém o centro físico da observação, e o Kalman recebe também a meia
+ * largura para não corrigir quando sua previsão já é compatível.
  */
 static void test_quantized_flow_does_not_invent_travel(void) {
   disp_config_t cfg = { .flow_scale_x = 1.0F, .flow_scale_y = 1.0F, .gyro_sign_x = -1.0F, .gyro_sign_y = -1.0F, .deadband_rad_s = 0.0F };
 
-  /* Girando a 0,15 rad/s, abaixo do passo de 0,2 rad/s do sensor, então o
-     fluxo lê 0 enquanto o giroscópio ainda vê o giro. Isso não pode gerar
-     deslocamento nenhum. */
+  /* Giro de 0,05 rad/s cabe na célula zero de +-0,1 rad/s. */
   disp_state_t still = {0};
-  disp_input_t turning = frame(0.0F, 0.0F, 0.0F, 0.15F, 0.0F);
+  disp_input_t turning = frame(0.0F, 0.0F, 0.0F, 0.05F, 0.0F);
   turning.range_m = 0.84F;
-  for (int i = 0; i < 100; ++i) assert(disp_fused_update(&still, &turning, &cfg));
-  assert(still.x == 0.0F && still.y == 0.0F);
-
-  /* O mesmo para um giro grande o bastante para passar pela antiga zona
-     morta por magnitude: uma leitura de fluxo zero continua sendo movimento
-     zero. */
-  disp_state_t fast = {0};
-  disp_input_t spinning = frame(0.0F, 0.0F, 0.9F, 0.0F, 0.0F);
-  spinning.range_m = 0.84F;
-  for (int i = 0; i < 100; ++i) assert(disp_fused_update(&fast, &spinning, &cfg));
-  assert(fast.x == 0.0F && fast.y == 0.0F);
+  assert(disp_fused_update(&still, &turning, &cfg));
+  assert(NEAR(still.vy,-0.042F,1e-6F));
+  assert(NEAR(still.quant_half_width[1],0.084F,1e-6F));
 
   /* Confiar no zero do sensor não pode engolir movimento que ele realmente
      resolveu: uma contagem inteira de translação real ainda precisa ser
