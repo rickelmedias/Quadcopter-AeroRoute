@@ -1,25 +1,21 @@
 /**
  * @file sensors.h
- * @brief Ponto único de inicialização dos sensores e da estimação.
+ * @brief Ponto único de inicialização do sensor ativo no perfil de bancada.
  */
 #ifndef SENSORS_H
 #define SENSORS_H
 #include <stdbool.h>
-#include "bno08x.h"
 #include "mtf01.h"
-#include "displacement.h"
 
 /**
- * @brief Inicia a captura (no build Capture) e as tasks dos sensores.
+ * @brief Inicia somente a task de aquisição do MTF-01.
  *
- * Cada módulo é dono do seu periférico, então MTF-01 e BNO08x são iniciados
- * independentemente: a falha de um não impede o outro. A task de
- * deslocamento só é criada se os dois sensores subirem.
+ * Este perfil existe para a caracterização isolada do MTF-01: não inicializa
+ * BNO08x, captura, deslocamento, filtros ou estimadores de posição.
  *
  * Chamada em MX_FREERTOS_Init(), antes de o scheduler iniciar.
  *
- * @return true se tudo foi criado; false se a captura, algum sensor ou a
- *         task de deslocamento falhou.
+ * @return true se a task do MTF-01 foi criada.
  */
 bool sensors_init(void);
 #endif
