@@ -28,6 +28,7 @@
 #include "dronelink/dronelink_app.h"
 #include "sensors.h"
 #include "sensor_log.h"
+#include "motor_test.h"
 #include "usb_device.h"
 /* USER CODE END Includes */
 
@@ -143,7 +144,7 @@ void MX_FREERTOS_Init(void) {
   {
     Error_Handler();
   }
-  if (!sensors_init() || !sensor_log_start())
+  if (!sensor_log_start() || !sensors_init() || !motor_test_start())
   {
     Error_Handler();
   }

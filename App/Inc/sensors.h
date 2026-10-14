@@ -1,21 +1,23 @@
 /**
  * @file sensors.h
- * @brief Ponto único de inicialização do sensor ativo no perfil de bancada.
+ * @brief Ponto único de inicialização do perfil de bancada dos motores.
  */
 #ifndef SENSORS_H
 #define SENSORS_H
 #include <stdbool.h>
 #include "mtf01.h"
+#include "bno08x.h"
 
 /**
- * @brief Inicia somente a task de aquisição do MTF-01.
+ * @brief Inicia as tasks do MTF-01 e do BNO08x (só leitura e log).
  *
- * Este perfil existe para a caracterização isolada do MTF-01: não inicializa
- * BNO08x, captura, deslocamento, filtros ou estimadores de posição.
+ * Perfil de teste dos motores: os sensores são lidos e registrados para ver
+ * vibração e interferência com os motores girando, mas não há estimador nem
+ * controle (sem LQG). Os motores são iniciados à parte por motor_test_start().
  *
  * Chamada em MX_FREERTOS_Init(), antes de o scheduler iniciar.
  *
- * @return true se a task do MTF-01 foi criada.
+ * @return true se as duas tasks foram criadas.
  */
 bool sensors_init(void);
 #endif
