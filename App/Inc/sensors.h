@@ -5,17 +5,17 @@
 #ifndef SENSORS_H
 #define SENSORS_H
 #include <stdbool.h>
-#include "mtf01.h"
+#include "bno08x.h"
 
 /**
- * @brief Inicia somente a task de aquisição do MTF-01.
+ * @brief Inicia somente a task de aquisição do BNO08x.
  *
- * Este perfil existe para a caracterização isolada do MTF-01: não inicializa
- * BNO08x, captura, deslocamento, filtros ou estimadores de posição.
+ * Este perfil existe para a caracterização isolada do BNO08x a 400 Hz: não
+ * inicializa MTF-01, captura, deslocamento, filtros ou estimadores.
  *
  * Chamada em MX_FREERTOS_Init(), antes de o scheduler iniciar.
  *
- * @return true se a task do MTF-01 foi criada.
+ * @return true se a task do BNO08x foi criada.
  */
 bool sensors_init(void);
 #endif
