@@ -133,6 +133,13 @@ bool bno_start(void);
  */
 void bno_get_sample(bno_sample_t *out);
 
+/**
+ * @brief Registra uma task (TaskHandle_t) para ser notificada a cada novo
+ *        relatório de rotação, ou NULL para nenhuma. É o relógio da malha de
+ *        controle (400 Hz).
+ */
+void bno_set_listener(void *task);
+
 /** Alinha atitude, giro e aceleração ao intervalo do frame MTF. */
 bool bno_get_aligned(uint32_t end_us, uint32_t interval_us,
                      bno_aligned_sample_t *out);

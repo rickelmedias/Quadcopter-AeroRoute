@@ -26,6 +26,7 @@
 #ifndef MOTOR_TEST_H
 #define MOTOR_TEST_H
 #include <stdbool.h>
+#include <stdint.h>
 
 /** Limite absoluto de aceleração, em décimos de por cento (1000 = 100%). */
 #define MOTOR_TEST_MAX_PERMILLE 1000U
@@ -36,4 +37,36 @@
  * @return true se a task foi criada.
  */
 bool motor_test_start(void);
+
+/* ---- Ligação com o controle de voo (flight_ctrl.c) ---------------------- */
+
+/** @brief Define a saída de cada motor quando armado pelo controle (0..1000). */
+void motor_control_output(const uint16_t permille[4]);
+
+/**
+ * @brief Arma com o controle de voo como fonte. Só da task de motores (dentro
+ *        de flight_command()).
+ * @return false se já estava armado, algum motor não está em 0 ou a porta
+ *         USB está fechada.
+ */
+bool motor_control_engage(void);
+
+/** @brief Verdadeiro enquanto armado pelo controle de voo. */
+bool motor_control_active(void);
+
+/** @brief Pede parada e desarme a partir de outra task (failsafe). */
+void motor_request_stop(const char *why);
+
+/** @brief Escreve uma linha de texto no log. */
+void motor_say(const char *text);
+
+/**
+ * @brief Comandos extras do controle de voo, chamada para linhas que o teste de
+ *        motores não conhece. A definição padrão (fraca) não aceita nenhum.
+ * @return true se o comando foi tratado.
+ */
+bool flight_command(int argc, char **argv);
+
+/** @brief Avisada a cada parada (definição padrão fraca não faz nada). */
+void flight_on_stop(void);
 #endif

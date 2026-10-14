@@ -35,7 +35,7 @@
 /** Período da linha SYS, em ms. */
 #define SYS_PERIOD_MS 1000U
 
-typedef enum { REC_TEXT, REC_MTF, REC_BNO, REC_MOTOR } rec_type_t;
+typedef enum { REC_TEXT, REC_MTF, REC_BNO, REC_MOTOR, REC_EST } rec_type_t;
 
 /** Registro na fila: já em inteiros, pronto para virar texto. */
 typedef struct {
@@ -56,6 +56,7 @@ typedef struct {
       uint8_t acc[3], online;
     } bno;
     log_motor_t motor;
+    struct { int32_t v[16]; uint8_t mode; } est;
   } u;
 } rec_t;
 
@@ -149,6 +150,21 @@ void log_motor(const log_motor_t *m) {
 #endif
 }
 
+void log_est(uint8_t mode, const float x[12], const float u[4]) {
+#if LOG_EST
+  if (!stream_enabled) return;
+  rec_t r;
+  r.type = REC_EST;
+  r.t_ms = HAL_GetTick();
+  r.u.est.mode = mode;
+  for (int i = 0; i < 12; ++i) r.u.est.v[i] = (int32_t)(x[i] * 1000.0F);
+  for (int i = 0; i < 4; ++i) r.u.est.v[12 + i] = (int32_t)(u[i] * 10.0F);
+  push(&r);
+#else
+  (void)mode; (void)x; (void)u;
+#endif
+}
+
 /** @brief Converte um registro em uma linha de texto; devolve o tamanho. */
 static int format(const rec_t *r, char *line, size_t size) {
   switch (r->type) {
@@ -181,6 +197,14 @@ static int format(const rec_t *r, char *line, size_t size) {
       r->u.motor.throttle_permille[0], r->u.motor.throttle_permille[1],
       r->u.motor.throttle_permille[2], r->u.motor.throttle_permille[3],
       r->u.motor.dshot[0], r->u.motor.dshot[1], r->u.motor.dshot[2], r->u.motor.dshot[3]);
+  case REC_EST: {
+    int n = snprintf(line, size, "EST;%lu;%u", (unsigned long)r->t_ms, r->u.est.mode);
+    for (int i = 0; i < 16 && n > 0 && n < (int)size; ++i) {
+      n += snprintf(line + n, size - (size_t)n, ";%ld", (long)r->u.est.v[i]);
+    }
+    if (n > 0 && n < (int)size) n += snprintf(line + n, size - (size_t)n, "\r\n");
+    return n;
+  }
   default:
     return 0;
   }
@@ -267,6 +291,7 @@ bool sensor_log_start(void) { return true; }
 void log_mtf(const mtf_sample_t *m) { (void)m; }
 void log_bno(const bno_sample_t *b) { (void)b; }
 void log_motor(const log_motor_t *m) { (void)m; }
+void log_est(uint8_t mode, const float x[12], const float u[4]) { (void)mode; (void)x; (void)u; }
 void log_text(const char *text) { (void)text; }
 void log_set_stream(bool enabled) { (void)enabled; }
 #endif

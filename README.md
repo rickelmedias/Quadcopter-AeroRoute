@@ -6,9 +6,23 @@ deslocamento horizontal, produz logs pela USB e mantém uma comunicação
 MAVLink própria com uma Raspberry Pi.
 
 O projeto ainda está em desenvolvimento. A parte de percepção foi implementada
-e ensaiada em bancada; o acionamento dos ESCs, a mixagem dos quatro motores e
-o controle de voo ainda não foram implementados. Portanto, o firmware atual
-serve para desenvolvimento e bancada, não para voo.
+e ensaiada em bancada. A `main` já tem a saída DShot600 para os quatro ESCs e a
+malha LQG do TCC (ver [`docs/lqg_firmware.md`](docs/lqg_firmware.md)), mas o
+LQG só roda em ensaio a seco até a curva dos motores e os sinais dos sensores
+serem calibrados. Portanto, o firmware atual serve para desenvolvimento e
+bancada, não para voo.
+
+Perfis de bancada em branches separadas, cada um testável sozinho:
+
+| Branch | O que roda |
+|---|---|
+| `mtf` | Só o MTF-01, uma linha por frame (100 Hz) |
+| `bno` | Só o BNO08x a 400 Hz (I2C a 400 kHz) |
+| `motors` | MTF-01 + BNO08x + teste dos motores por comandos USB, sem LQG ([guia](docs/guia_teste_motores.md)) |
+| `main` | Tudo integrado com o LQG |
+
+Em todos, o log sai pela USB por uma task de prioridade baixa alimentada por
+fila (`sensor_log.h`), para não atrasar a aquisição nem o controle.
 
 O histórico técnico detalhado, com resultados, calibrações e problemas já
 investigados, foi movido para

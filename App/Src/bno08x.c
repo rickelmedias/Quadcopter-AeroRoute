@@ -45,6 +45,8 @@ static bool reset_seen;
 static bool transport_failed;
 /** Instante (us, derivado do tick) da última borda do pino INT. */
 static volatile uint32_t irq_us;
+/** Task notificada a cada novo relatório de rotação (ver bno_set_listener()). */
+static TaskHandle_t volatile listener;
 /** Endereço I2C já deslocado como a HAL espera; 0 até o sensor ser encontrado. */
 static uint16_t address;
 
@@ -519,6 +521,7 @@ static void bno_task(void *argument) {
           if (sample.rotation.count != last_rotation) {
             last_rotation = sample.rotation.count;
             log_bno(&sample);
+            if (listener) xTaskNotifyGive(listener);
           }
         }
       }
@@ -535,6 +538,8 @@ static void bno_task(void *argument) {
     vTaskDelay(pdMS_TO_TICKS(RETRY_DELAY_MS));
   }
 }
+
+void bno_set_listener(void *task) { listener = (TaskHandle_t)task; }
 
 /** @brief Cria a task do BNO08x (ver bno08x.h). */
 bool bno_start(void) {

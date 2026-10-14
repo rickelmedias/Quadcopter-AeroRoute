@@ -45,6 +45,13 @@ static struct {
   uint32_t next_ms;
 } sweep;
 
+/** Saída comandada pelo controle de voo (flight_ctrl.c), em décimos de %. */
+static volatile uint16_t control_permille[4];
+/** Armado com o controle de voo como fonte, em vez dos alvos manuais. */
+static volatile bool control_mode;
+/** Pedido de parada vindo de outra task (failsafe); motivo em texto fixo. */
+static const char *volatile stop_request;
+
 /** Motor do beep (máscara) e quadros restantes. */
 static uint8_t beep_mask;
 static uint32_t beep_left;
@@ -68,9 +75,18 @@ static void say(const char *fmt, ...) {
   log_text(text);
 }
 
+/** @brief Padrão: não há controle de voo para avisar (ver motor_test.h). */
+__attribute__((weak)) void flight_on_stop(void) {}
+/** @brief Padrão: nenhum comando extra (ver motor_test.h). */
+__attribute__((weak)) bool flight_command(int argc, char **argv) {
+  (void)argc; (void)argv; return false;
+}
+
 /** @brief Zera tudo na hora e desarma. */
 static void stop(const char *why) {
   armed = false;
+  control_mode = false;
+  flight_on_stop();
   sweep.active = false;
   for (int i = 0; i < 4; ++i) { target[i] = 0; current[i] = 0; }
   say("PARADO: %s", why);
@@ -182,8 +198,31 @@ static void command(char *line) {
         (unsigned long)(sweep.hold_ms / 1000U));
     return;
   }
+  if (flight_command(argc, argv)) return;
   stop("comando desconhecido");
 }
+
+void motor_control_output(const uint16_t permille[4]) {
+  taskENTER_CRITICAL();
+  for (int i = 0; i < 4; ++i) {
+    control_permille[i] = permille[i] > MOTOR_TEST_MAX_PERMILLE ? MOTOR_TEST_MAX_PERMILLE : permille[i];
+  }
+  taskEXIT_CRITICAL();
+}
+
+bool motor_control_engage(void) {
+  if (armed || !all_zero() || !CDC_HostDTR()) return false;
+  sweep.active = false;
+  control_mode = true;
+  armed = true;
+  return true;
+}
+
+bool motor_control_active(void) { return armed && control_mode; }
+
+void motor_request_stop(const char *why) { stop_request = why; }
+
+void motor_say(const char *text) { log_text(text); }
 
 /** @brief Avança a varredura: um degrau a cada hold_ms, sobe e depois desce. */
 static void sweep_step(uint32_t now) {
@@ -235,12 +274,22 @@ static void motor_task(void *argument) {
     }
 
     if (armed && !CDC_HostDTR()) stop("porta USB fechada");
+    if (stop_request) { const char *why = stop_request; stop_request = NULL; stop(why); }
     uint32_t now = HAL_GetTick();
     if (armed) sweep_step(now);
 
     uint16_t value[4] = {0, 0, 0, 0};
     bool telemetry = false;
-    if (armed) {
+    if (armed && control_mode) {
+      uint16_t pm[4];
+      taskENTER_CRITICAL();
+      for (int i = 0; i < 4; ++i) pm[i] = control_permille[i];
+      taskEXIT_CRITICAL();
+      for (int i = 0; i < 4; ++i) {
+        current[i] = (uint32_t)pm[i] * 1000U;
+        value[i] = dshot_from_permille(pm[i]);
+      }
+    } else if (armed) {
       for (int i = 0; i < 4; ++i) {
         uint32_t goal = (uint32_t)target[i] * 1000U;
         if (current[i] < goal) current[i] = (goal - current[i] > rate) ? current[i] + rate : goal;
@@ -275,5 +324,5 @@ bool motor_test_start(void) {
   dshot_init();
   rx = xStreamBufferCreate(256, 1);
   return rx && xTaskCreateStatic(motor_task, "Motors", sizeof(motor_stack) / sizeof(motor_stack[0]),
-                                 NULL, tskIDLE_PRIORITY + 4, motor_stack, &motor_tcb) != NULL;
+                                 NULL, tskIDLE_PRIORITY + 5, motor_stack, &motor_tcb) != NULL;
 }

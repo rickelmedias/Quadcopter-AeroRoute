@@ -17,6 +17,7 @@
  *   BNO;t_ms;qw;qx;qy;qz (x10000);gx;gy;gz (mrad/s);ax;ay;az (mm/s^2);
  *       acc_rot;acc_gyro;acc_lin;n_rot;n_gyro;n_lin;gaps_rot;gaps_gyro;gaps_lin;online
  *   MOT;t_ms;armed;thr1..thr4 (0,1 %);dshot1..dshot4 (valor de 11 bits enviado)
+ *   EST;t_ms;modo;x;y;z;phi;theta;psi;vx;vy;vz;p;q;r (x1000, SI);w1..w4 (rad/s x10)
  *   SYS;t_ms;log_drop;heap_livre
  *   # texto livre (respostas de comando, avisos)
  *
@@ -33,6 +34,7 @@
 #define LOG_BNO   0
 #define LOG_MOTOR 0
 #define LOG_SYS   0
+#define LOG_EST   0
 #else
 /** Uma linha MTF a cada frame do MTF-01 (100 Hz). */
 #define LOG_MTF   1
@@ -40,12 +42,17 @@
 #define LOG_BNO   1
 /** Uma linha MOT a cada período da task de motores. */
 #define LOG_MOTOR 1
+/** Uma linha EST a cada LOG_EST_DIVIDER passos do LQG. */
+#define LOG_EST   1
 /** Uma linha SYS por segundo: descartes do log e heap livre. */
 #define LOG_SYS   1
 #endif
 
 /** Registra 1 a cada N amostras do BNO (1 = todas, 4 = 100 Hz com o BNO a 400 Hz). */
 #define LOG_BNO_DIVIDER 1U
+
+/** Registra 1 a cada N passos do LQG (8 = 50 Hz com a malha a 400 Hz). */
+#define LOG_EST_DIVIDER 8U
 
 /**
  * @brief Mantido em zero: os perfis de teste não criam estimadores de
@@ -91,6 +98,13 @@ void log_bno(const struct bno_sample_s *b);
 
 /** @brief Enfileira uma linha MOT; nunca bloqueia. */
 void log_motor(const log_motor_t *m);
+
+/**
+ * @brief Enfileira uma linha EST: 12 estados estimados e 4 rotações; nunca bloqueia.
+ *
+ * @param[in] mode  0 parado, 1 ensaio a seco, 2 voo.
+ */
+void log_est(uint8_t mode, const float x[12], const float u[4]);
 
 /**
  * @brief Enfileira uma linha de texto começando com "# ".

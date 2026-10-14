@@ -29,6 +29,7 @@
 #include "sensors.h"
 #include "sensor_log.h"
 #include "motor_test.h"
+#include "flight_ctrl.h"
 #include "usb_device.h"
 /* USER CODE END Includes */
 
@@ -144,7 +145,8 @@ void MX_FREERTOS_Init(void) {
   {
     Error_Handler();
   }
-  if (!sensor_log_start() || !sensors_init() || !motor_test_start())
+  if (!sensor_log_start() || !sensors_init() || !motor_test_start() ||
+      !flight_ctrl_start())
   {
     Error_Handler();
   }
