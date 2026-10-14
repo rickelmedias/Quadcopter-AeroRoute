@@ -5,7 +5,8 @@
  */
 #include "displacement.h"
 #include "sensor_log.h"
-#include "sensors.h"
+#include "bno08x.h"
+#include "mtf01.h"
 #include "capture.h"
 #include "range_filter.h"
 #include "FreeRTOS.h"

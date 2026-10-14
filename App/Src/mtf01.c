@@ -9,6 +9,7 @@
 #include "dma_ring.h"
 #include "mtf_parser.h"
 #include "capture.h"
+#include "sensor_log.h"
 #include "FreeRTOS.h"
 #include "task.h"
 #include "stream_buffer.h"
@@ -106,6 +107,8 @@ static void mtf_task(void *argument) {
                     parser.sample.precision, parser.sample.range_valid,
                     parser.sample.flow_valid, parser.sample.time_ms,
                     parser.sample.frames);
+        parser.sample.uart_errors = errors; parser.sample.dropped_bytes = dropped;
+        log_mtf(&parser.sample);
       }
     }
     parser.sample.uart_errors = errors; parser.sample.dropped_bytes = dropped;

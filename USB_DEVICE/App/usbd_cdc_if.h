@@ -39,4 +39,16 @@ bool CDC_HostDTR(void);
  * @return O contador.
  */
 uint32_t CDC_CloseEpoch(void);
+
+/**
+ * @brief Bytes recebidos do PC (chamada na interrupção USB).
+ *
+ * A definição padrão é fraca e descarta os bytes. Um perfil que aceita
+ * comandos (por exemplo, o teste de motores) a redefine; ela deve só copiar
+ * os bytes para uma fila e voltar.
+ *
+ * @param[in] data    Bytes recebidos.
+ * @param[in] length  Quantidade, até 64.
+ */
+void CDC_OnReceive(const uint8_t *data, uint32_t length);
 #endif

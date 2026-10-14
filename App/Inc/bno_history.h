@@ -13,8 +13,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-/** 160 ms a 100 Hz por tipo de relatório; cobre folgadamente um frame MTF. */
-#define BNO_HISTORY_CAPACITY 16U
+/** 80 ms a 400 Hz por tipo de relatório; cobre folgadamente um frame MTF. */
+#define BNO_HISTORY_CAPACITY 32U
 /** Extrapolação máxima tolerada numa borda do intervalo. */
 #define BNO_HISTORY_MAX_EXTRAPOLATION_US 20000U
 

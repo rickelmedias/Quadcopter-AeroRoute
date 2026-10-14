@@ -281,6 +281,11 @@ extern PCD_HandleTypeDef hpcd_USB_OTG_FS;
 void OTG_FS_IRQHandler(void) { HAL_PCD_IRQHandler(&hpcd_USB_OTG_FS); }
 
 /* USER CODE BEGIN 1 */
+extern I2C_HandleTypeDef hi2c2;
+/** Eventos do I2C2 (leitura do BNO08x por interrupção). */
+void I2C2_EV_IRQHandler(void) { HAL_I2C_EV_IRQHandler(&hi2c2); }
+/** Erros do I2C2. */
+void I2C2_ER_IRQHandler(void) { HAL_I2C_ER_IRQHandler(&hi2c2); }
 
 /* USER CODE END 1 */
 

@@ -14,7 +14,7 @@
 /**
  * @brief Último frame decodificado do MTF-01 e contadores de saúde do enlace.
  */
-typedef struct {
+typedef struct mtf_sample_s {
   /** Relógio do próprio sensor no frame, em ms (não é o tick do STM32). */
   uint32_t time_ms;
   /** Tick do STM32 (ms) em que o frame foi decodificado. */
