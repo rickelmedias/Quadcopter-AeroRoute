@@ -29,8 +29,8 @@ vibração e a interferência com os motores girando.
 | 3 | M3 | PB8 | TIM4_CH3 |
 | 4 | M4 | PB9 | TIM4_CH4 |
 
-O firmware envia DShot600 (1,67 us por bit, um quadro por milissegundo). Os
-ESCs com BLHeli_S, Bluejay, BLHeli_32 e AM32 aceitam DShot600. Se o ESC só
+O firmware envia DShot600 (1,67 us por bit, um quadro por milissegundo). O ESC
+do projeto (Skystars KM55A II, AM32) aceita DShot300 e DShot600. Se o ESC só
 aceitar DShot300, mude o período do TIM4 para 319 (`htim4.Init.Period` no
 CubeMX); o driver recalcula os pulsos sozinho.
 
