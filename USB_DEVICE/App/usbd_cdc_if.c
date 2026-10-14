@@ -11,7 +11,7 @@
 /** Memória da classe CDC. Instância única e alocação fixa, segura também
     durante o reset feito na interrupção USB. */
 static USBD_CDC_HandleTypeDef class_memory;
-/** Buffer de recepção (o conteúdo recebido é ignorado). */
+/** Buffer de recepção; o conteúdo vai para CDC_OnReceive(). */
 static uint8_t rx[64];
 /** Buffer de envio; CDC_Transmit_FS copia os dados para cá. */
 static uint8_t tx[2048];
@@ -93,17 +93,21 @@ static int8_t control(uint8_t cmd, uint8_t *p, uint16_t n) {
   return USBD_OK;
 }
 
+/** @brief Padrão: descarta os bytes (ver usbd_cdc_if.h). */
+__attribute__((weak)) void CDC_OnReceive(const uint8_t *data, uint32_t length) {
+  (void)data; (void)length;
+}
+
 /**
- * @brief Callback da classe: dados recebidos do PC. São descartados e a
- *        recepção é rearmada.
+ * @brief Callback da classe: dados recebidos do PC. São entregues a
+ *        CDC_OnReceive() e a recepção é rearmada.
  *
- * @param[in] p  Não usado.
- * @param[in] n  Não usado.
+ * @param[in] p  Bytes recebidos.
+ * @param[in] n  Quantidade.
  * @return USBD_OK.
  */
 static int8_t receive(uint8_t *p, uint32_t *n) {
-  (void)p; (void)n;
-  /* Esta porta só expõe logs, nunca comandos de voo. */
+  if (p && n) CDC_OnReceive(p, *n);
   USBD_CDC_SetRxBuffer(&hUsbDeviceFS, rx);
   USBD_CDC_ReceivePacket(&hUsbDeviceFS);
   return USBD_OK;

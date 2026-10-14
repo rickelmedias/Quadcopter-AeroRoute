@@ -9,6 +9,7 @@
 #include "bno08x.h"
 #include "bno_i2c_header.h"
 #include "capture.h"
+#include "sensor_log.h"
 #include "FreeRTOS.h"
 #include "task.h"
 #include "i2c.h"
@@ -19,8 +20,9 @@
 #include <math.h>
 #include <string.h>
 
-/** Intervalo pedido para cada relatório, em us (100 Hz). */
-#define REPORT_INTERVAL_US 10000U
+/** Intervalo pedido para cada relatório, em us (400 Hz, o máximo do datasheet
+    para rotação, giroscópio e aceleração linear). */
+#define REPORT_INTERVAL_US 2500U
 /** Tempo máximo sondando o I2C após soltar o RST, em ms; cobre os ~80 ms que
     esta placa realmente precisa. */
 #define PROBE_WINDOW_MS    400U
@@ -45,6 +47,51 @@ static bool transport_failed;
 static volatile uint32_t irq_us;
 /** Endereço I2C já deslocado como a HAL espera; 0 até o sensor ser encontrado. */
 static uint16_t address;
+
+/** Task que espera a transferência I2C em andamento. */
+static TaskHandle_t i2c_waiter;
+/** Resultado da última transferência I2C por interrupção. */
+static volatile bool i2c_ok;
+
+/** @brief Fim de recepção I2C (interrupção): acorda a task do BNO. */
+void HAL_I2C_MasterRxCpltCallback(I2C_HandleTypeDef *h) {
+  if (h != &hi2c2 || !i2c_waiter) return;
+  BaseType_t wake = pdFALSE;
+  i2c_ok = true;
+  vTaskNotifyGiveFromISR(i2c_waiter, &wake);
+  portYIELD_FROM_ISR(wake);
+}
+
+/** @brief Erro I2C (interrupção): acorda a task do BNO com falha. */
+void HAL_I2C_ErrorCallback(I2C_HandleTypeDef *h) {
+  if (h != &hi2c2 || !i2c_waiter) return;
+  BaseType_t wake = pdFALSE;
+  i2c_ok = false;
+  vTaskNotifyGiveFromISR(i2c_waiter, &wake);
+  portYIELD_FROM_ISR(wake);
+}
+
+/**
+ * @brief Lê @p length bytes do BNO por interrupção, dormindo até o fim.
+ *
+ * Com o I2C a 400 kHz e os três relatórios a 400 Hz, o barramento fica ocupado
+ * perto de metade do tempo. No modo bloqueante da HAL a CPU ficaria esse tempo
+ * todo esperando; aqui ela fica livre para as outras tasks.
+ *
+ * @return true se a transferência terminou sem erro dentro de @p timeout_ms.
+ */
+static bool i2c_receive(uint8_t *buffer, uint16_t length, uint32_t timeout_ms) {
+  i2c_waiter = xTaskGetCurrentTaskHandle();
+  (void)ulTaskNotifyTake(pdTRUE, 0);
+  i2c_ok = false;
+  if (HAL_I2C_Master_Receive_IT(&hi2c2, address, buffer, length) != HAL_OK) return false;
+  if (!ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(timeout_ms))) {
+    /* Sem resposta: a sessão será refeita, e o caminho de erro reinicia o
+       periférico (HAL_I2C_DeInit/Init) antes da próxima tentativa. */
+    return false;
+  }
+  return i2c_ok;
+}
 
 /**
  * @brief Copia a amostra em construção para a publicada.
@@ -205,7 +252,7 @@ static int hub_read(sh2_Hal_t *self, uint8_t *buffer, unsigned capacity, uint32_
   }
   uint8_t header[4];
   *timestamp = irq_us;
-  if (HAL_I2C_Master_Receive(&hi2c2, address, header, 4, 20) != HAL_OK) {
+  if (!i2c_receive(header, 4, 20)) {
     fail(BNO_FAULT_TRANSPORT); goto failed;
   }
   unsigned length = ((unsigned)header[0] | (unsigned)header[1]<<8) & 0x7FFFU;
@@ -221,7 +268,7 @@ static int hub_read(sh2_Hal_t *self, uint8_t *buffer, unsigned capacity, uint32_
   /* Toda transferência I2C repete o cabeçalho SHTP, então se lê o tamanho
      completo, e não tamanho-4, e nunca como leitura de registrador
      (Mem_Read). */
-  if (HAL_I2C_Master_Receive(&hi2c2, address, buffer, length, 40) != HAL_OK) {
+  if (!i2c_receive(buffer, (uint16_t)length, 40)) {
     fail(BNO_FAULT_TRANSPORT); goto failed;
   }
   if (!bno_i2c_header_matches(header, buffer)) { fail(BNO_FAULT_PROTOCOL); goto failed; }
@@ -350,7 +397,7 @@ static void sensor_event(void *cookie, sh2_SensorEvent_t *e) {
 }
 
 /**
- * @brief Habilita os três relatórios a 100 Hz: rotação, giroscópio calibrado
+ * @brief Habilita os três relatórios a 400 Hz: rotação, giroscópio calibrado
  *        e aceleração linear.
  *
  * @return true se os três foram aceitos pelo sensor.
@@ -362,8 +409,8 @@ static bool configure(void) {
          sh2_setSensorConfig(SH2_GYROSCOPE_CALIBRATED, &c) == SH2_OK &&
          /* Aceleração linear em vez do acelerômetro bruto: o hub remove a
             gravidade usando a própria solução de atitude, o que é melhor que
-            reconstruí-la aqui. Três relatórios a 100 Hz é o que o barramento
-            I2C carrega com folga, então este substitui o bruto. */
+            reconstruí-la aqui. Três relatórios a 400 Hz ocupam cerca de
+            metade do I2C a 400 kHz, então este substitui o bruto. */
          sh2_setSensorConfig(SH2_LINEAR_ACCELERATION, &c) == SH2_OK;
 }
 
@@ -443,6 +490,8 @@ static void bno_task(void *argument) {
       }
 
       uint32_t settled = HAL_GetTick();
+      uint32_t last_rotation = sample.rotation.count;
+      uint32_t last_total = 0;
       while (sample.online && !transport_failed) {
         capture_diag_poll(&last_diag_ms, CAP_CLOCK_RESYNCS_UNKNOWN);
         sh2_service();
@@ -459,8 +508,19 @@ static void bno_task(void *argument) {
           fail(BNO_FAULT_STALLED);
           break;
         }
-        publish();
-        vTaskDelay(1);
+        /* Publica só quando chegou relatório novo. hub_read() já dorme 1 ms
+           quando o INT diz que não há nada, então este laço não gira em vão,
+           e com dado pendente ele lê o próximo pacote sem esperar o tick. */
+        const uint32_t total = sample.rotation.count + sample.angular.count +
+                               sample.acceleration.count;
+        if (total != last_total) {
+          last_total = total;
+          publish();
+          if (sample.rotation.count != last_rotation) {
+            last_rotation = sample.rotation.count;
+            log_bno(&sample);
+          }
+        }
       }
       sh2_close();
     }

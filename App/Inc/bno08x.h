@@ -61,7 +61,7 @@ typedef struct {
 /**
  * @brief Última amostra e estado de saúde publicados pelo driver do BNO08x.
  */
-typedef struct {
+typedef struct bno_sample_s {
   /** Vetor de rotação w,x,y,z, normalizado. */
   float q[4];
   /** Velocidade angular calibrada p,q,r, em rad/s, eixos do corpo. Estes são
@@ -116,7 +116,7 @@ typedef struct {
  * @brief Cria a task do BNO08x.
  *
  * A task faz o reset físico, sonda os endereços, configura os relatórios a
- * 100 Hz e tenta reconectar a cada 2 s após qualquer falha.
+ * 400 Hz e tenta reconectar a cada 2 s após qualquer falha.
  *
  * @return true se a task foi criada.
  */
