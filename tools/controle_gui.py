@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Painel do teste de controle: sobe 10 cm em rampa, segura e pousa em rampa.
+"""Painel do teste de controle: sobe 15 cm em rampa, segura e pousa em rampa.
 
 Fala com o console USB do firmware (``App/Inc/usb_console.h``) pela porta serial
 do STM32 (CDC, normalmente ``/dev/ttyACM0``) e mostra a telemetria do LQG:
@@ -10,8 +10,8 @@ Depende de ``pyserial`` e de ``tkinter``.
 
 O que o painel faz:
 
-* **LIGAR** arma e sobe 10 cm em rampa (o firmware limita qualquer pedido a
-  10 cm e usa a altura lida pelo MTF-01); **DESLIGAR** pousa em rampa e desarma.
+* **LIGAR** arma e sobe 15 cm em rampa (o firmware limita qualquer pedido a
+  15 cm e usa a altura lida pelo MTF-01); **DESLIGAR** pousa em rampa e desarma.
 * **EMERGÊNCIA** (ou barra de espaço / Esc) corta os motores na hora.
 * **Ensaio a seco** (marcado por padrão): o controle roda e a tela mostra o que
   cada motor receberia, mas os motores não giram. Use com o drone na mão para
@@ -23,7 +23,7 @@ posição horizontal **não** é controlada: um pequeno erro de nível faz o dro
 deslizar. Prenda-o.
 
 Segurança no firmware: inclinação acima de 20 graus corta os motores; altura
-acima de 20 cm pousa; se o PC calar por 1 s (watchdog), o drone pousa em rampa.
+acima de 25 cm pousa; se o PC calar por 1 s (watchdog), o drone pousa em rampa.
 """
 from __future__ import annotations
 
@@ -40,7 +40,7 @@ from serial.tools import list_ports
 #: Porta padrão do STM32 (CDC).
 PORTA_PADRAO = "/dev/ttyACM0"
 #: Altura da subida pedida, em m (o firmware também limita a este valor).
-ALTURA_M = 0.10
+ALTURA_M = 0.15
 #: Prazo do watchdog do firmware, em ms.
 WATCHDOG_MS = 1000
 #: Intervalo entre mensagens de "estou vivo", em s.
@@ -317,14 +317,14 @@ def executar_tela(porta_inicial: str) -> None:
             return
         if not seco_var.get() and not messagebox.askokcancel(
             "Soltar os motores?",
-            "Ensaio a seco DESLIGADO: os motores vão girar e o drone vai subir 10 cm.\n\n"
+            f"Ensaio a seco DESLIGADO: os motores vão girar e o drone vai subir {ALTURA_M * 100:.0f} cm.\n\n"
             "• Drone PRESO (barbante) e em área livre?\n• Hélices conferidas?\n"
             "• Mão no botão de EMERGÊNCIA (barra de espaço)?",
         ):
             return
         for cmd in comando_ligar(seco_var.get()):
             mandar(cmd)
-        escrever_log("LIGAR: " + ("ensaio a seco" if seco_var.get() else "MOTORES REAIS") + ", subindo 10 cm")
+        escrever_log("LIGAR: " + ("ensaio a seco" if seco_var.get() else "MOTORES REAIS") + f", subindo {ALTURA_M * 100:.0f} cm")
 
     def ajustar(nome: str, valor: str) -> None:
         mandar(f"param set {nome} {valor}")
@@ -400,7 +400,7 @@ def executar_tela(porta_inicial: str) -> None:
             return "DESLIGAR (pousar em rampa)"
         if est.estado == ESTADO_POUSANDO:
             return "Pousando..."
-        return "LIGAR (subir 10 cm)"
+        return f"LIGAR (subir {ALTURA_M * 100:.0f} cm)"
 
     def tique() -> None:
         consumir_eventos()

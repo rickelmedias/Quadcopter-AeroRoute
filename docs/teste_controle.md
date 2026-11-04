@@ -1,7 +1,7 @@
 # Teste de controle (branch `controle`)
 
 Testa só o controle do TCC (Kalman + LQR do `main`): estabiliza **rolagem e
-arfagem**, mantém a **guinada no zero da energização** e **sobe 10 cm** em
+arfagem**, mantém a **guinada no zero da energização** e **sobe 15 cm** em
 rampa, lendo a altura no MTF-01. Ao desligar, pousa em rampa.
 
 ## O que é diferente do `main`
@@ -9,8 +9,8 @@ rampa, lendo a altura no MTF-01. Ao desligar, pousa em rampa.
 | Item | `main` | `controle` |
 |---|---|---|
 | `LQG_FLIGHT_ENABLED` | 0 | 1 (mas o firmware sobe com `FLT_DRY_RUN = 1`) |
-| Altura máxima (`FLIGHT_MAX_HEIGHT_M`) | 1,5 m | **0,10 m** (qualquer pedido maior é negado) |
-| Rampa de subida e de descida | 0,3 m/s e ≥ 0,2 m/s | **0,05 m/s** (subir 10 cm leva 2 s) |
+| Altura máxima (`FLIGHT_MAX_HEIGHT_M`) | 1,5 m | **0,15 m** (qualquer pedido maior é negado) |
+| Rampa de subida e de descida | 0,3 m/s e ≥ 0,2 m/s | **0,05 m/s** (subir 15 cm leva 3 s) |
 | Corte por inclinação (`FLT_TILT_MAX`) | 45° | **20°** |
 | Fim do pouso (`FLT_LAND_H`) | 8 cm | 3 cm |
 | `MOT_MAX` | 100% | **60%** |
@@ -28,7 +28,7 @@ Prenda-o com barbante e teste numa área livre. O zero de roll e pitch
 (`SNS_ZERO_ROLL`/`SNS_ZERO_PITCH`) precisa estar certo.
 
 Proteções do firmware: inclinação > 20° corta os motores; altura acima de
-20 cm pousa; BNO sem dado por 50 ms corta; MTF sem dado por 300 ms pousa;
+25 cm pousa; BNO sem dado por 50 ms corta; MTF sem dado por 300 ms pousa;
 porta USB fechada corta; **PC calado por 1 s (watchdog) pousa em rampa**.
 
 ## Painel
@@ -37,7 +37,7 @@ porta USB fechada corta; **PC calado por 1 s (watchdog) pousa em rampa**.
 python3 tools/controle_gui.py [/dev/ttyACM0]
 ```
 
-- **LIGAR / DESLIGAR:** LIGAR arma e sobe 10 cm em rampa; DESLIGAR pousa em
+- **LIGAR / DESLIGAR:** LIGAR arma e sobe 15 cm em rampa; DESLIGAR pousa em
   rampa e desarma sozinho.
 - **EMERGÊNCIA** (ou barra de espaço / Esc): corta os motores na hora.
 - **Ensaio a seco** (marcado): o controle roda e a tela mostra o que cada motor
@@ -64,7 +64,7 @@ python3 tools/controle_gui.py [/dev/ttyACM0]
    Sinal trocado: corrija `SNS_SGN_*` (`param set` pelo console). O de ψ também
    depende de as hélices pretas (M2, M3) girarem no sentido anti-horário visto
    de cima.
-3. LIGAR a seco: o estado vai a DECOLANDO e a referência sobe 10 cm. Como os
+3. LIGAR a seco: o estado vai a DECOLANDO e a referência sobe 15 cm. Como os
    motores estão parados, ele não chega em SEGURANDO.
 4. **Com motores:** drone preso, barbante, mão na EMERGÊNCIA. Desmarque o
    ensaio a seco e LIGAR. Se não sai do chão, suba `CTL_W0`; se dispara, desça.

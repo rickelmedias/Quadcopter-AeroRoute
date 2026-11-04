@@ -104,7 +104,7 @@ static void test_first_step_is_zero(void) {
 static double noise(void) { return (rand() / (double)RAND_MAX - 0.5) * 2.0; }
 
 /**
- * @brief Malha fechada na planta exportada pelo Simulink: sobe 10 cm em rampa
+ * @brief Malha fechada na planta exportada pelo Simulink: sobe 15 cm em rampa
  *        de 0,05 m/s, com ruído nos sensores e um fluxo óptico absurdo que
  *        precisa ser ignorado.
  *
@@ -130,7 +130,7 @@ static void test_closed_loop_attitude_and_height(void) {
                                        LQG_X_VY, LQG_X_P, LQG_X_Q, LQG_X_R};
   double max_late_angle = 0.0;
   for (int k = 0; k < 1500; ++k) {
-    if (k >= 100) zref = fmax(zref - 0.05 * LQG_TS_S, z0 - 0.10);
+    if (k >= 100) zref = fmax(zref - 0.05 * LQG_TS_S, z0 - 0.15);
     lqg_real_t y[LQG_NY], du[LQG_NU];
     const lqg_real_t r[LQG_NR] = {0.0, 0.0, zref, 0.0};
     for (unsigned i = 0U; i < LQG_NY; ++i) y[i] = x[idx[i]];
@@ -160,7 +160,7 @@ static void test_closed_loop_attitude_and_height(void) {
     }
   }
   assert(max_late_angle < 0.01);                 /* menos de 0,6 grau depois de 3 s */
-  assert(fabs(x[LQG_X_Z] - (z0 - 0.10)) < 0.005); /* 10 cm, com erro < 5 mm */
+  assert(fabs(x[LQG_X_Z] - (z0 - 0.15)) < 0.005); /* 15 cm, com erro < 5 mm */
 }
 
 int main(void) {

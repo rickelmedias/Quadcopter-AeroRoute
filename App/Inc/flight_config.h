@@ -115,9 +115,9 @@
 
 /**
  * Maior altura que qualquer pedido de decolagem ou trecho aceita, em m. O
- * teste de controle sobe só 10 cm (lidos pelo MTF-01).
+ * teste de controle sobe só 15 cm (lidos pelo MTF-01).
  */
-#define FLIGHT_MAX_HEIGHT_M    0.10F
+#define FLIGHT_MAX_HEIGHT_M    0.15F
 /** Folga numérica ao comparar uma altura pedida com ::FLIGHT_MAX_HEIGHT_M, em m. */
 #define FLIGHT_HEIGHT_TOL_M    0.001F
 /**
@@ -129,7 +129,7 @@
 #define FLIGHT_LAND_MIN_RATE_M_S 0.03F
 
 /** Altura padrão do hover, em m. */
-#define DEFAULT_HOVER_HEIGHT_M 0.10F
+#define DEFAULT_HOVER_HEIGHT_M 0.15F
 /** Rampa da referência vertical, em m/s (0 = degrau, como na simulação). */
 #define DEFAULT_Z_RATE_M_S     0.05F
 /** Rampa padrão da referência horizontal, em m/s. */
