@@ -99,7 +99,9 @@ do parâmetro `CTL_W0`. *Confira esse valor com o ω0 do script do MATLAB.*
 ```
 
 Frente = M2 e M4, trás = M1 e M3, direita = M1 e M2, esquerda = M3 e M4.
-M1 e M4 têm hélice amarela (invertida). As colunas de B seguem outra ordem:
+M1 e M4 têm hélice amarela (invertida) e o ESC com sentido **invertido**; M2 e
+M3 têm hélice preta e ESC **normal** (testado e gravado na bancada, ver
+`docs/guia_teste_motores.md`). As colunas de B seguem outra ordem:
 `control/mixer.h` leva u1→M4, u2→M2, u3→M1, u4→M3, que é o canto de cada
 entrada no modelo (u1 frente/esquerda, u2 frente/direita, u3 trás/direita,
 u4 trás/esquerda). O sinal de ψ de B supõe hélices pretas (M2, M3) girando no

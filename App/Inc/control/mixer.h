@@ -19,12 +19,16 @@
  * M2 e M4, trás = M1 e M3, direita = M1 e M2, esquerda = M3 e M4. Cada
  * entrada do modelo vai para o motor que ocupa o mesmo canto:
  *
- * | Entrada | Canto do modelo     | Motor físico |
- * |---------|---------------------|--------------|
- * | u1      | frente / esquerda   | M4           |
- * | u2      | frente / direita    | M2           |
- * | u3      | trás / direita      | M1           |
- * | u4      | trás / esquerda     | M3           |
+ * | Entrada | Canto do modelo     | Motor físico | Hélice  | Sentido gravado no ESC |
+ * |---------|---------------------|--------------|---------|------------------------|
+ * | u1      | frente / esquerda   | M4           | amarela | invertido              |
+ * | u2      | frente / direita    | M2           | preta   | normal                 |
+ * | u3      | trás / direita      | M1           | amarela | invertido              |
+ * | u4      | trás / esquerda     | M3           | preta   | normal                 |
+ *
+ * O sentido dos ESCs foi definido e gravado no teste de bancada (branch
+ * `motores`, painel tools/motores_gui.py): fica na memória do ESC, então o
+ * voo não envia comando de sentido.
  *
  * Os pares diagonais (u2, u4) e (u1, u3) caem em (M2, M3) e (M4, M1), ou seja,
  * em hélices de mesma cor, como o sinal de ψ da matriz B exige. Esse sinal

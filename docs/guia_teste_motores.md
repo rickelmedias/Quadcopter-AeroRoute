@@ -7,6 +7,26 @@ BNO08x) continuam sendo lidos e registrados, para ver a vibração e a
 interferência com os motores girando. Os comandos de voo do mesmo console
 (`hover`, `dry`, `land`...) estão em [`controle_lqg.md`](controle_lqg.md).
 
+## Configuração final dos ESCs
+
+Definida no teste de bancada da branch `motores` (painel
+`tools/motores_gui.py`, comandos `dir` e `d` do console de lá) e gravada na
+memória dos ESCs:
+
+| Motor | Posição | Hélice | Sentido do ESC |
+|---|---|---|---|
+| M1 | trás / direita | amarela (invertida) | invertido |
+| M2 | frente / direita | preta | normal |
+| M3 | trás / esquerda | preta | normal |
+| M4 | frente / esquerda | amarela (invertida) | invertido |
+
+Efeitos medidos na bancada: M1+M2 acima de M3+M4 faz o pitch do BNO ficar mais
+negativo (e o contrário o deixa mais positivo); M2+M4 acima de M1+M3 faz o
+roll do BNO subir (e o contrário o faz descer). Girar o drone para a esquerda
+aumenta a guinada do BNO. Os `SNS_SGN_*` e o mixer (`control/mixer.h`) seguem
+essas medições. O firmware da `main` não envia comando de sentido; se trocar
+um ESC, refaça pela branch `motores`.
+
 ## 1. Segurança antes de ligar
 
 - **Tire as hélices.** Todas. O teste vai até 100%.
