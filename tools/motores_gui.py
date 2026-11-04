@@ -46,6 +46,11 @@ INTERVALO_ENVIO_S = 0.08
 #: Rampa do firmware, em % por segundo, ao conectar.
 RAMPA_PADRAO = 40
 
+#: Sentido gravado nos ESCs no teste de bancada ("r" = invertido, "n" = normal):
+#: M1 e M4 (hélices amarelas, invertidas) e M2 e M3 (pretas, normais). O ESC não
+#: informa o sentido, então a tela parte deste valor e muda quando o botão é usado.
+SENTIDO_ESC_CONFIGURADO = {1: "r", 2: "n", 3: "n", 4: "r"}
+
 #: Motores na ordem da tela (cima = frente do drone): (número, rótulo, cor da hélice).
 LAYOUT = [
     [(4, "M4 · frente/esquerda", "#e0b400"), (2, "M2 · frente/direita", "#222222")],
@@ -182,7 +187,7 @@ def executar_tela(porta_inicial: str) -> None:
     # Valor pedido por motor (índice 0 = M1) e último valor já enviado.
     pedido = [0, 0, 0, 0]
     enviado = [-1, -1, -1, -1]
-    sentido = {n: "?" for n in (1, 2, 3, 4)}  # "n", "r" ou "?" (não definido por aqui)
+    sentido = dict(SENTIDO_ESC_CONFIGURADO)  # "n", "r" ou "?" (desconhecido)
     angulo = {n: 0.0 for n in (1, 2, 3, 4)}
     ultimo_envio = [0.0]
     ultimo_ping = [0.0]

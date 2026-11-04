@@ -35,6 +35,15 @@ def test_limitar():
     assert g.limitar(2000, 20) == 48  # limite abaixo do mínimo ainda respeita 48
 
 
+def test_sentido_configurado_segue_a_cor_da_helice():
+    """Hélices amarelas (invertidas) têm o ESC invertido; as pretas, normal."""
+    for linha in g.LAYOUT:
+        for numero, _rotulo, cor in linha:
+            esperado = "r" if cor == "#e0b400" else "n"
+            assert g.SENTIDO_ESC_CONFIGURADO[numero] == esperado, numero
+    assert g.SENTIDO_ESC_CONFIGURADO == {1: "r", 2: "n", 3: "n", 4: "r"}
+
+
 def test_proximo_comando():
     enviado = [0, 0, 0, 0]
     assert g.proximo_comando([0, 0, 0, 0], enviado) is None

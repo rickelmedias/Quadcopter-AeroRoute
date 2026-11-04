@@ -23,6 +23,13 @@ motor, beep, **sentido de giro** (comandos DShot 7/8 mais 12 para gravar no
 ESC), limite de DShot e rampa. Ele liga o watchdog do firmware (`wd 1000`): se
 o PC parar de falar por 1 s, os motores são cortados.
 
+**Configuração final dos ESCs (testada na bancada):** M1 e M4 (hélices
+amarelas, invertidas) com o sentido **invertido**; M2 e M3 (hélices pretas)
+**normal**. Está gravada na memória dos ESCs, então o controle de voo não
+precisa reenviar. O painel já parte desse estado (`SENTIDO_ESC_CONFIGURADO` em
+`tools/motores_gui.py`), mas o ESC não informa o sentido: se trocar um ESC,
+refaça pelo botão e confira olhando o motor.
+
 A animação é proporcional ao DShot **enviado**; o ESC não informa a rotação
 real. O sentido gravado também não é lido de volta: o botão mostra "?" até
 você mexer nele. Se o ESC não aceitar o comando de sentido, inverta dois fios
