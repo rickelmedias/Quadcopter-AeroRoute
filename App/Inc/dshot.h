@@ -23,6 +23,12 @@
 #define DSHOT_THROTTLE_MAX 2047U
 /** Comando DShot de beep 1 (só com o motor parado). */
 #define DSHOT_CMD_BEEP1 1U
+/** Comando DShot: sentido de giro normal (só com o motor parado; precisa ser salvo). */
+#define DSHOT_CMD_SPIN_DIRECTION_1 7U
+/** Comando DShot: sentido de giro invertido (só com o motor parado; precisa ser salvo). */
+#define DSHOT_CMD_SPIN_DIRECTION_2 8U
+/** Comando DShot: grava na memória do ESC o que foi mudado (sentido). */
+#define DSHOT_CMD_SAVE_SETTINGS 12U
 
 /**
  * @brief Liga os quatro canais PWM do TIM4 com saída em zero e prepara o DMA.
@@ -55,4 +61,12 @@ bool dshot_write(const uint16_t value[4], bool telemetry);
  * 0 vira 0 (parado); 1..1000 vira 48..2047, linear.
  */
 uint16_t dshot_from_permille(uint16_t permille);
+
+/**
+ * @brief Converte um valor DShot de aceleração (48..2047) em décimos de por cento.
+ *
+ * Inversa aproximada de ::dshot_from_permille(): 0 e valores abaixo de 48
+ * viram 0 (parado); acima de 2047 vira 1000.
+ */
+uint16_t dshot_to_permille(uint16_t value);
 #endif

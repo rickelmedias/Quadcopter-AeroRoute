@@ -70,6 +70,13 @@ bool dshot_write(const uint16_t value[4], bool telemetry) {
   return true;
 }
 
+uint16_t dshot_to_permille(uint16_t value) {
+  if (value < DSHOT_THROTTLE_MIN) return 0U;
+  if (value > DSHOT_THROTTLE_MAX) value = DSHOT_THROTTLE_MAX;
+  const uint32_t span = DSHOT_THROTTLE_MAX - DSHOT_THROTTLE_MIN;
+  return (uint16_t)(((uint32_t)(value - DSHOT_THROTTLE_MIN) * 1000U + span / 2U) / span);
+}
+
 uint16_t dshot_from_permille(uint16_t permille) {
   if (permille == 0U) return 0U;
   if (permille > 1000U) permille = 1000U;

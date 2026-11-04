@@ -99,6 +99,37 @@ void motors_set_flight_throttle(const float throttle[MOTORS_COUNT]);
 bool motors_bench_set(uint8_t mask, uint16_t permille);
 
 /**
+ * @brief Alvo de bancada em valor DShot cru.
+ *
+ * Converte para décimos de por cento (resolução de 2 degraus DShot) e segue a
+ * mesma rampa de ::motors_bench_set(). O valor realmente enviado aparece em
+ * ::motors_status_t::dshot.
+ *
+ * @param[in] mask    Bit i = motor i+1.
+ * @param[in] dshot   0 (parado) ou 48..2047.
+ * @return false se a bancada não está armada.
+ */
+bool motors_bench_set_dshot(uint8_t mask, uint16_t dshot);
+
+/**
+ * @brief Muda e grava o sentido de giro dos ESCs (só desarmado, motor parado).
+ *
+ * Envia o comando DShot 7 (normal) ou 8 (invertido) repetido, e depois o
+ * comando 12 (gravar), com pausas. A sequência leva ~0,4 s e bloqueia o
+ * armamento enquanto roda (::motors_direction_busy()). Nem todo firmware de
+ * ESC aceita; se o sentido não mudar, inverta dois fios do motor.
+ *
+ * @param[in] mask      Bit i = motor i+1.
+ * @param[in] reversed  true = invertido (comando 8), false = normal (comando 7).
+ * @return false se a saída está armada, algum motor não está em zero ou já há
+ *         uma sequência em andamento.
+ */
+bool motors_set_direction(uint8_t mask, bool reversed);
+
+/** @brief Verdadeiro enquanto uma sequência de ::motors_set_direction() roda. */
+bool motors_direction_busy(void);
+
+/**
  * @brief Velocidade máxima da rampa de bancada.
  * @param[in] permille_per_s  Décimos de por cento por segundo (10..1000).
  */

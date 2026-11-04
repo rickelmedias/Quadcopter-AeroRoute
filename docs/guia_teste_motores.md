@@ -7,6 +7,27 @@ BNO08x) continuam sendo lidos e registrados, para ver a vibração e a
 interferência com os motores girando. Os comandos de voo do mesmo console
 (`hover`, `dry`, `land`...) estão em [`controle_lqg.md`](controle_lqg.md).
 
+## Painel gráfico (branch `motores`)
+
+A branch `motores` sobe só o teste de motores (sem sensores, voo nem
+DroneLink) e traz um painel em Python que fala com o console USB:
+
+```text
+python3 tools/motores_gui.py [/dev/ttyACM0]
+```
+
+Precisa de `pyserial` e `tkinter`. O painel mostra os 4 motores na posição
+física (frente para cima; M1 e M4 amarelos), com **ARMAR ESC**, **PARAR TUDO**
+(também barra de espaço e Esc), um controle de DShot (0 ou 48 a 2047) por
+motor, beep, **sentido de giro** (comandos DShot 7/8 mais 12 para gravar no
+ESC), limite de DShot e rampa. Ele liga o watchdog do firmware (`wd 1000`): se
+o PC parar de falar por 1 s, os motores são cortados.
+
+A animação é proporcional ao DShot **enviado**; o ESC não informa a rotação
+real. O sentido gravado também não é lido de volta: o botão mostra "?" até
+você mexer nele. Se o ESC não aceitar o comando de sentido, inverta dois fios
+do motor ou use o configurador do AM32.
+
 ## 1. Segurança antes de ligar
 
 - **Tire as hélices.** Todas. O teste vai até 100%.
