@@ -50,21 +50,43 @@
 /** Aceleração com o drone armado e parado no chão (fração 0..1). */
 #define DEFAULT_MOT_IDLE  0.05F
 
+/* ---- Zero (nível) do BNO08x -------------------------------------------
+   O BNO está montado de cabeça para baixo por exigência da montagem: com o
+   drone nivelado no chão ele lê roll ~ -174,5 graus e pitch ~ -2,9 graus.
+   Esses valores são o zero: o controle usa roll e pitch medidos em relação a
+   eles, então o drone nivelado vale 0. A guinada não é zerada (referência
+   ao norte). Para recalibrar, leia roll e pitch crus com o drone nivelado
+   (log EST/BNO) e ajuste ZERO_ROLL e ZERO_PITCH em tempo de execução. */
+/** Roll cru lido com o drone nivelado, em graus. */
+#define DEFAULT_ZERO_ROLL_DEG   (-174.5F)
+/** Pitch cru lido com o drone nivelado, em graus. */
+#define DEFAULT_ZERO_PITCH_DEG  (-2.9F)
+
 /* ---- Sinais dos sensores para NED ---------------------------------------
-   Padrão para o BNO montado com x para a frente e z para cima (FLU):
-   rolagem igual, arfagem e guinada invertidas. */
-/** Sinal da rolagem do BNO08x. */
+   O BNO está de cabeça para baixo e com o eixo x para o lado do drone, então
+   o pitch do sensor é a rolagem φ do modelo e o roll do sensor é a arfagem θ
+   (ver control/meas.h). Medido na bancada, com o zero de nível aplicado:
+   - aumentar M2 e M4 (frente) e diminuir M1 e M3 faz o roll do sensor subir,
+     e o nariz sobe: θ = +roll do sensor;
+   - aumentar M1 e M2 (direita) e diminuir M3 e M4 faz o pitch do sensor
+     descer, e o lado direito sobe (φ negativo): φ = +pitch do sensor;
+   - girar para a esquerda (anti-horário visto de cima) aumenta a guinada do
+     sensor, e ψ do modelo cresce no sentido horário: ψ = -guinada do sensor.
+   Os giros seguem a cinemática de Euler com o roll do sensor perto de 180
+   graus: p = -giro y, q = +giro x, r = +giro z. Confirme os giros na
+   bancada (roteiro em docs/controle_lqg.md). */
+/** Sinal de φ (vem do pitch do BNO08x). */
 #define DEFAULT_SGN_ROLL   (+1.0F)
-/** Sinal da arfagem do BNO08x. */
-#define DEFAULT_SGN_PITCH  (-1.0F)
+/** Sinal de θ (vem do roll do BNO08x). */
+#define DEFAULT_SGN_PITCH  (+1.0F)
 /** Sinal da guinada do BNO08x. */
 #define DEFAULT_SGN_YAW    (-1.0F)
-/** Sinal do giro p. */
-#define DEFAULT_SGN_P      (+1.0F)
-/** Sinal do giro q. */
-#define DEFAULT_SGN_Q      (-1.0F)
-/** Sinal do giro r. */
-#define DEFAULT_SGN_R      (-1.0F)
+/** Sinal de p (vem do giro y do BNO08x). */
+#define DEFAULT_SGN_P      (-1.0F)
+/** Sinal de q (vem do giro x do BNO08x). */
+#define DEFAULT_SGN_Q      (+1.0F)
+/** Sinal de r (vem do giro z do BNO08x). */
+#define DEFAULT_SGN_R      (+1.0F)
 /** Sinal da velocidade x do fluxo (já girada pela guinada) para NED. */
 #define DEFAULT_SGN_VX     (+1.0F)
 /** Sinal da velocidade y do fluxo para NED. */

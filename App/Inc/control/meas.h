@@ -10,10 +10,16 @@
  * | Medida      | Origem                                                          |
  * |-------------|-----------------------------------------------------------------|
  * | z           | -(distância do MTF-01 · cos(inclinação)), em m (NED: z para baixo) |
- * | φ, θ        | Euler do BNO08x, com os sinais SNS_SGN_*                         |
- * | ψ           | guinada do BNO08x relativa ao início, sem saltos em ±π           |
+ * | φ           | pitch do BNO08x menos o zero, com o sinal SNS_SGN_ROLL           |
+ * | θ           | roll do BNO08x menos o zero, com o sinal SNS_SGN_PITCH           |
+ * | ψ           | guinada do BNO08x relativa à energização, sem saltos em ±π       |
  * | vx, vy      | (escala · fluxo + ganho · giro) · distância, girada pela guinada |
- * | p, q, r     | giroscópio do BNO08x, com os sinais SNS_SGN_*                    |
+ * | p, q, r     | giro y, giro x e giro z do BNO08x, com os sinais SNS_SGN_P/Q/R   |
+ *
+ * O BNO está montado de cabeça para baixo e girado 90 graus em torno da
+ * vertical: o eixo x dele aponta para o lado do drone, então roll e pitch do
+ * sensor trocam de papel (e o giro x/y também). Com o drone nivelado o roll
+ * do sensor lê ~ -174,5 graus; o zero é SNS_ZERO_ROLL/SNS_ZERO_PITCH.
  *
  * Quando um sensor não tem leitura válida, a medida correspondente repete o
  * último valor (segurador de ordem zero, como uma entrada amostrada no
@@ -70,7 +76,7 @@ typedef struct {
 typedef struct {
   /** Última medida de cada saída (repetida quando o sensor falha). */
   float y[LQG_NY];
-  /** Guinada do sensor no instante do reset, em rad. */
+  /** Guinada do sensor na energização (primeira leitura válida), em rad. */
   float yaw_origin;
   /** Última guinada do sensor vista, em rad, para desenrolar. */
   float yaw_last;
@@ -81,13 +87,24 @@ typedef struct {
 } meas_state_t;
 
 /**
- * @brief Zera as medidas e define que a próxima guinada lida é o zero.
+ * @brief Zera tudo e define que a próxima guinada lida é o zero.
  *
- * Chamada ao armar: o referencial local (x, y e ψ) começa onde o drone está.
+ * Chamada uma vez, na energização: a guinada zero é a direção em que o drone
+ * foi ligado.
  *
  * @param[out] s  Estado.
  */
 void meas_reset(meas_state_t *s);
+
+/**
+ * @brief Esquece as últimas medidas, mas mantém a origem da guinada.
+ *
+ * Chamada ao armar: a guinada continua sendo a medida desde a energização,
+ * então a referência ψ = 0 leva o drone de volta à direção em que foi ligado.
+ *
+ * @param[in,out] s  Estado.
+ */
+void meas_rearm(meas_state_t *s);
 
 /**
  * @brief Monta y a partir das leituras de um passo.

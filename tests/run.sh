@@ -21,7 +21,8 @@ cd "$(dirname "$0")/.."
 
 PURE="App/Src/attitude.c App/Src/mtf_parser.c
       App/Src/control/lqg_ert.c App/Src/control/lqg_ert_model.c
-      App/Src/control/ctrl_gains.c App/Src/control/ctrl_params.c App/Src/control/meas.c"
+      App/Src/control/ctrl_gains.c App/Src/control/ctrl_params.c App/Src/control/meas.c
+      App/Src/control/mixer.c"
 REFERENCE="reference/STM32_ert_rtw/STM32.c reference/STM32_ert_rtw/STM32_data.c"
 
 CFLAGS="-std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined

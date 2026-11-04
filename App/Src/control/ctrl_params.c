@@ -33,11 +33,11 @@ static const ctrl_param_desc_t TABLE[] = {
           "aceleracao maxima em voo (0..1)"),
     PARAM("MOT_IDLE", mot_idle, 0.0F, 0.2F, DEFAULT_MOT_IDLE, CTRL_PARAM_LIVE,
           "aceleracao armado no chao (0..1)"),
-    SIGN_PARAM("SNS_SGN_ROLL", sgn_roll, DEFAULT_SGN_ROLL, "sinal rolagem BNO->NED"),
-    SIGN_PARAM("SNS_SGN_PITCH", sgn_pitch, DEFAULT_SGN_PITCH, "sinal arfagem BNO->NED"),
+    SIGN_PARAM("SNS_SGN_ROLL", sgn_roll, DEFAULT_SGN_ROLL, "sinal phi (pitch do BNO)"),
+    SIGN_PARAM("SNS_SGN_PITCH", sgn_pitch, DEFAULT_SGN_PITCH, "sinal theta (roll do BNO)"),
     SIGN_PARAM("SNS_SGN_YAW", sgn_yaw, DEFAULT_SGN_YAW, "sinal guinada BNO->NED"),
-    SIGN_PARAM("SNS_SGN_P", sgn_p, DEFAULT_SGN_P, "sinal gyro p BNO->NED"),
-    SIGN_PARAM("SNS_SGN_Q", sgn_q, DEFAULT_SGN_Q, "sinal gyro q BNO->NED"),
+    SIGN_PARAM("SNS_SGN_P", sgn_p, DEFAULT_SGN_P, "sinal p (gyro y do BNO)"),
+    SIGN_PARAM("SNS_SGN_Q", sgn_q, DEFAULT_SGN_Q, "sinal q (gyro x do BNO)"),
     SIGN_PARAM("SNS_SGN_R", sgn_r, DEFAULT_SGN_R, "sinal gyro r BNO->NED"),
     SIGN_PARAM("SNS_SGN_VX", sgn_vx, DEFAULT_SGN_VX, "sinal vx fluxo->NED"),
     SIGN_PARAM("SNS_SGN_VY", sgn_vy, DEFAULT_SGN_VY, "sinal vy fluxo->NED"),
@@ -67,6 +67,10 @@ static const ctrl_param_desc_t TABLE[] = {
           "DRONE_CTRL_DEBUG para a Pi (Hz)"),
     PARAM("LOG_EST_HZ", log_est_hz, 0.0F, 50.0F, DEFAULT_LOG_EST_HZ, CTRL_PARAM_LIVE,
           "linha EST no log USB (Hz)"),
+    PARAM("SNS_ZERO_ROLL", zero_roll_deg, -180.0F, 180.0F, DEFAULT_ZERO_ROLL_DEG,
+          CTRL_PARAM_DISARMED_ONLY, "roll cru do BNO nivelado (graus)"),
+    PARAM("SNS_ZERO_PITCH", zero_pitch_deg, -90.0F, 90.0F, DEFAULT_ZERO_PITCH_DEG,
+          CTRL_PARAM_DISARMED_ONLY, "pitch cru do BNO nivelado (graus)"),
 };
 
 /** Quantidade de entradas da tabela. */

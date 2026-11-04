@@ -80,6 +80,14 @@ void attitude_euler_error(const euler_t *reference, const euler_t *measured,
   error->yaw = attitude_wrap_pi(reference->yaw - measured->yaw);
 }
 
+/** @brief Atitude relativa ao zero (ver attitude.h). */
+void attitude_euler_relative(const euler_t *zero, const euler_t *measured,
+                             euler_t *relative) {
+  relative->roll = attitude_wrap_pi(measured->roll - zero->roll);
+  relative->pitch = attitude_wrap_pi(measured->pitch - zero->pitch);
+  relative->yaw = measured->yaw;
+}
+
 /** @brief Cosseno da inclinação (ver attitude.h). */
 float attitude_cos_tilt(const float q[4]) {
   const float x = q[1], y = q[2];

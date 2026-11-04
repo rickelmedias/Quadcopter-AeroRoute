@@ -90,16 +90,21 @@ termo de B em vz é g / (2 ω0), independente da massa e do Kt. Com o B
 exportado (6,9872e-3) isso dá **ω0 ≈ 702 rad/s** (~6700 rpm), que é o padrão
 do parâmetro `CTL_W0`. *Confira esse valor com o ω0 do script do MATLAB.*
 
-**Ordem dos motores** (colunas de B, vista de cima, nariz para cima):
+**Ordem dos motores** (numeração física, vista de cima, frente do drone para cima):
 
 ```text
-   M1 (horário)      M2 (anti-horário)        M1 = PB6   M2 = PB7
-            \  frente  /                      M3 = PB8   M4 = PB9
-            /          \
-   M4 (anti-horário) M3 (horário)
+   M4 (amarela)   M2 (preta)        M1 = PB6   M2 = PB7
+        frente  ^                   M3 = PB8   M4 = PB9
+   M3 (preta)     M1 (amarela)
 ```
 
-Não é a numeração do Betaflight. Use `beep 1` a `beep 4` no console.
+Frente = M2 e M4, trás = M1 e M3, direita = M1 e M2, esquerda = M3 e M4.
+M1 e M4 têm hélice amarela (invertida). As colunas de B seguem outra ordem:
+`control/mixer.h` leva u1→M4, u2→M2, u3→M1, u4→M3, que é o canto de cada
+entrada no modelo (u1 frente/esquerda, u2 frente/direita, u3 trás/direita,
+u4 trás/esquerda). O sinal de ψ de B supõe hélices pretas (M2, M3) girando no
+sentido anti-horário visto de cima: confirme na bancada. Não é a numeração do
+Betaflight. Use `beep 1` a `beep 4` no console.
 
 **Como os ganhos foram projetados.** Os ganhos exportados são reproduzidos
 por `tools/pi/dronectl/design.py` com erro relativo de ~1e-12:
@@ -184,6 +189,7 @@ reaplica perfis salvos.
 | `MOT_MIN` / `MOT_MAX` | 0,03 / 1,0 | Limites da aceleração com o controle ligado |
 | `MOT_IDLE` | 0,05 | Aceleração armado no chão |
 | `SNS_SGN_*` | ver `flight_config.h` | Sinais dos sensores para NED (só desarmado) |
+| `SNS_ZERO_ROLL` / `SNS_ZERO_PITCH` | −174,5 / −2,9 | Roll e pitch crus do BNO com o drone nivelado, em graus (só desarmado). O BNO está montado de cabeça para baixo; roll e pitch entram no modelo relativos a este zero |
 | `FLOW_SCALE_X/Y` | 0,944 / 0,942 | Escala do fluxo óptico |
 | `FLOW_GYRO_X/Y` | +1 / −1 | Compensação da rotação no fluxo (0 desliga) |
 | `FLT_HOVER_H` | 0,5 | Altura padrão do hover, m |
@@ -246,11 +252,15 @@ Toda sessão `--debug` grava a telemetria em `logs/hover_<data>.csv`.
    `docs/guia_teste_motores.md`).
 3. `dry 0.5` no console (ou `dronectl hover --dry --debug`). Com o drone na
    mão:
-   - abaixe o lado direito: φ positivo, e w2/w3 (lado direito) devem subir;
-   - levante o nariz: θ positivo, w3/w4 (traseira) sobem;
-   - gire no sentido horário visto de cima: ψ aumenta, w1/w3 sobem;
+   (colunas u1..u4 do modelo; o `mixer` leva u1→M4, u2→M2, u3→M1, u4→M3)
+   - abaixe o lado direito: φ positivo, e u2/u3 (M2 e M1, direita) devem subir;
+   - levante o nariz: θ positivo, u3/u4 (M1 e M3, trás) sobem;
+   - gire no sentido horário visto de cima: ψ aumenta, u2/u4 (M2 e M3, hélices
+     pretas) sobem;
    - suba o drone: z fica mais negativo, as quatro rotações caem.
-   Sinal trocado: corrija o `SNS_SGN_*` correspondente (desarmado).
+   Sinal trocado: corrija o `SNS_SGN_*` correspondente (desarmado). Lembre
+   que o BNO está girado: φ vem do pitch dele e θ do roll dele
+   (`control/meas.h`), e a guinada é zerada na energização.
 4. Meça a curva do motor e ajuste `MOT_W_AT_0`/`MOT_W_AT_100` (ou confirme
    `CTL_W0` com o MATLAB).
 5. Só então, com o drone preso: `LQG_FLIGHT_ENABLED 1` em `flight_config.h`,

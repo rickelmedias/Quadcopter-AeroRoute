@@ -14,8 +14,11 @@
  * ::motors_stop() pode ser chamada de qualquer task e zera tudo no próximo
  * quadro. O dono atual percebe a parada por ::motors_owner().
  *
- * Numeração: M1..M4 = PB6..PB9 = colunas 1..4 da matriz B do modelo
- * (control/lqg_ert_model.h).
+ * Numeração: M1..M4 = PB6..PB9, a numeração física do drone (frente = M2 e
+ * M4, trás = M1 e M3, direita = M1 e M2, esquerda = M3 e M4; M1 e M4 têm
+ * hélice amarela, invertida). As colunas da matriz B do modelo seguem outra
+ * ordem: control/mixer.h faz a conversão antes de chamar
+ * ::motors_set_flight_throttle().
  */
 #ifndef MOTORS_H
 #define MOTORS_H

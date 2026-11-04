@@ -46,15 +46,15 @@ typedef struct {
   float mot_max;
   /** MOT_IDLE: aceleração com o drone armado no chão, em fração (0..1). */
   float mot_idle;
-  /** SNS_SGN_ROLL: sinal da rolagem do BNO08x para NED (+1/-1). */
+  /** SNS_SGN_ROLL: sinal de φ, que vem do pitch do BNO08x (+1/-1). */
   float sgn_roll;
-  /** SNS_SGN_PITCH: sinal da arfagem. */
+  /** SNS_SGN_PITCH: sinal de θ, que vem do roll do BNO08x. */
   float sgn_pitch;
   /** SNS_SGN_YAW: sinal da guinada. */
   float sgn_yaw;
-  /** SNS_SGN_P: sinal do giro p. */
+  /** SNS_SGN_P: sinal de p, que vem do giro y do BNO08x. */
   float sgn_p;
-  /** SNS_SGN_Q: sinal do giro q. */
+  /** SNS_SGN_Q: sinal de q, que vem do giro x do BNO08x. */
   float sgn_q;
   /** SNS_SGN_R: sinal do giro r. */
   float sgn_r;
@@ -88,6 +88,10 @@ typedef struct {
   float debug_rate_hz;
   /** LOG_EST_HZ: taxa da linha EST no log USB, em Hz (0 desliga). */
   float log_est_hz;
+  /** SNS_ZERO_ROLL: roll cru do BNO08x com o drone nivelado, em graus. */
+  float zero_roll_deg;
+  /** SNS_ZERO_PITCH: pitch cru do BNO08x com o drone nivelado, em graus. */
+  float zero_pitch_deg;
 } ctrl_params_t;
 
 /** @brief Regras de um parâmetro. */

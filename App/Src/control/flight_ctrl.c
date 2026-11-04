@@ -19,6 +19,7 @@
 #include "bno08x.h"
 #include "flight_config.h"
 #include "main.h"
+#include "control/mixer.h"
 #include "motors.h"
 #include "mtf01.h"
 #include "sensor_log.h"
@@ -444,9 +445,10 @@ static void handle_request(const request_t *req, uint32_t now) {
     case REQ_ARM:
       arm_pending = false;
       if (state != FLIGHT_STATE_STANDBY && state != FLIGHT_STATE_FAILSAFE) break;
-      /* Referencial local novo: Kalman, guinada e posição começam aqui. */
+      /* Referencial local novo: Kalman e posição começam aqui. A guinada
+         continua zerada na energização (ver meas_rearm). */
       lqg_ert_init(&lqg);
-      meas_reset(&meas);
+      meas_rearm(&meas);
       memset(ref, 0, sizeof(ref));
       memset(&goal, 0, sizeof(goal));
       origin = req->origin;
@@ -782,7 +784,11 @@ static void step(uint32_t step_count) {
   float throttle[LQG_NU];
   lqg_real_t du_applied[LQG_NU];
   compute_output(du, throttle, du_applied, &flags);
-  if (!dry_run && motors_owner() == MOTORS_OWNER_FLIGHT) motors_set_flight_throttle(throttle);
+  if (!dry_run && motors_owner() == MOTORS_OWNER_FLIGHT) {
+    float motor_throttle[MIXER_COUNT];
+    mixer_model_to_motors(throttle, motor_throttle);
+    motors_set_flight_throttle(motor_throttle);
+  }
 
   lqg_ert_update(&lqg, &gains, du_applied);
 
