@@ -58,3 +58,6 @@ Desktop.ini
 *.gcda
 *.gcno
 *.gcov
+
+# Logs dos ensaios do painel de controle (tools/controle_gui.py).
+tools/logs/

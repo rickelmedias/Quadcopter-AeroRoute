@@ -22,8 +22,11 @@
  *
  * Mudar para 1 é uma decisão consciente, com a curva do motor medida, os
  * sinais conferidos e o drone preso.
+ *
+ * Branch controle: 1, para testar o controle. Mesmo assim o firmware sobe com
+ * FLT_DRY_RUN = 1 (motores parados) até a interface pedir o contrário.
  */
-#define LQG_FLIGHT_ENABLED 0
+#define LQG_FLIGHT_ENABLED 1
 
 /* ---- Motores ------------------------------------------------------------ */
 
@@ -46,7 +49,7 @@
 /** Aceleração mínima com o controle ligado (fração 0..1). */
 #define DEFAULT_MOT_MIN   0.03F
 /** Aceleração máxima com o controle ligado (fração 0..1). */
-#define DEFAULT_MOT_MAX   1.0F
+#define DEFAULT_MOT_MAX   0.6F
 /** Aceleração com o drone armado e parado no chão (fração 0..1). */
 #define DEFAULT_MOT_IDLE  0.05F
 
@@ -110,18 +113,38 @@
 
 /* ---- Voo ---------------------------------------------------------------- */
 
+/**
+ * Maior altura que qualquer pedido de decolagem ou trecho aceita, em m. O
+ * teste de controle sobe só 10 cm (lidos pelo MTF-01).
+ */
+#define FLIGHT_MAX_HEIGHT_M    0.10F
+/** Folga numérica ao comparar uma altura pedida com ::FLIGHT_MAX_HEIGHT_M, em m. */
+#define FLIGHT_HEIGHT_TOL_M    0.001F
+/**
+ * Se a altura medida passar de ::FLIGHT_MAX_HEIGHT_M mais esta folga, o voo
+ * pousa sozinho, em m.
+ */
+#define FLIGHT_OVERSHOOT_M     0.10F
+/** Menor velocidade de descida no pouso, em m/s (a rampa do pouso nunca é um degrau). */
+#define FLIGHT_LAND_MIN_RATE_M_S 0.03F
+
 /** Altura padrão do hover, em m. */
-#define DEFAULT_HOVER_HEIGHT_M 0.5F
+#define DEFAULT_HOVER_HEIGHT_M 0.10F
 /** Rampa da referência vertical, em m/s (0 = degrau, como na simulação). */
-#define DEFAULT_Z_RATE_M_S     0.3F
+#define DEFAULT_Z_RATE_M_S     0.05F
 /** Rampa padrão da referência horizontal, em m/s. */
 #define DEFAULT_XY_RATE_M_S    0.3F
 /** Rampa da referência de guinada, em rad/s. */
 #define DEFAULT_YAW_RATE_RAD_S 0.5F
-/** Inclinação acima da qual os motores são cortados, em rad (45 graus). */
-#define DEFAULT_TILT_MAX_RAD   0.785F
+/** Inclinação acima da qual os motores são cortados, em rad (20 graus). */
+#define DEFAULT_TILT_MAX_RAD   0.35F
 /** Altura acima do chão em que o pouso termina, em m. */
-#define DEFAULT_LAND_HEIGHT_M  0.08F
+#define DEFAULT_LAND_HEIGHT_M  0.03F
+/**
+ * 1 = o LQG também segura x e y (usa o fluxo óptico); 0 = só atitude e
+ * altura (control/attitude_mode.h). O teste de controle começa em 0.
+ */
+#define DEFAULT_CTL_XY         0.0F
 /** Começa em ensaio a seco: os motores só giram depois de FLT_DRY_RUN = 0. */
 #define DEFAULT_DRY_RUN        1.0F
 

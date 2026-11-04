@@ -41,6 +41,15 @@
  *   gains default            volta aos ganhos do Simulink
  * @endverbatim
  *
+ * Enlace com o PC:
+ *
+ * @verbatim
+ *   wd <ms>                  watchdog (200..5000, 0 desliga): se nenhuma linha
+ *                            chegar em <ms>, o voo pousa em rampa e a bancada
+ *                            para (age uma vez por silêncio)
+ *   ping                     não faz nada; só mantém o watchdog vivo
+ * @endverbatim
+ *
  * stop, disarm, s ou Enter vazio param tudo na hora. Qualquer linha não
  * reconhecida também para (um erro de digitação nunca deixa motor girando).
  * Fechar a porta no PC corta motores armados pela USB.

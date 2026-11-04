@@ -92,6 +92,8 @@ typedef struct {
   float zero_roll_deg;
   /** SNS_ZERO_PITCH: pitch cru do BNO08x com o drone nivelado, em graus. */
   float zero_pitch_deg;
+  /** CTL_XY: 1 = o LQG segura x e y também; 0 = só atitude e altura. */
+  float use_xy;
 } ctrl_params_t;
 
 /** @brief Regras de um parâmetro. */

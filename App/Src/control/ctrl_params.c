@@ -71,6 +71,8 @@ static const ctrl_param_desc_t TABLE[] = {
           CTRL_PARAM_DISARMED_ONLY, "roll cru do BNO nivelado (graus)"),
     PARAM("SNS_ZERO_PITCH", zero_pitch_deg, -90.0F, 90.0F, DEFAULT_ZERO_PITCH_DEG,
           CTRL_PARAM_DISARMED_ONLY, "pitch cru do BNO nivelado (graus)"),
+    PARAM("CTL_XY", use_xy, 0.0F, 1.0F, DEFAULT_CTL_XY, CTRL_PARAM_BOOL | CTRL_PARAM_DISARMED_ONLY,
+          "1 = LQG segura x,y; 0 = so atitude e altura"),
 };
 
 /** Quantidade de entradas da tabela. */

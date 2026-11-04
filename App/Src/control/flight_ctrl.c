@@ -13,6 +13,7 @@
 #include "control/flight_ctrl.h"
 
 #include "control/ctrl_gains.h"
+#include "control/attitude_mode.h"
 #include "control/ctrl_params.h"
 #include "control/meas.h"
 #include "attitude.h"
@@ -46,7 +47,7 @@
 /** Pouso sem telêmetro: tempo extra depois de a rampa chegar ao chão, em ms. */
 #define LAND_BLIND_EXTRA_MS 3000U
 /** Menor velocidade de descida no pouso, em m/s (FLT_Z_RATE = 0 seria um degrau). */
-#define LAND_MIN_RATE_M_S 0.2F
+#define LAND_MIN_RATE_M_S FLIGHT_LAND_MIN_RATE_M_S
 /** Tolerância padrão de posição para concluir decolagem e trechos, em m. */
 #define DEFAULT_POS_TOL_M 0.05F
 /** Tolerância padrão de guinada, em rad. */
@@ -119,6 +120,8 @@ static bool leg_event_pending;
 static lqg_ert_t lqg;
 /** Cópia dos ganhos em uso. */
 static lqg_gains_t gains;
+/** Ganhos aplicados neste passo: os de ::gains, sem os termos horizontais se CTL_XY = 0. */
+static lqg_gains_t gains_effective;
 /** Geração da cópia (control/ctrl_gains.h). */
 static uint32_t gains_generation;
 /** Conversão dos sensores. */
@@ -208,12 +211,14 @@ flight_request_result_t flight_ctrl_arm(flight_origin_t from) {
   }
   flight_telemetry_t t;
   flight_ctrl_get_telemetry(&t);
-  const uint8_t needed = MEAS_ATTITUDE | MEAS_GYRO | MEAS_RANGE | MEAS_FLOW;
+  ctrl_params_t p;
+  ctrl_params_snapshot(&p);
+  /* Sem CTL_XY o fluxo óptico não entra na malha, então não é exigido. */
+  uint8_t needed = MEAS_ATTITUDE | MEAS_GYRO | MEAS_RANGE;
+  if (p.use_xy >= 0.5F) needed |= MEAS_FLOW;
   if ((t.meas_flags & needed) != needed) {
     return result(FLIGHT_REQUEST_DENIED, FLIGHT_REASON_SENSOR_UNHEALTHY);
   }
-  ctrl_params_t p;
-  ctrl_params_snapshot(&p);
   const bool dry = p.dry_run >= 0.5F || !LQG_FLIGHT_ENABLED;
   if (!dry && !motors_arm(MOTORS_OWNER_FLIGHT)) {
     return result(FLIGHT_REQUEST_TEMPORARILY_REJECTED, FLIGHT_REASON_BUSY);
@@ -244,7 +249,7 @@ flight_request_result_t flight_ctrl_takeoff(float height_m) {
   if (!can_take_off()) {
     return result(FLIGHT_REQUEST_DENIED, FLIGHT_REASON_BAD_STATE);
   }
-  if (!(height_m >= 0.0F && height_m <= 1.5F)) {
+  if (!(height_m >= 0.0F && height_m <= FLIGHT_MAX_HEIGHT_M + FLIGHT_HEIGHT_TOL_M)) {
     return result(FLIGHT_REQUEST_DENIED, FLIGHT_REASON_OUT_OF_BOUNDS);
   }
   const request_t req = {.type = REQ_TAKEOFF, .height = height_m};
@@ -258,7 +263,7 @@ flight_request_result_t flight_ctrl_leg(const flight_leg_t *leg) {
     if (!can_take_off()) {
       return result(FLIGHT_REQUEST_DENIED, FLIGHT_REASON_BAD_STATE);
     }
-    if (!(leg->z < 0.0F && leg->z >= -1.5F)) {
+    if (!(leg->z < 0.0F && leg->z >= -(FLIGHT_MAX_HEIGHT_M + FLIGHT_HEIGHT_TOL_M))) {
       return result(FLIGHT_REQUEST_DENIED, FLIGHT_REASON_OUT_OF_BOUNDS);
     }
     const request_t req = {.type = REQ_TAKEOFF, .height = -leg->z,
@@ -426,8 +431,9 @@ static bool goal_from_leg(const flight_leg_t *leg) {
     default:
       return false;
   }
-  /* Não descer abaixo da altura de pouso nem subir acima de 1,5 m. */
-  if (t[LQG_R_Z] > z_ground - prm.land_height || t[LQG_R_Z] < z_ground - 1.5F) {
+  /* Não descer abaixo da altura de pouso nem subir acima de FLIGHT_MAX_HEIGHT_M. */
+  if (t[LQG_R_Z] > z_ground - prm.land_height ||
+      t[LQG_R_Z] < z_ground - (FLIGHT_MAX_HEIGHT_M + FLIGHT_HEIGHT_TOL_M)) {
     return false;
   }
   memcpy(goal.target, t, sizeof(t));
@@ -467,7 +473,10 @@ static void handle_request(const request_t *req, uint32_t now) {
     case REQ_TAKEOFF:
       if (state != FLIGHT_STATE_ARMED) break;
       memcpy(goal.target, ref, sizeof(ref));
-      goal.target[LQG_R_Z] = z_ground - (req->height > 0.0F ? req->height : prm.hover_height);
+      {
+        const float wanted = req->height > 0.0F ? req->height : prm.hover_height;
+        goal.target[LQG_R_Z] = z_ground - fminf(wanted, FLIGHT_MAX_HEIGHT_M);
+      }
       goal.speed_xy = 0.0F;
       goal.pos_tol = req->pos_tol > 0.0F ? req->pos_tol : DEFAULT_POS_TOL_M;
       goal.yaw_tol = DEFAULT_YAW_TOL_RAD;
@@ -557,6 +566,13 @@ static void supervise(uint8_t flags, const lqg_real_t y[LQG_NY], uint32_t now) {
   if (active && (fabsf((float)y[LQG_Y_PHI]) > prm.tilt_max ||
                  fabsf((float)y[LQG_Y_THETA]) > prm.tilt_max)) {
     enter_failsafe("inclinacao excessiva", FLIGHT_REASON_OUT_OF_BOUNDS);
+    return;
+  }
+  if (is_airborne_state(state) && state != FLIGHT_STATE_LAND && (flags & MEAS_RANGE) != 0U &&
+      isfinite(z_ground) &&
+      z_ground - (float)y[LQG_Y_Z] > FLIGHT_MAX_HEIGHT_M + FLIGHT_OVERSHOOT_M) {
+    say("altura acima do limite: pousando");
+    enter_land(FLIGHT_REASON_OUT_OF_BOUNDS);
     return;
   }
   if (origin == FLIGHT_ORIGIN_USB && !CDC_HostDTR()) {
@@ -755,6 +771,12 @@ static void step(uint32_t step_count) {
   read_sensors(&in);
   lqg_real_t y[LQG_NY];
   const uint8_t meas_flags = meas_update(&meas, &in, &prm, y);
+  const bool use_xy = prm.use_xy >= 0.5F;
+  gains_effective = gains;
+  if (!use_xy) {
+    attitude_mode_mask_gains(&gains_effective);
+    attitude_mode_repeat_prediction(&lqg, y);
+  }
 
   if (state == FLIGHT_STATE_ARMED && isnan(z_ground)) {
     /* Primeira medida depois de armar: o chão e a referência ficam aqui. */
@@ -776,7 +798,7 @@ static void step(uint32_t step_count) {
   lqg_real_t r[LQG_NR];
   for (unsigned i = 0U; i < LQG_NR; ++i) r[i] = (lqg_real_t)ref[i];
   lqg_real_t du[LQG_NU];
-  lqg_ert_output(&lqg, &gains, y, r, du);
+  lqg_ert_output(&lqg, &gains_effective, y, r, du);
 
   uint8_t flags = 0U;
   if (dry_run || !is_armed_state(state)) flags |= FLIGHT_FLAG_DRY_RUN;
@@ -790,7 +812,7 @@ static void step(uint32_t step_count) {
     motors_set_flight_throttle(motor_throttle);
   }
 
-  lqg_ert_update(&lqg, &gains, du_applied);
+  lqg_ert_update(&lqg, &gains_effective, du_applied);
 
   float x[LQG_NX];
   for (unsigned i = 0U; i < LQG_NX; ++i) x[i] = (float)lqg.x_filt[i];
