@@ -23,8 +23,7 @@ typedef struct mtf_sample_s {
   uint32_t received_us;
   /** Distância medida pelo telêmetro, no eixo do sensor, em mm. */
   uint32_t distance_mm;
-  /** Frames válidos decodificados desde o boot. Também serve de identificador
-      do frame (usado pela captura e pelo replay). */
+  /** Frames válidos decodificados desde o boot. */
   uint32_t frames;
   /** Frames descartados por checksum inválido. */
   uint32_t crc_errors;

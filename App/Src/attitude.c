@@ -8,8 +8,9 @@
 #include "attitude.h"
 #include <math.h>
 
-/** Pi e 2*pi em float, sem depender de M_PI, que não existe em C11 estrito. */
+/** Pi em float, sem depender de M_PI, que não existe em C11 estrito. */
 #define ATT_PI_F     3.14159265358979323846F
+/** 2*pi em float. */
 #define ATT_TWO_PI_F 6.28318530717958647692F
 /** Abaixo deste |cos(pitch)|, a conversão de p,q,r fica numericamente singular. */
 #define EULER_RATE_MIN_COS_PITCH 0.001F

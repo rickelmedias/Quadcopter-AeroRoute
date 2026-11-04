@@ -15,10 +15,8 @@ __pycache__/
 venv/
 
 # Ensaios locais -------------------------------------------------------------
-# Capturas binárias e CSVs são grandes e podem conter dados ainda não
-# revisados. Publique ensaios escolhidos como artefatos de uma Release.
-/captures/*
-!/captures/README.md
+# CSVs de telemetria gravados pelo dronectl (tools/pi) na Pi ou no PC.
+tools/pi/logs/
 
 # Conversas completas usadas como referência são arquivos locais. Os
 # documentos consolidados e revisados continuam em docs/.

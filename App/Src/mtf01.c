@@ -8,7 +8,6 @@
 #include "mtf01.h"
 #include "dma_ring.h"
 #include "mtf_parser.h"
-#include "capture.h"
 #include "sensor_log.h"
 #include "FreeRTOS.h"
 #include "task.h"
@@ -65,8 +64,8 @@ void mtf_get_sample(mtf_sample_t *out) {
 }
 
 /**
- * @brief Task do MTF-01: (re)inicia a recepção, decodifica os bytes, grava
- *        cada frame na captura e publica a última amostra.
+ * @brief Task do MTF-01: (re)inicia a recepção, decodifica os bytes,
+ *        registra cada frame no log e publica a última amostra.
  *
  * @param[in] argument  Não usado.
  */
@@ -74,10 +73,8 @@ static void mtf_task(void *argument) {
   (void)argument;
   uint8_t bytes[128];
   uint32_t previous_dropped = 0;
-  uint32_t last_diag_ms = 0;
   restart = true;
   for (;;) {
-    capture_diag_poll(&last_diag_ms, CAP_CLOCK_RESYNCS_UNKNOWN);
     if (restart) {
       HAL_UART_AbortReceive(&huart2);
       xStreamBufferReset(stream);
@@ -96,17 +93,10 @@ static void mtf_task(void *argument) {
       restart = true; n = 0;
     }
     for (size_t i=0; i<n; ++i) {
-      /* Cada frame aceito é gravado aqui, e não a partir de uma fotografia:
-         este é o único lugar que vê todos os frames, com o relógio do sensor
-         ainda separado do nosso tick de recepção. */
+      /* Cada frame aceito é registrado aqui, e não a partir de uma
+         fotografia: este é o único lugar que vê todos os frames. */
       if (mtf_parser_byte(&parser, bytes[i], HAL_GetTick())) {
         parser.sample.received_us = HAL_GetTick()*1000U;
-        capture_mtf(parser.sample.flow_x, parser.sample.flow_y,
-                    parser.sample.distance_mm, parser.sample.quality,
-                    parser.sample.distance_status, parser.sample.strength,
-                    parser.sample.precision, parser.sample.range_valid,
-                    parser.sample.flow_valid, parser.sample.time_ms,
-                    parser.sample.frames);
         parser.sample.uart_errors = errors; parser.sample.dropped_bytes = dropped;
         log_mtf(&parser.sample);
       }

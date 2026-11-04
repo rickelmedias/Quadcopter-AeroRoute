@@ -22,46 +22,86 @@
 /* Os floats viram inteiros escalados no produtor: a newlib-nano é ligada sem
    suporte a %f, e converter ali é barato. q=9670 se lê 0,9670. */
 
-#if !CAPTURE_ENABLED
-
 /** Registros que cabem na fila (~140 ms de folga com tudo ligado). */
 #define QUEUE_LENGTH 96U
 /** Tamanho do bloco entregue de uma vez à USB (o buffer da CDC tem 2048). */
 #define OUT_SIZE 1536U
 /** Maior linha formatada, em bytes. */
-#define LINE_MAX 200U
+#define LINE_MAX 256U
 /** Com a USB ocupada por mais que isto (porta fechada no PC), o bloco é descartado. */
 #define USB_STALL_MS 50U
 /** Período da linha SYS, em ms. */
 #define SYS_PERIOD_MS 1000U
 
-typedef enum { REC_TEXT, REC_MTF, REC_BNO, REC_MOTOR, REC_EST } rec_type_t;
+/** Valores da linha EST: 9 medidas, 12 estados, 4 saídas e 4 referências. */
+#define EST_VALUES 29U
+
+/** Tipo de registro (uma etiqueta de linha cada). */
+typedef enum {
+  REC_TEXT,   /**< "# texto". */
+  REC_MTF,    /**< Linha MTF. */
+  REC_BNO,    /**< Linha BNO. */
+  REC_MOTOR,  /**< Linha MOT. */
+  REC_EST     /**< Linha EST. */
+} rec_type_t;
+
+/** Campos da linha MTF (ver o formato em sensor_log.h). */
+typedef struct {
+  uint32_t sensor_ms;    /**< Relógio do sensor. */
+  uint32_t distance_mm;  /**< Distância. */
+  uint32_t frames;       /**< Frames válidos. */
+  uint32_t crc;          /**< Erros de checksum. */
+  uint32_t gaps;         /**< Frames perdidos. */
+  uint32_t uart;         /**< Erros de UART. */
+  uint32_t drop;         /**< Bytes descartados. */
+  int16_t fx;            /**< Fluxo X. */
+  int16_t fy;            /**< Fluxo Y. */
+  uint8_t quality;       /**< Qualidade da imagem. */
+  uint8_t dist_status;   /**< Estado da distância. */
+  uint8_t flow_status;   /**< Estado do fluxo. */
+  uint8_t strength;      /**< Intensidade do telêmetro. */
+  uint8_t precision;     /**< Precisão do telêmetro. */
+  uint8_t range_ok;      /**< Distância utilizável. */
+  uint8_t flow_ok;       /**< Fluxo utilizável. */
+} rec_mtf_t;
+
+/** Campos da linha BNO. */
+typedef struct {
+  int16_t q[4];       /**< Quatérnio x10000. */
+  int16_t g[3];       /**< Giroscópio em mrad/s. */
+  int32_t a[3];       /**< Aceleração linear em mm/s^2. */
+  uint32_t n[3];      /**< Relatórios recebidos (rotação, giro, aceleração). */
+  uint32_t gaps[3];   /**< Relatórios perdidos. */
+  uint8_t acc[3];     /**< Acurácia informada pelo sensor. */
+  uint8_t online;     /**< Sensor online. */
+} rec_bno_t;
+
+/** Campos da linha EST. */
+typedef struct {
+  int16_t v[EST_VALUES];  /**< y, x̂ e r em milésimos; du em décimos. */
+  uint8_t state;          /**< Estado do voo. */
+  uint8_t meas;           /**< Medidas válidas. */
+  uint8_t flags;          /**< Situação do controle. */
+} rec_est_t;
 
 /** Registro na fila: já em inteiros, pronto para virar texto. */
 typedef struct {
-  uint8_t type;
-  uint32_t t_ms;
+  uint8_t type;   /**< ::rec_type_t. */
+  uint32_t t_ms;  /**< Tick da amostra. */
   union {
-    char text[61];
-    struct {
-      uint32_t sensor_ms, distance_mm, frames, crc, gaps, uart, drop;
-      int16_t fx, fy;
-      uint8_t quality, dist_status, flow_status, strength, precision, range_ok, flow_ok;
-    } mtf;
-    struct {
-      int16_t q[4];      /* x10000 */
-      int16_t g[3];      /* mrad/s */
-      int32_t a[3];      /* mm/s^2 */
-      uint32_t n[3], gaps[3];
-      uint8_t acc[3], online;
-    } bno;
-    log_motor_t motor;
-    struct { int32_t v[16]; uint8_t mode; } est;
-  } u;
+    char text[61];      /**< REC_TEXT. */
+    rec_mtf_t mtf;      /**< REC_MTF. */
+    rec_bno_t bno;      /**< REC_BNO. */
+    log_motor_t motor;  /**< REC_MOTOR. */
+    rec_est_t est;      /**< REC_EST. */
+  } u;            /**< Conteúdo, conforme o tipo. */
 } rec_t;
 
+/** Controle da fila (alocação estática). */
 static StaticQueue_t queue_memory;
+/** Armazenamento da fila. */
 static uint8_t queue_storage[QUEUE_LENGTH * sizeof(rec_t)];
+/** Fila de registros entre os produtores e a task de log. */
 static QueueHandle_t queue;
 /** Registros perdidos por fila cheia ou USB parada. */
 static volatile uint32_t dropped;
@@ -76,8 +116,10 @@ static void push(const rec_t *r) {
   if (xQueueSend(queue, r, 0) != pdPASS) __atomic_fetch_add(&dropped, 1U, __ATOMIC_RELAXED);
 }
 
+/** @brief Liga ou silencia as linhas de dados (ver sensor_log.h). */
 void log_set_stream(bool enabled) { stream_enabled = enabled; }
 
+/** @brief Enfileira uma linha de texto (ver sensor_log.h). */
 void log_text(const char *text) {
   rec_t r;
   r.type = REC_TEXT;
@@ -87,6 +129,7 @@ void log_text(const char *text) {
   push(&r);
 }
 
+/** @brief Enfileira uma linha MTF (ver sensor_log.h). */
 void log_mtf(const mtf_sample_t *m) {
 #if LOG_MTF
   if (!stream_enabled) return;
@@ -115,6 +158,7 @@ void log_mtf(const mtf_sample_t *m) {
 #endif
 }
 
+/** @brief Enfileira uma linha BNO (ver sensor_log.h). */
 void log_bno(const bno_sample_t *b) {
 #if LOG_BNO
   if (!stream_enabled || ++bno_divider < LOG_BNO_DIVIDER) return;
@@ -137,6 +181,7 @@ void log_bno(const bno_sample_t *b) {
 #endif
 }
 
+/** @brief Enfileira uma linha MOT (ver sensor_log.h). */
 void log_motor(const log_motor_t *m) {
 #if LOG_MOTOR
   if (!stream_enabled) return;
@@ -150,18 +195,33 @@ void log_motor(const log_motor_t *m) {
 #endif
 }
 
-void log_est(uint8_t mode, const float x[12], const float u[4]) {
+/** @brief Converte com escala e satura em int16. */
+static int16_t scaled(float v, float scale) {
+  const float s = v * scale;
+  if (!(s > -32767.0F)) return s > 0.0F ? 32767 : -32767;  /* também pega NaN */
+  if (s > 32767.0F) return 32767;
+  return (int16_t)s;
+}
+
+/** @brief Enfileira uma linha EST (ver sensor_log.h). */
+void log_est(uint8_t state, uint8_t meas, uint8_t flags, const float y[9], const float x[12],
+             const float du[4], const float ref[4]) {
 #if LOG_EST
   if (!stream_enabled) return;
   rec_t r;
   r.type = REC_EST;
   r.t_ms = HAL_GetTick();
-  r.u.est.mode = mode;
-  for (int i = 0; i < 12; ++i) r.u.est.v[i] = (int32_t)(x[i] * 1000.0F);
-  for (int i = 0; i < 4; ++i) r.u.est.v[12 + i] = (int32_t)(u[i] * 10.0F);
+  r.u.est.state = state;
+  r.u.est.meas = meas;
+  r.u.est.flags = flags;
+  int16_t *v = r.u.est.v;
+  for (int i = 0; i < 9; ++i) *v++ = scaled(y[i], 1000.0F);
+  for (int i = 0; i < 12; ++i) *v++ = scaled(x[i], 1000.0F);
+  for (int i = 0; i < 4; ++i) *v++ = scaled(du[i], 10.0F);
+  for (int i = 0; i < 4; ++i) *v++ = scaled(ref[i], 1000.0F);
   push(&r);
 #else
-  (void)mode; (void)x; (void)u;
+  (void)state; (void)meas; (void)flags; (void)y; (void)x; (void)du; (void)ref;
 #endif
 }
 
@@ -198,9 +258,10 @@ static int format(const rec_t *r, char *line, size_t size) {
       r->u.motor.throttle_permille[2], r->u.motor.throttle_permille[3],
       r->u.motor.dshot[0], r->u.motor.dshot[1], r->u.motor.dshot[2], r->u.motor.dshot[3]);
   case REC_EST: {
-    int n = snprintf(line, size, "EST;%lu;%u", (unsigned long)r->t_ms, r->u.est.mode);
-    for (int i = 0; i < 16 && n > 0 && n < (int)size; ++i) {
-      n += snprintf(line + n, size - (size_t)n, ";%ld", (long)r->u.est.v[i]);
+    int n = snprintf(line, size, "EST;%lu;%u;%u;%u", (unsigned long)r->t_ms, r->u.est.state,
+                     r->u.est.meas, r->u.est.flags);
+    for (unsigned i = 0; i < EST_VALUES && n > 0 && n < (int)size; ++i) {
+      n += snprintf(line + n, size - (size_t)n, ";%d", r->u.est.v[i]);
     }
     if (n > 0 && n < (int)size) n += snprintf(line + n, size - (size_t)n, "\r\n");
     return n;
@@ -212,7 +273,9 @@ static int format(const rec_t *r, char *line, size_t size) {
 
 /** Bloco em montagem para a USB; usado só pela task de log. */
 static uint8_t out[OUT_SIZE];
+/** Bytes ocupados em ::out. */
 static size_t used;
+/** Tick do último envio aceito pela USB (ou do último descarte). */
 static uint32_t busy_since;
 
 /**
@@ -274,7 +337,9 @@ static void log_task(void *argument) {
   }
 }
 
+/** Controle da task de log (alocação estática). */
 static StaticTask_t log_tcb;
+/** Pilha da task de log, em words. */
 static StackType_t log_stack[768];
 
 /** @brief Cria a fila e a task de log (ver sensor_log.h). */
@@ -283,15 +348,3 @@ bool sensor_log_start(void) {
   return queue && xTaskCreateStatic(log_task, "Log", sizeof(log_stack) / sizeof(log_stack[0]),
                                     NULL, tskIDLE_PRIORITY + 1, log_stack, &log_tcb) != NULL;
 }
-
-#else /* CAPTURE_ENABLED */
-/* Build Capture: a captura binária é dona da porta USB, então não há log de
-   texto e as funções abaixo não fazem nada. */
-bool sensor_log_start(void) { return true; }
-void log_mtf(const mtf_sample_t *m) { (void)m; }
-void log_bno(const bno_sample_t *b) { (void)b; }
-void log_motor(const log_motor_t *m) { (void)m; }
-void log_est(uint8_t mode, const float x[12], const float u[4]) { (void)mode; (void)x; (void)u; }
-void log_text(const char *text) { (void)text; }
-void log_set_stream(bool enabled) { (void)enabled; }
-#endif

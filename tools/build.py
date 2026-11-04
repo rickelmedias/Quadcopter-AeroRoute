@@ -1,10 +1,9 @@
 """Compilação ARM reproduzível a partir dos fontes, sem usar objetos antigos do CubeIDE.
 
-Uso (no Windows, com o STM32CubeIDE instalado):
+Uso (Windows ou Linux, com o STM32CubeIDE instalado):
 
     python tools/build.py              # build/Release (firmware normal)
     python tools/build.py --debug      # build/Debug
-    python tools/build.py --capture    # build/Capture (ensaio de captura)
     python tools/build.py --gcc "C:\\caminho\\arm-none-eabi-gcc.exe"
 
 Gera ELF, HEX, BIN, mapa de memória e um manifest.json com o hash dos fontes e
@@ -23,21 +22,20 @@ ROOT = Path(__file__).resolve().parents[1]
 def main():
     """Compila todos os fontes, liga e gera os artefatos da variante pedida.
 
-    A variante (Release, Debug, Capture ou CaptureDebug) define a pasta de
-    saída. O prefixo do hash dos fontes vira CAP_FIRMWARE_ID, e --capture
-    define CAPTURE_BUILD. Encerra com erro se a compilação falhar.
+    A variante (Release ou Debug) define a pasta de saída. Encerra com erro
+    se a compilação falhar.
     """
     parser = argparse.ArgumentParser()
     parser.add_argument('--gcc', help='Path to arm-none-eabi-gcc.exe')
     parser.add_argument('--debug', action='store_true')
-    parser.add_argument('--capture', action='store_true', help='Binary capture, text logs off; separate output directory')
     args = parser.parse_args()
     gcc = args.gcc or shutil.which('arm-none-eabi-gcc')
     if not gcc:
-        candidates = list(Path('C:/ST').glob('*/STM32CubeIDE/plugins/*gnu-tools*/tools/bin/arm-none-eabi-gcc.exe'))
+        candidates = (list(Path('C:/ST').glob('*/STM32CubeIDE/plugins/*gnu-tools*/tools/bin/arm-none-eabi-gcc.exe')) +
+                      list(Path('/opt/st').glob('*/plugins/*gnu-tools*/tools/bin/arm-none-eabi-gcc')))
         if not candidates: parser.error('Pass --gcc with your ARM compiler path')
         gcc = str(sorted(candidates)[-1])
-    variant = ('CaptureDebug' if args.debug else 'Capture') if args.capture else ('Debug' if args.debug else 'Release')
+    variant = 'Debug' if args.debug else 'Release'
     out = ROOT/'build'/variant
     out.mkdir(parents=True, exist_ok=True)
     includes = ['Core/Inc','App/Inc','Drivers/STM32F4xx_HAL_Driver/Inc',
@@ -72,9 +70,6 @@ def main():
         '-O0' if args.debug else '-Os','-ffunction-sections','-fdata-sections','-Wall','-Wextra',
         '-Wno-unused-parameter','-fstack-usage','--specs=nano.specs']
     options += ['-I'+str(ROOT/p) for p in includes]
-    options += ['-DCAP_FIRMWARE_ID="'+source_hash[:24]+'"']
-    if args.capture:
-        options += ['-DCAPTURE_BUILD=1']
     def compile_one(src):
         """Compila um fonte; devolve (caminho do objeto, resultado do processo)."""
         obj = out/('obj/'+src.relative_to(ROOT).as_posix()+'.o')
