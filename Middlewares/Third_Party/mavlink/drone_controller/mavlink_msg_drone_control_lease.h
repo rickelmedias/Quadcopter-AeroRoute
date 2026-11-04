@@ -1,6 +1,8 @@
 #pragma once
 // MESSAGE DRONE_CONTROL_LEASE PACKING
 
+#include <stdint.h>
+
 #define MAVLINK_MSG_ID_DRONE_CONTROL_LEASE 51004
 
 

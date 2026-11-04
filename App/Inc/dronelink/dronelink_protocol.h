@@ -18,10 +18,10 @@
  * @brief Zera o estado do protocolo e o histórico de transações.
  *
  * @param[in] boot_id               Identidade deste boot (0 = inválida).
- * @param[in] boot_id_persistent    Se a identidade foi gravada na flash. Sem
+ * @param[in] boot_id_is_persistent Se a identidade foi gravada na flash. Sem
  *                                  ela, armar e executar trechos é negado.
  */
-void dronelink_protocol_init(uint32_t boot_id, bool boot_id_persistent);
+void dronelink_protocol_init(uint32_t boot_id, bool boot_id_is_persistent);
 
 /**
  * @brief Entrega bytes recebidos ao decodificador MAVLink.

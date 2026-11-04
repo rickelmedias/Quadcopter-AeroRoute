@@ -13,7 +13,7 @@
 #include "usart.h"
 
 /** Pilha da task, em words. */
-#define DRONELINK_TASK_STACK_WORDS 768U
+#define DRONELINK_TASK_STACK_WORDS 1024U
 /** Prioridade da task (a mesma dos sensores). */
 #define DRONELINK_TASK_PRIORITY    (tskIDLE_PRIORITY + 2U)
 

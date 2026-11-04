@@ -1,16 +1,17 @@
 # DroneController
 
 Firmware de uma controladora de drone baseada na **STM32F411CEU6 Black Pill**.
-O projeto já faz a aquisição do BNO08x e do MTF-01, estima atitude, altura e
-deslocamento horizontal, produz logs pela USB e mantém uma comunicação
-MAVLink própria com uma Raspberry Pi.
+Ele roda o controle apresentado no TCC — **Filtro de Kalman + LQR, simulado e
+validado no MATLAB/Simulink** e exportado como `STM32_ert_rtw` — sobre o
+BNO08x (atitude e giroscópio), o MTF-01 (altura e fluxo óptico) e quatro ESCs
+em DShot600. Uma Raspberry Pi comanda o drone por MAVLink (DroneLink) e
+permite ajustar o controle e ver a filtragem dos sensores em tempo real.
 
-O projeto ainda está em desenvolvimento. A parte de percepção foi implementada
-e ensaiada em bancada. A `main` já tem a saída DShot600 para os quatro ESCs e a
-malha LQG do TCC (ver [`docs/lqg_firmware.md`](docs/lqg_firmware.md)), mas o
-LQG só roda em ensaio a seco até a curva dos motores e os sinais dos sensores
-serem calibrados. Portanto, o firmware atual serve para desenvolvimento e
-bancada, não para voo.
+O projeto ainda está em desenvolvimento. O controle roda inteiro em ensaio a
+seco (estimativa, comandos e telemetria), mas os motores só seguem o LQG
+depois de conferir sinais e curva do motor na bancada
+([`docs/controle_lqg.md`](docs/controle_lqg.md), seção 9). Portanto, o
+firmware atual serve para desenvolvimento e bancada, não para voo.
 
 Perfis de bancada em branches separadas, cada um testável sozinho:
 
@@ -18,394 +19,253 @@ Perfis de bancada em branches separadas, cada um testável sozinho:
 |---|---|
 | `mtf` | Só o MTF-01, uma linha por frame (100 Hz) |
 | `bno` | Só o BNO08x a 400 Hz (I2C a 400 kHz) |
-| `motors` | MTF-01 + BNO08x + teste dos motores por comandos USB, sem LQG ([guia](docs/guia_teste_motores.md)) |
-| `main` | Tudo integrado com o LQG |
-
-Em todos, o log sai pela USB por uma task de prioridade baixa alimentada por
-fila (`sensor_log.h`), para não atrasar a aquisição nem o controle.
-
-O histórico técnico detalhado, com resultados, calibrações e problemas já
-investigados, foi movido para
-[`docs/acompanhamento_tecnico.md`](docs/acompanhamento_tecnico.md). Este README
-é a porta de entrada para uma pessoa nova no projeto.
+| `motors` | MTF-01 + BNO08x + teste dos motores por comandos USB, sem controle ([guia](docs/guia_teste_motores.md)) |
+| `main` | Tudo integrado com o Kalman + LQR do Simulink |
 
 ## O que existe hoje
 
 ```text
  BNO08x ── I2C/SH-2 ──┐
-                      ├── estimadores ── atitude, altura e deslocamento
- MTF-01 ─ UART/DMA ───┘                         │
-                                                ├── USB CDC ── PC/logs
- Raspberry Pi ── UART/MAVLink ── DroneLink ─────┘
+                      ├── control/meas ── y ──► Kalman + LQR (Simulink, 100 Hz) ── du
+ MTF-01 ─ UART/DMA ───┘                               ▲                            │
+                                                      │ r = [x y z ψ]              ▼
+ Raspberry Pi ── UART/MAVLink ── DroneLink ──► voo (flight_ctrl) ──► motores ── DShot600 ── ESCs
+      ▲  (dronectl: hover, ajuste,                    │
+      │   telemetria, parâmetros)                     ▼
+      └──────────────────────────────────── telemetria ──► USB CDC ── PC/logs e console
 ```
 
-- O **BNO08x** fornece quatérnio, velocidade angular e aceleração linear.
-- O **MTF-01** fornece fluxo óptico e distância até o piso.
-- Os estimadores combinam essas leituras em atitude, altura e deslocamento.
-- O **DroneLink** troca mensagens MAVLink 2 entre o STM32 e a Raspberry Pi.
-- A USB da Black Pill aparece como porta COM para logs ou captura de ensaio.
-- O FreeRTOS separa aquisição, estimação, telemetria e logs em tasks.
-
-Os comandos de voo já possuem um contrato de software, mas usam uma
-implementação provisória que recusa armar e mover com `NOT_IMPLEMENTED`. Isso
-impede que a presença do protocolo seja confundida com controle de voo pronto.
+- O **BNO08x** fornece quatérnio, velocidade angular e aceleração linear a 400 Hz.
+- O **MTF-01** fornece fluxo óptico e distância até o piso a 100 Hz.
+- `control/meas` converte as leituras no vetor de medidas do modelo, sem filtrar.
+- O **Kalman + LQR** é o código exportado do Simulink, portado com resultado
+  idêntico bit a bit (`tests/test_lqg_ert.c`).
+- A **máquina de voo** arma, decola, segura, executa trechos e pousa, com
+  failsafes.
+- O **DroneLink** troca mensagens MAVLink 2 com a Raspberry Pi: comandos de
+  voo, parâmetros, troca atômica de ganhos e telemetria do controle.
+- A **ferramenta `dronectl`** (`tools/pi`) roda na Pi por SSH: `hover`,
+  `hover --debug` com ajuste em tempo real, `monitor` da filtragem e perfis.
+- A USB da Black Pill aparece como porta COM para logs e um console de
+  bancada.
 
 ## Peças e interfaces
 
 | Peça | Papel | Interface com o STM32 |
 |---|---|---|
 | STM32F411CEU6 Black Pill | Controladora principal | — |
-| GY-BNO08X | IMU: orientação, giroscópio e aceleração linear | I2C2, INT e RST |
+| GY-BNO08X | IMU: orientação, giroscópio e aceleração | I2C2, INT e RST |
 | MicoAir MTF-01 | Fluxo óptico e telêmetro | USART2, protocolo Micolink |
-| Raspberry Pi | Computador de alto nível e envio de comandos | USART1, MAVLink 2/DroneLink |
+| Raspberry Pi Zero W | Comandos, ajuste e telemetria | USART1, MAVLink 2/DroneLink |
 | W25Q64 | Identidade persistente de boot do DroneLink | SPI1 |
-| Computador de desenvolvimento | Gravação DFU, logs e capturas | USB da Black Pill |
-| ESCs e quatro motores | Atuação futura | Ainda não implementada |
+| Skystars KM55A II (AM32) e 4 motores | Atuação | TIM4, DShot600 |
+| Divisor de tensão da bateria | Tensão da bateria (**ainda não ligado**) | ADC1_IN1 |
+| Saída CURR do ESC | Corrente (**ainda não ligada**) | ADC1_IN8 |
+| Computador de desenvolvimento | Gravação DFU, logs e console | USB da Black Pill |
 
-Ligações usadas atualmente:
+Ligações:
 
-| Sinal | Pino STM32 |
-|---|---|
-| BNO SCL | PB10 |
-| BNO SDA | PB3 |
-| BNO INT, ativo baixo | PB4 |
-| BNO RST, ativo baixo | PB5 |
-| MTF TX → STM32 RX | PA3 |
-| MTF RX ← STM32 TX | PA2 |
-| Raspberry Pi TX → STM32 RX | PA10 |
-| Raspberry Pi RX ← STM32 TX | PA9 |
-| USB D− / D+ | PA11 / PA12 |
+| Pino STM32 | Função | Liga em |
+|---|---|---|
+| PB6 | TIM4_CH1 (DShot) | ESC do motor 1 |
+| PB7 | TIM4_CH2 (DShot) | ESC do motor 2 |
+| PB8 | TIM4_CH3 (DShot) | ESC do motor 3 |
+| PB9 | TIM4_CH4 (DShot) | ESC do motor 4 |
+| PA2 | USART2_TX | RX do MTF-01 |
+| PA3 | USART2_RX | TX do MTF-01 |
+| PB3 | I2C2_SDA | SDA do BNO08x |
+| PB10 | I2C2_SCL | SCL do BNO08x |
+| PB4 | EXTI4 | INT do BNO08x (ativo baixo) |
+| PB5 | GPIO | RST do BNO08x (ativo baixo) |
+| PA9 | USART1_TX | RXD da Raspberry Pi Zero W (GPIO15, pino 10) |
+| PA10 | USART1_RX | TXD da Raspberry Pi Zero W (GPIO14, pino 8) |
+| PA1 | ADC1_IN1 | divisor da bateria — **não ligado** (`POWER_VBAT_ENABLED 0`) |
+| PB0 | ADC1_IN8 | CURR do ESC por 1 kΩ — **não ligado** (`POWER_CURRENT_ENABLED 0`) |
+| PA11 / PA12 | USB D− / D+ | PC |
+
+A leitura de bateria e corrente já existe em `power.h/.c`, mas fica
+desligada pelas duas chaves acima até o circuito ser montado: com elas em 0,
+o firmware não toca no ADC nem nos pinos e informa "desconhecido" à Pi.
 
 Todos os módulos devem compartilhar o GND. O MTF-01 é alimentado com 5 V e
 usa sinais UART de 3,3 V. No BNO08x, a tensão de alimentação depende da placa
-GY-BNO08X utilizada; SDA e SCL devem ter pull-ups para 3,3 V.
+GY-BNO08X utilizada; SDA e SCL devem ter pull-ups para 3,3 V. A posição de
+cada motor (M1..M4) está em [`docs/controle_lqg.md`](docs/controle_lqg.md).
 
 ## Mapa do repositório
-
-Estrutura resumida que deve aparecer no Git:
 
 ```text
 DroneController/
 ├── App/                    código próprio do firmware
 │   ├── Inc/                contratos e tipos públicos
-│   └── Src/                implementações, DroneLink e driver SH-2
+│   │   ├── control/        Kalman + LQR do Simulink, medidas, voo, parâmetros, ganhos
+│   │   └── dronelink/      comunicação com a Raspberry Pi
+│   └── Src/                implementações (mesmas subpastas) e driver SH-2
 ├── Core/                   inicialização gerada pelo CubeMX
 ├── Drivers/                CMSIS e HAL da ST
-├── Middlewares/            FreeRTOS, MAVLink e USB Device
+├── Middlewares/            FreeRTOS, MAVLink (gerado) e USB Device
 ├── USB_DEVICE/             configuração da porta USB CDC
 ├── protocol/               fonte XML do dialeto MAVLink próprio
+├── reference/              código exportado pelo Simulink (referência dos testes)
 ├── docs/                   documentação consolidada
-│   └── references/         README público; chats completos ficam locais
-├── captures/               README público; dados dos ensaios ficam locais
 ├── tests/                  testes executados no computador
-├── tools/                  build, logs, captura, decoder e replay
+├── tools/                  build, importação do Simulink, MAVLink, logs
+│   └── pi/                 dronectl: ferramenta da Raspberry Pi
+├── Doxyfile                documentação do código (doxygen)
 ├── DroneController.ioc     configuração do CubeMX
-├── STM32F411CEUX_FLASH.ld  mapa de memória da aplicação em Flash
-├── .project/.cproject      projeto do STM32CubeIDE
-├── .gitignore              exclusões de build e dados locais
 └── README.md               entrada para novos colaboradores
 ```
 
-`Debug/`, `Release/`, `build/`, `tmp/` e os dados internos de `captures/` não
-aparecem no Git: são recriados localmente ou são resultados de ensaio. A
-estrutura completa no computador continua sendo explicada nas seções abaixo.
+`Debug/`, `Release/` e `build/` não aparecem no Git: são recriados localmente.
 
 ### Código próprio
 
-| Pasta | Conteúdo |
-|---|---|
-| `App/Inc/` | Interfaces públicas, tipos, configurações e contratos dos módulos próprios. Comece pelos `.h` antes de abrir os `.c`. |
-| `App/Src/` | Implementação dos sensores, estimadores, logs e captura. |
-| `App/Inc/dronelink/` | Contratos da comunicação com a Raspberry Pi, transações e API que o futuro controle de voo deverá implementar. |
-| `App/Src/dronelink/` | Task, transporte UART/DMA, protocolo MAVLink, transações e identidade de boot do DroneLink. |
-| `App/Src/sh2/` | Driver SH-2 da CEVA usado pelo BNO08x. É código externo vendorizado; consulte `UPSTREAM.txt` antes de alterá-lo. |
-
-Os principais arquivos de `App/` são:
-
 | Arquivo | Para que serve |
 |---|---|
-| `sensors.h/.c` | Ponto único que inicia captura, MTF, BNO e estimação. |
-| `bno08x.h/.c` | Driver do BNO08x, transporte I2C, reset, reconexão e publicação das amostras. |
-| `bno_history.h/.c` | Histórico temporal que integra gyro/aceleração e interpola atitude no intervalo de cada frame MTF. |
-| `mtf01.h/.c` | Recepção do MTF-01 pela USART2 com DMA circular. |
-| `mtf_parser.h/.c` | Decodificação pura dos frames Micolink. |
-| `displacement.h/.c` | Tipos públicos e task que associa as amostras dos sensores. |
-| `disp_estimator.c` | Estimadores cru e compensado por giroscópio. |
-| `flow_ekf.h/.c` | Filtro de Kalman para posição e velocidade horizontais. |
-| `range_filter.h/.c` | Suavização do alcance e rejeição de saltos usados para escalar o fluxo. |
-| `flow_calibrator.h/.c` | Calibração da escala do fluxo contra o giroscópio. |
-| `attitude.h/.c` | Conversões de quatérnio, Euler, inclinação e referencial. |
-| `sensor_log.h/.c` | Seleção dos grupos de log e saída textual pela USB. |
-| `capture.h/.c` | Formato binário e gravação evento a evento para replay. |
-| `capture_session.h` | Máquina de estados da sessão de captura controlada por DTR. |
+| `control/lqg_ert.h/.c` | Kalman de regime + LQR com pré-compensador: o `STM32_step()` do Simulink, legível e sem globais. |
+| `control/lqg_ert_model.h/.c` | A, B, C, Kd, Kfd, L e M do Simulink. O `.c` é gerado por `tools/ert_import.py`. |
+| `control/meas.h/.c` | Leituras do BNO08x e do MTF-01 → medidas `y` do modelo. |
+| `control/flight_ctrl.h/.c` | Task de 100 Hz: estados do voo, referência, failsafes, saída e telemetria. |
+| `control/flight_command.c` | Implementa `dronelink/flight_command_api.h` com o voo. |
+| `control/ctrl_params.h/.c` | Parâmetros ajustáveis em tempo de execução. |
+| `control/ctrl_gains.h/.c` | Ganhos em uso e troca atômica de ganhos enviados pela Pi. |
+| `control/ctrl_port.h` | Seção crítica (FreeRTOS no firmware, nada nos testes). |
+| `motors.h/.c` | DShot600 a 1 kHz e arbitragem bancada/voo. |
+| `usb_console.h/.c` | Console de texto pela USB: bancada, voo e parâmetros. |
+| `flight_config.h` | Chave `LQG_FLIGHT_ENABLED` e valores padrão dos parâmetros. |
+| `sensors.h/.c` | Inicia as tasks do MTF-01 e do BNO08x. |
+| `power.h/.c` | Bateria (PA1) e corrente (PB0) pelo ADC1; desligado até o circuito existir. |
+| `bno08x.h/.c`, `bno_i2c_header.h` | Driver do BNO08x, transporte I2C, reset e reconexão. |
+| `mtf01.h/.c`, `mtf_parser.h/.c` | Recepção do MTF-01 por DMA e decodificação do Micolink. |
+| `attitude.h/.c` | Quatérnio, Euler, inclinação e rotação pela guinada. |
+| `dshot.h/.c` | Geração dos quadros DShot600 no TIM4 com DMA burst. |
+| `sensor_log.h/.c` | Log de texto pela USB por fila (MTF, BNO, MOT, EST, SYS). |
 | `dma_ring.h` | Regra compartilhada para consumir DMA circular das USARTs. |
 
 Dentro de `dronelink/`:
 
 | Arquivo | Para que serve |
 |---|---|
-| `dronelink_app` | Cria e executa a task principal do enlace. |
-| `dronelink_transport` | USART1, DMA, filas e envio/recepção de bytes MAVLink. |
-| `dronelink_protocol` | Validação e tratamento das mensagens recebidas. |
+| `dronelink_app` | Cria e executa a task do enlace. |
+| `dronelink_transport` | USART1, DMA, filas e envio/recepção de bytes. |
+| `dronelink_protocol` | Mensagens de voo, enlace, autorização e telemetria básica. |
+| `dronelink_tuning` | Parâmetros (PARAM_*) e envio de ganhos (DRONE_GAIN_*). |
+| `dronelink_telemetry` | ATTITUDE, LOCAL_POSITION_NED e DRONE_CTRL_DEBUG. |
+| `dronelink_mavlink.h` | Ponto único de inclusão do MAVLink e envio de mensagens. |
 | `dronelink_transaction` | Ordem, repetição e estado dos comandos de trecho. |
 | `dronelink_boot_identity` | Número de boot persistido na W25Q64. |
-| `dronelink_config` | IDs MAVLink, períodos, timeouts e tamanhos de buffer. |
-| `flight_command_api` | Interface que o futuro controle de voo deve fornecer. |
-| `flight_command_stub.c` | Implementação provisória e segura: desarmar é aceito; atuação é negada. |
+| `dronelink_config` | IDs MAVLink, períodos, timeouts e buffers. |
+| `flight_command_api.h` | Contrato entre o protocolo e o voo. |
 
-### Código gerado e dependências
+`App/Src/sh2/` é o driver SH-2 da CEVA, código externo vendorizado; consulte
+`UPSTREAM.txt` antes de alterá-lo.
 
-| Pasta | Conteúdo e regra de uso |
-|---|---|
-| `Core/` | Inicialização do STM32 gerada pelo CubeMX: `main`, GPIO, DMA, I2C, SPI, timers, USART, interrupções e FreeRTOS. Alterações próprias devem ficar em blocos `USER CODE`. |
-| `Drivers/` | CMSIS e STM32 HAL fornecidos pela ST. Normalmente não são editados. |
-| `Middlewares/ST/` | Biblioteca USB Device da ST. |
-| `Middlewares/Third_Party/FreeRTOS/` | Kernel e adaptação CMSIS-RTOS v2. |
-| `Middlewares/Third_Party/mavlink/` | Headers MAVLink gerados, incluindo o dialeto `drone_controller`. |
-| `USB_DEVICE/` | Configuração da classe USB CDC. `usbd_cdc_if.c` liga o firmware à porta COM e detecta DTR para iniciar captura. |
-
-### Protocolo, documentação e dados
-
-| Pasta | Conteúdo |
-|---|---|
-| `protocol/` | Fonte do dialeto MAVLink próprio. `drone_controller.xml` define comandos, respostas, estados e motivos de falha trocados com a Raspberry Pi. Os headers gerados correspondentes ficam em `Middlewares/Third_Party/mavlink/drone_controller/`. |
-| `docs/` | Documentos técnicos: estado atual, evolução dos estimadores, captura/replay, revisão de código e acompanhamento histórico. Esses documentos explicam o “por quê”; o README explica “onde começar”. |
-| `docs/references/` | Conversas brutas usadas durante o desenvolvimento. Os `.txt` são locais e ignorados pelo Git; o conteúdo válido deve estar consolidado nos demais documentos. |
-| `captures/` | Ensaios reais. O `.bin` contém eventos crus; `.bin.json` guarda metadados e hash; `.bin.firmware.json` copia o manifesto do build; a subpasta com o mesmo nome contém os CSVs decodificados. |
-
-Em cada captura decodificada:
-
-| CSV | Conteúdo |
-|---|---|
-| `session.csv` | Versão do formato, identificação do firmware e parâmetros da sessão. |
-| `bno.csv` | Eventos de quatérnio, giroscópio e aceleração do BNO. |
-| `mtf.csv` | Frames de fluxo e distância do MTF-01. |
-| `observation.csv` | Amostras do MTF efetivamente observadas pela task de estimação. |
-| `step.csv` | Decisões e resultados de cada passo do estimador. |
-| `diag.csv` | Diagnóstico de perdas, heap e margem de stack das tasks. |
-
-### Compilação, testes e arquivos temporários
-
-| Pasta | Conteúdo |
-|---|---|
-| `tools/` | Build independente, leitura de logs, gravação/decodificação de captura e replay. |
-| `tests/` | Dez suítes C executadas no computador. `run.sh` também testa replay e detecção de sabotagens. |
-| `build/` | Saída de `tools/build.py`, separada em `Debug`, `Release` e `Capture`. É a saída reproduzível usada nas verificações automatizadas. |
-| `Debug/` e `Release/` | Saída gerada pelo STM32CubeIDE para a configuração ativa. Contém objetos, mapas, ELF e, após o conversor, HEX. Não edite arquivos aqui. |
-| `tmp/` | Scripts e artefatos auxiliares de revisões. Não faz parte do firmware e não deve ser incluído por código de produção. |
-| `.settings/` | Preferências compartilháveis do Eclipse/STM32CubeIDE. O cache local `language.settings.xml` é ignorado. |
-
-Arquivos de `tools/`:
+### Ferramentas, testes e documentação
 
 | Arquivo | Para que serve |
 |---|---|
-| `build.py` | Compila todas as fontes ARM e gera ELF, HEX, BIN, mapa e manifesto. |
-| `read_logs.ps1` | Lê e opcionalmente salva o log textual da porta COM. |
-| `capture_binary.ps1` | Grava bytes crus do firmware Capture e salva metadados e SHA-256. |
-| `decode_capture.py` | Valida o arquivo de captura e o converte nos CSVs de eventos. |
-| `replay.c` | Reexecuta os estimadores no computador e compara o resultado com os registros `STEP`. |
-| `make_synthetic_capture.c` | Produz uma captura controlada para testar o caminho completo. |
-| `verify_replay.py` | Compila o replay, cruza C/Python e sabota dados para provar que erros são detectados. |
-
-Arquivos de `tests/`:
-
-| Arquivo | Para que serve |
-|---|---|
-| `run.sh` | Compila e executa todas as suítes e a verificação do replay. |
-| `test_mtf.c` | Parser Micolink, ruído, fragmentação, checksum e sequência. |
-| `test_bno_header.c` | Validação dos cabeçalhos SHTP recebidos do BNO. |
-| `test_displacement.c` | Atitude, associação de amostras e estimadores cru/fundido. |
-| `test_flow_ekf.c` | Predição, correção, validade e gates do EKF. |
-| `test_flow_calibrator.c` | Cálculo e rejeições da calibração de escala. |
-| `test_capture.c` | Codificação, CRC, corrupção e ressincronização da captura. |
-| `test_capture_session.c` | Máquina de estados controlada por DTR. |
-| `test_regressions.c` | Casos que reproduzem defeitos encontrados nas revisões. |
-| `stubs/` | Definições mínimas de HAL/FreeRTOS para testar no computador. |
-
-Arquivos de `docs/`:
-
-| Arquivo | Para que serve |
-|---|---|
-| `acompanhamento_tecnico.md` | Antigo README: histórico amplo, ensaios, calibração e decisões acumuladas. |
-| `estado_atual_do_sistema.md` | Arquitetura e situação consolidada do sensoriamento e da estimação. |
-| `evolucao_algoritmo_deslocamento.md` | Experimentos e mudanças sucessivas no cálculo de deslocamento. |
-| `captura_replay_v3.md` | Formato binário, sessão DTR, decoder, replay e limitações. |
-| `revisao_tecnica_codex.md` | Achados da revisão de código e correções relacionadas. |
-| `pesquisa_fluxo_optico_e_plano.md` | Comparação com ArduPilot, PX4, INAV, Betaflight e Crazyflie; diagnóstico do erro de fechamento e plano de evolução. |
-
-Arquivos locais de `docs/references/`:
-
-| Arquivo | Para que serve |
-|---|---|
-
-Os arquivos produzidos por um build têm funções diferentes:
-
-- `.hex`: imagem com endereços, indicada para gravar no STM32CubeProgrammer.
-- `.bin`: bytes crus; ao gravar manualmente, usa endereço inicial `0x08000000`.
-- `.elf`: programa com símbolos, usado pelo depurador.
-- `.map`: mapa de memória e símbolos, útil para analisar Flash e RAM.
-- `manifest.json`: variante, compilador e hashes do build feito por `build.py`.
-- `.o`, `.d`, `.su` e `.cyclo`: intermediários e relatórios do compilador.
-
-### Arquivos na raiz
-
-| Arquivo | Para que serve |
-|---|---|
-| `DroneController.ioc` | Fonte da configuração do STM32CubeMX: pinos, clocks e periféricos. |
-| `.project`, `.cproject`, `.mxproject` | Metadados do STM32CubeIDE/CubeMX. |
-| `DroneController Debug.launch` | Configuração de depuração da IDE. |
-| `STM32F411CEUX_FLASH.ld` | Script de ligação para executar a aplicação a partir da Flash. |
-| `STM32F411CEUX_RAM.ld` | Script alternativo de ligação para execução pela RAM. |
+| `tools/build.py` | Compila todas as fontes ARM e gera ELF, HEX, BIN, mapa e manifesto. |
+| `tools/ert_import.py` | Gera `lqg_ert_model.c` a partir da exportação do Simulink. |
+| `tools/gen_mavlink.py` | Regenera os headers C do MAVLink a partir do `protocol/drone_controller.xml`. |
+| `tools/pi/` | `dronectl`, a ferramenta da Raspberry Pi ([README](tools/pi/README.md)). |
+| `tools/read_logs.ps1`, `tools/motor_console.ps1` | Log e console USB no Windows. |
+| `tests/run.sh` | Roda todas as suítes de PC e as verificações cruzadas. |
+| `tests/test_lqg_ert.c` | Firmware × código gerado pelo Simulink: idêntico em double, erro medido em float. |
+| `tests/test_ctrl_gains.c`, `test_ctrl_params.c`, `test_meas.c` | Troca de ganhos, parâmetros e conversão das medidas. |
+| `tests/test_mtf.c`, `test_bno_header.c`, `test_regressions.c` | Parser Micolink, cabeçalhos SHTP e DMA circular. |
+| `docs/controle_lqg.md` | **Comece aqui para o controle**: modelo, malha, parâmetros, ajuste pela Pi, roteiro de bancada. |
+| `docs/guia_teste_motores.md` | Teste dos motores pelo console USB. |
+| `docs/acompanhamento_tecnico.md` | Histórico: bring-up dos sensores, calibrações e decisões anteriores. |
 
 ## Getting started
 
-### 1. Abrir e entender o projeto
+### 1. Abrir e compilar
 
 Instale o STM32CubeIDE e o STM32CubeProgrammer. No CubeIDE, importe a pasta
-raiz como projeto existente. O arquivo `.project` já descreve o projeto; não é
-necessário criar outro projeto ou regenerar o `.ioc` para começar.
+raiz como projeto existente, selecione **Debug**, pressione **F5**, faça
+**Project > Clean** e **Ctrl+B**. O HEX sai em `Debug/DroneController.hex`.
 
-Antes do primeiro build:
+Sem a IDE (Windows ou Linux, com o compilador do CubeIDE instalado):
 
-1. Selecione a configuração **Debug** na barra do CubeIDE.
-2. Pressione **F5** para atualizar os arquivos do projeto.
-3. Se a IDE estiver usando objetos antigos, execute **Project > Clean**.
-4. Pressione **Ctrl+B** para compilar.
-5. Confirme no Console que o build terminou sem erros.
-
-O conversor HEX está habilitado no projeto. No perfil Debug, o arquivo para
-gravação deve aparecer em:
-
-```text
-Debug/DroneController.hex
+```bash
+python tools/build.py           # build/Release/DroneController.hex
+python tools/build.py --debug   # build/Debug
 ```
-
-No perfil Release, ele aparece em `Release/DroneController.hex`. As pastas
-`Debug/` e `Release/` pertencem ao CubeIDE; a pasta `build/` pertence ao script
-de build explicado mais abaixo.
 
 ### 2. Gravar o HEX em modo DFU
 
 1. Feche qualquer terminal que esteja usando a porta COM da placa.
 2. Coloque a Black Pill em modo DFU usando BOOT0 e RESET.
-3. Conecte o cabo USB e abra o STM32CubeProgrammer.
-4. Selecione a conexão **USB** e conecte ao dispositivo DFU.
-5. Abra `Debug/DroneController.hex`.
-6. Inicie **Download/Program** e aguarde a verificação terminar.
-7. Retorne BOOT0 para 0 e reinicie a placa.
+3. No STM32CubeProgrammer, conecte por **USB** ao dispositivo DFU.
+4. Abra o `.hex`, inicie **Download** e aguarde a verificação.
+5. Retorne BOOT0 para 0 e reinicie a placa.
 
-O arquivo HEX já carrega os endereços de gravação. O endereço `0x08000000` só
-precisa ser informado quando se grava o arquivo BIN.
+O HEX já carrega os endereços; `0x08000000` só é necessário para o BIN.
 
-Depois do reset normal, o firmware deixa de aparecer como DFU e passa a
-enumerar uma porta COM USB. O CubeProgrammer grava a placa, mas não é o monitor
-dos logs da aplicação.
-
-### 3. Ver os logs
-
-Abra um PowerShell na raiz e execute:
+### 3. Logs e console USB
 
 ```powershell
-.\tools\read_logs.ps1
-.\tools\read_logs.ps1 -Port COM3 -OutputPath logs\bancada.txt
+.\tools\motor_console.ps1 -Port COM5 -OutputPath logs\bancada.txt
 ```
 
-O primeiro comando ajuda a listar as portas. Troque `COM3` pela porta da sua
-placa. Também é possível usar Tera Term ou outro terminal serial em 115200,
-8N1 e sem controle de fluxo. No USB CDC, o baud rate é virtual, mas manter
-115200 evita confusão com as UARTs físicas.
+O console liga o DTR (sem ele nada arma), mostra o log e envia o que você
+digitar. `help` lista os comandos; `log off` silencia as linhas de sensores;
+`lqg` mostra o estado do voo e a estimativa; `dry 0.5` faz um ensaio a seco
+completo. Enter vazio para tudo. As linhas do log estão descritas em
+`App/Inc/sensor_log.h`.
 
-Os grupos exibidos são escolhidos em `App/Inc/sensor_log.h`. Alterar um grupo
-exige recompilar e gravar novamente.
+### 4. Raspberry Pi
 
-O perfil normal atual mostra o deslocamento horizontal do EKF, em milímetros,
-a cada 500 ms. Ele começa do zero em todo boot e mantém o diagnóstico na mesma
-linha:
+Siga [`tools/pi/README.md`](tools/pi/README.md). Em resumo, por SSH na Pi:
 
-```text
-DESLOCAMENTO_MM 0,0 height_mm=301 valid=0 health=2 corr_age=25 imu_align_rej=0 range_rej=0 range_reanchor=0 ekf_rej=0
-DESLOCAMENTO_MM -24,1 height_mm=298 valid=1 health=0 corr_age=4 imu_align_rej=0 range_rej=0 range_reanchor=0 ekf_rej=0
-DESLOCAMENTO_MM -83,0 height_mm=304 valid=1 health=0 corr_age=3 imu_align_rej=0 range_rej=0 range_reanchor=0 ekf_rej=1
+```bash
+cd DroneSTM32/tools/pi
+.venv/bin/python -m dronectl monitor           # filtragem dos sensores ao vivo
+.venv/bin/python -m dronectl hover --dry --debug
 ```
 
-O primeiro valor é X e o segundo é Y. `height_mm` é a altura atual filtrada e
-corrigida pela inclinação; ela não é acumulada. `valid=1 health=0` indica
-estimativa utilizável. Os contadores revelam perda de alinhamento temporal,
-rejeições do telêmetro, mudanças persistentes de altura e rejeições do Kalman.
-O sinal depende do sentido dos eixos na montagem do MTF-01.
-
-### 4. Build independente da IDE
-
-O script abaixo usa o compilador instalado junto do CubeIDE, recompila todas
-as fontes e cria os resultados em `build/`:
-
-```powershell
-python .\tools\build.py             # build/Release: firmware normal
-python .\tools\build.py --debug     # build/Debug
-python .\tools\build.py --capture   # build/Capture: captura binária de bancada
-```
-
-Para uso normal, grave `build/Release/DroneController.hex`. O perfil Capture é
-exclusivo para ensaios: desliga os logs textuais e envia registros binários,
-que parecem caracteres ilegíveis em um terminal.
-
-### 5. Executar os testes no computador
-
-Os testes usam GCC, AddressSanitizer e UndefinedBehaviorSanitizer no WSL:
+### 5. Testes no computador
 
 ```bash
 sh tests/run.sh
 ```
 
-Eles verificam parsers, estimadores, regressões, formato de captura, sessão e
-replay. Esses testes não substituem ensaios com o hardware.
+Compila as suítes C com AddressSanitizer e UndefinedBehaviorSanitizer, confere
+o firmware contra o código do Simulink, confere que `lqg_ert_model.c` está em
+dia com a exportação, que o firmware e a Pi calculam o mesmo CRC dos ganhos e,
+com `numpy`, `pymavlink` e `pyserial` instalados, roda os testes da
+ferramenta da Pi contra um STM32 simulado. Os testes não substituem ensaios
+com o hardware.
+
+### 6. Documentação do código
+
+```bash
+doxygen        # gera build/docs/html/index.html
+```
 
 ## Por onde começar a ler o código
 
-Para uma primeira leitura, não tente entender todas as pastas em sequência.
-Siga o caminho que os dados percorrem:
-
-1. **Configuração física:** abra `DroneController.ioc` no modo gráfico e veja
-   os pinos e periféricos. Depois consulte `Core/Inc/main.h` para os nomes dos
-   pinos e `Core/Src/freertos.c` para saber quais módulos são iniciados.
-2. **Inicialização própria:** leia `App/Inc/sensors.h` e
-   `App/Src/sensors.c`. São pequenos e mostram a ordem captura → MTF → BNO →
-   estimação.
-3. **Um sensor de cada vez:** leia primeiro `mtf01.h` e `mtf_parser.h`; depois
-   seus `.c`. Em seguida faça o mesmo com `bno08x.h/.c`. Os headers descrevem
-   o contrato e os `.c` mostram HAL, DMA, SH-2 e FreeRTOS.
-4. **Cálculo:** leia `displacement.h`, depois `disp_estimator.c`, `attitude.c`
-   e `flow_ekf.c`. Por último, leia a task em `displacement.c`, que conecta as
-   peças.
-5. **Saída para o computador:** leia `sensor_log.h/.c`. Para ensaios
-   reproduzíveis, continue em `capture.h/.c` e
-   [`docs/captura_replay_v3.md`](docs/captura_replay_v3.md).
-6. **Comunicação com a Pi:** comece por `protocol/drone_controller.xml`, depois
-   `dronelink_app.h`, `dronelink_protocol.h` e `flight_command_api.h`. Só então
-   abra as implementações em `App/Src/dronelink/`.
-7. **Histórico e decisões:** consulte
-   [`docs/estado_atual_do_sistema.md`](docs/estado_atual_do_sistema.md) e
-   [`docs/evolucao_algoritmo_deslocamento.md`](docs/evolucao_algoritmo_deslocamento.md).
+1. **Configuração física:** `DroneController.ioc`, `Core/Inc/main.h` e
+   `Core/Src/freertos.c` (ordem em que as tasks são criadas).
+2. **O controle do TCC:** [`docs/controle_lqg.md`](docs/controle_lqg.md),
+   depois `control/lqg_ert.h` e `lqg_ert.c` lado a lado com
+   `reference/STM32_ert_rtw/STM32.c`.
+3. **Sensores → medidas:** `control/meas.h`, depois `bno08x.h` e `mtf01.h`.
+4. **Voo:** `control/flight_ctrl.h` (estados e contrato) e só então o `.c`.
+5. **Pi:** `protocol/drone_controller.xml`, `dronelink/flight_command_api.h`,
+   `dronelink_tuning.h` e `tools/pi/dronectl/`.
 
 Uma regra útil: arquivos `.h` explicam **o que** um módulo oferece; arquivos
-`.c` explicam **como** ele faz. `Core/` conecta o código ao microcontrolador,
-enquanto `App/` contém o comportamento específico deste drone.
+`.c` explicam **como** ele faz.
 
 ## Cuidados ao modificar
 
+- Não edite `App/Src/control/lqg_ert_model.c` à mão: exporte de novo no
+  Simulink e rode `tools/ert_import.py`.
+- Se alterar `protocol/drone_controller.xml`, rode `tools/gen_mavlink.py`; a
+  Pi regenera o lado dela sozinha.
 - Preserve alterações próprias dentro dos blocos `USER CODE` dos arquivos
   gerados pelo CubeMX.
-- Não edite `Debug/`, `Release/` ou `build/`; essas pastas são recriadas.
 - Trate `Drivers/`, `Middlewares/` e `App/Src/sh2/` como dependências externas.
-- Se alterar `protocol/drone_controller.xml`, regenere os headers MAVLink para
-  STM32 e Raspberry Pi a partir da mesma versão do dialeto.
-- Não misture logs de texto com captura binária no mesmo firmware.
-- Teste motores sempre sem hélices durante a futura implementação de ESCs.
-
-## Documentos para aprofundar
-
-- [Acompanhamento técnico e histórico](docs/acompanhamento_tecnico.md)
-- [Estado atual do sensoriamento e estimação](docs/estado_atual_do_sistema.md)
-- [Evolução do algoritmo de deslocamento](docs/evolucao_algoritmo_deslocamento.md)
-- [Formato de captura e replay](docs/captura_replay_v3.md)
-- [Revisão técnica do código](docs/revisao_tecnica_codex.md)
+- Teste motores sempre sem hélices; `LQG_FLIGHT_ENABLED` só vai para 1 depois
+  do roteiro de bancada.

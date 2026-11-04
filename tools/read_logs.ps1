@@ -4,9 +4,7 @@
 
 .DESCRIPTION
     Abre a porta serial USB da placa com DTR e RTS ativos e imprime o que
-    chegar, até Ctrl+C. Serve só para os logs de texto do build Release; para
-    o firmware Capture use tools/capture_binary.ps1, que grava bytes crus.
-    Sem -Port, lista as portas disponíveis. Se a placa reiniciar, execute de
+    chegar, até Ctrl+C. Sem -Port, lista as portas disponíveis. Se a placa reiniciar, execute de
     novo.
 
 .PARAMETER Port
@@ -36,11 +34,6 @@
     Compatível com Windows PowerShell 5.1. O arquivo usa UTF-8 com BOM para
     preservar os acentos nessa versão.
 
-    Use o firmware normal (build/Release). Este leitor ativa DTR ao abrir
-    a porta: usá-lo com firmware Capture iniciaria uma sessão binária que
-    este script não preserva. Nesse caso, reinicie a placa e use
-    tools/capture_binary.ps1.
-
     Feche outros terminais que ocupem a mesma COM. Ctrl+C encerra a leitura
     e o bloco finally libera a porta e fecha o arquivo.
 #>
@@ -49,7 +42,6 @@ param(
     [string]$OutputPath
 )
 $ErrorActionPreference = 'Stop'
-Write-Host 'Este leitor é só para logs de texto. Para firmware Capture use tools/capture_binary.ps1.'
 if (-not $Port) {
     Write-Host 'Portas disponiveis:'
     [System.IO.Ports.SerialPort]::GetPortNames() | Sort-Object

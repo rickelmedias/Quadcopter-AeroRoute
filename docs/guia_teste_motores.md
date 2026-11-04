@@ -1,9 +1,11 @@
 # Guia de teste dos motores (DShot600, 0 a 100%)
 
-Este guia vale para o firmware da branch `motors`. Ele não tem controle de voo:
-cada motor recebe exatamente o que for digitado, com rampa limitada. Os
-sensores (MTF-01 e BNO08x) continuam sendo lidos e registrados, para ver a
-vibração e a interferência com os motores girando.
+Este guia vale para o console USB da `main` (`App/Inc/usb_console.h`) e para
+a branch `motors`. Na bancada não há controle de voo: cada motor recebe
+exatamente o que for digitado, com rampa limitada. Os sensores (MTF-01 e
+BNO08x) continuam sendo lidos e registrados, para ver a vibração e a
+interferência com os motores girando. Os comandos de voo do mesmo console
+(`hover`, `dry`, `land`...) estão em [`controle_lqg.md`](controle_lqg.md).
 
 ## 1. Segurança antes de ligar
 

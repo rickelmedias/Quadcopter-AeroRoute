@@ -1,6 +1,8 @@
 #pragma once
 // MESSAGE DRONE_PROTOCOL_INFO PACKING
 
+#include <stdint.h>
+
 #define MAVLINK_MSG_ID_DRONE_PROTOCOL_INFO 51000
 
 

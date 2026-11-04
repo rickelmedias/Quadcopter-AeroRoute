@@ -9,7 +9,6 @@
 #ifndef BNO08X_H
 #define BNO08X_H
 #include "attitude.h"
-#include "bno_history.h"
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -42,8 +41,7 @@ typedef enum {
  * @brief Saúde de um tipo de relatório do BNO (rotação, giro ou aceleração).
  */
 typedef struct {
-  /** Relatórios recebidos e aceitos desde o boot. Também serve de identificador
-      da amostra (usado pela captura e pelo replay). */
+  /** Relatórios recebidos e aceitos desde o boot. */
   uint32_t count;
   /** Relatórios que o sensor numerou mas nunca chegaram. É o jeito mais barato
       de flagrar um barramento que perde dados em silêncio. */
@@ -78,7 +76,7 @@ typedef struct bno_sample_s {
   /** Aceleração linear, em m/s^2, eixos do sensor, com a gravidade já removida
       pela fusão do próprio sensor (SH2_LINEAR_ACCELERATION). Pegar assim, em
       vez de subtrair a gravidade aqui, evita adivinhar as convenções de sinal
-      do sensor. É com ela que o filtro do fluxo faz a predição. */
+      do sensor. Vai para o log; o modelo do TCC não a usa. */
   float lin_accel[3];
   /** Saúde do relatório de rotação. */
   bno_report_stats_t rotation;
@@ -135,12 +133,7 @@ void bno_get_sample(bno_sample_t *out);
 
 /**
  * @brief Registra uma task (TaskHandle_t) para ser notificada a cada novo
- *        relatório de rotação, ou NULL para nenhuma. É o relógio da malha de
- *        controle (400 Hz).
+ *        relatório de rotação (400 Hz), ou NULL para nenhuma.
  */
 void bno_set_listener(void *task);
-
-/** Alinha atitude, giro e aceleração ao intervalo do frame MTF. */
-bool bno_get_aligned(uint32_t end_us, uint32_t interval_us,
-                     bno_aligned_sample_t *out);
 #endif

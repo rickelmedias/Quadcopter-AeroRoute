@@ -8,7 +8,6 @@
  */
 #include "bno08x.h"
 #include "bno_i2c_header.h"
-#include "capture.h"
 #include "sensor_log.h"
 #include "FreeRTOS.h"
 #include "task.h"
@@ -37,8 +36,6 @@
 static bno_sample_t sample;
 /** Última amostra publicada; protegida por seção crítica. */
 static bno_sample_t published;
-/** Histórico usado para associar cada frame MTF ao mesmo intervalo da IMU. */
-static bno_history_t history;
 /** O SH-2 avisou que o sensor reiniciou. */
 static bool reset_seen;
 /** Uma transferência I2C falhou; a sessão atual precisa ser refeita. */
@@ -342,8 +339,8 @@ static bool update_stats(bno_report_stats_t *s, const sh2_SensorValue_t *v) {
 }
 
 /**
- * @brief Callback de relatórios do SH-2: decodifica, valida, guarda na
- *        amostra e grava na captura.
+ * @brief Callback de relatórios do SH-2: decodifica, valida e guarda na
+ *        amostra.
  *
  * @param[in] cookie  Não usado.
  * @param[in] e       Evento de sensor ainda codificado.
@@ -362,39 +359,16 @@ static void sensor_event(void *cookie, sh2_SensorEvent_t *e) {
     float scale = 1.0F/sqrtf(norm);
     sample.q[0] = q->real*scale; sample.q[1] = q->i*scale;
     sample.q[2] = q->j*scale;    sample.q[3] = q->k*scale;
-    taskENTER_CRITICAL();
-    bno_history_push_rotation(&history, (uint32_t)v.timestamp,
-                              sample.rotation.count, sample.q);
-    taskEXIT_CRITICAL();
-    capture_bno(CAP_BNO_ROTATION, sample.q, sample.rotation.accuracy,
-                sample.rotation.sequence, sample.rotation.count,
-                v.timestamp, v.delay);
   } else if (v.sensorId == SH2_GYROSCOPE_CALIBRATED) {
     if (!update_stats(&sample.angular, &v)) return;
     sample.gyro[0] = v.un.gyroscope.x;
     sample.gyro[1] = v.un.gyroscope.y;
     sample.gyro[2] = v.un.gyroscope.z;
-    taskENTER_CRITICAL();
-    bno_history_push_gyro(&history, (uint32_t)v.timestamp,
-                          sample.angular.count, sample.gyro);
-    taskEXIT_CRITICAL();
-    { const float g[4] = {sample.gyro[0], sample.gyro[1], sample.gyro[2], 0.0F};
-      capture_bno(CAP_BNO_GYRO, g, sample.angular.accuracy,
-                  sample.angular.sequence, sample.angular.count,
-                  v.timestamp, v.delay); }
   } else if (v.sensorId == SH2_LINEAR_ACCELERATION) {
     if (!update_stats(&sample.acceleration, &v)) return;
     sample.lin_accel[0] = v.un.linearAcceleration.x;
     sample.lin_accel[1] = v.un.linearAcceleration.y;
     sample.lin_accel[2] = v.un.linearAcceleration.z;
-    taskENTER_CRITICAL();
-    bno_history_push_accel(&history, (uint32_t)v.timestamp,
-                           sample.acceleration.count, sample.lin_accel);
-    taskEXIT_CRITICAL();
-    { const float a[4] = {sample.lin_accel[0], sample.lin_accel[1], sample.lin_accel[2], 0.0F};
-      capture_bno(CAP_BNO_ACCEL, a, sample.acceleration.accuracy,
-                  sample.acceleration.sequence, sample.acceleration.count,
-                  v.timestamp, v.delay); }
   }
 }
 
@@ -443,15 +417,6 @@ void bno_get_sample(bno_sample_t *out) {
   out->online = out->online && !reports_stalled(out, HAL_GetTick(), ONLINE_STALE_MS);
 }
 
-bool bno_get_aligned(uint32_t end_us, uint32_t interval_us,
-                     bno_aligned_sample_t *out) {
-  bool ok;
-  taskENTER_CRITICAL();
-  ok = bno_history_align(&history, end_us, interval_us, out);
-  taskEXIT_CRITICAL();
-  return ok;
-}
-
 /**
  * @brief Task do BNO08x: abre a sessão SH-2, identifica e configura o sensor,
  *        atende os relatórios e refaz tudo após qualquer falha.
@@ -460,12 +425,9 @@ bool bno_get_aligned(uint32_t end_us, uint32_t interval_us,
  */
 static void bno_task(void *argument) {
   (void)argument;
-  uint32_t last_diag_ms = 0;
   for (;;) {
-    capture_diag_poll(&last_diag_ms, CAP_CLOCK_RESYNCS_UNKNOWN);
     sample.online = false;
     sample.rotation.seen = sample.angular.seen = sample.acceleration.seen = false;
-    taskENTER_CRITICAL(); bno_history_reset(&history); taskEXIT_CRITICAL();
     transport_failed = false;
     reset_seen = false;
     publish();
@@ -495,7 +457,6 @@ static void bno_task(void *argument) {
       uint32_t last_rotation = sample.rotation.count;
       uint32_t last_total = 0;
       while (sample.online && !transport_failed) {
-        capture_diag_poll(&last_diag_ms, CAP_CLOCK_RESYNCS_UNKNOWN);
         sh2_service();
         /* Um reset durante a operação apaga os relatórios habilitados, então
            eles são reabilitados e a verificação de travamento ganha um novo

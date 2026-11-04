@@ -18,10 +18,12 @@ extern DMA_HandleTypeDef hdma_tim4_up;
 
 /** Um grupo de quatro CCR por período de bit, na ordem CCR1..CCR4. */
 static uint16_t frame[(FRAME_BITS + PAD_BITS) * 4U];
-/** Comparação do bit 0 (37,5% do período) e do bit 1 (75%). Derivadas do
-    período do TIM4: com ARR=159 dá DShot600 (60 e 120); para DShot300 basta
-    ARR=319 no CubeMX, sem mexer aqui. */
-static uint16_t t0h, t1h;
+/** Comparação do bit 0 (37,5% do período). Derivada do período do TIM4: com
+    ARR=159 dá DShot600 (60); para DShot300 basta ARR=319 no CubeMX, sem
+    mexer aqui. */
+static uint16_t t0h;
+/** Comparação do bit 1 (75% do período; 120 em DShot600). */
+static uint16_t t1h;
 
 void dshot_init(void) {
   DMA_Stream_TypeDef *s = hdma_tim4_up.Instance;

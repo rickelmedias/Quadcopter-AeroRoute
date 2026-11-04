@@ -5,6 +5,14 @@ ensaios, decisões de implementação, calibrações, limitações e hipóteses 
 investigadas. Para a apresentação do projeto, mapa do repositório e primeiros
 passos, consulte o [`README.md`](../README.md) na raiz.
 
+> **Documento histórico.** Em 2026-11-04 o estimador de deslocamento (EKF de
+> fluxo, filtros e calibradores), o LQG genérico e a captura com replay
+> descritos abaixo foram substituídos pelo Kalman + LQR exportado do Simulink
+> ([`controle_lqg.md`](controle_lqg.md)). O código antigo está no Git
+> (commit `16269e9`). Continuam valendo as partes sobre ligações, BNO08x,
+> MTF-01, configuração do Micolink e a calibração de escala e sinais do fluxo,
+> que o controle novo reaproveita.
+
 ## Estado atual (2026-09-16) e uso
 
 A fase de **percepção (BNO08x + MTF-01) está encerrada**: os dois sensores
@@ -71,7 +79,7 @@ captura binária**: ele é exclusivo dos logs textuais do firmware normal.
 O modo Capture espera amostras novas após DTR e começa o estimador do zero;
 movimento anterior à sessão não entra no replay. Se houver perda, o replay
 mostra o registro da interrupção e o prefixo conferido, retornando erro.
-Consulte [formato, testes e limitações](captura_replay_v3.md).
+O documento de formato, testes e limitações da captura saiu junto com ela (ver o histórico do Git).
 
 ## Arquitetura dos sensores
 

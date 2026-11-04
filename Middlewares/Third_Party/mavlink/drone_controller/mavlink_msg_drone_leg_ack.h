@@ -1,6 +1,8 @@
 #pragma once
 // MESSAGE DRONE_LEG_ACK PACKING
 
+#include <stdint.h>
+
 #define MAVLINK_MSG_ID_DRONE_LEG_ACK 51002
 
 
