@@ -83,6 +83,10 @@ static const ctrl_param_desc_t TABLE[] = {
           "limite do termo de hover (rad/s)"),
     PARAM("CTL_TRIM_ATT", trim_att_max, 0.0F, 400.0F, DEFAULT_TRIM_ATT_MAX, CTRL_PARAM_LIVE,
           "limite do equilibrio (rad/s)"),
+    PARAM("CTL_LQI", use_lqi, 0.0F, 1.0F, DEFAULT_CTL_LQI, CTRL_PARAM_BOOL | CTRL_PARAM_DISARMED_ONLY,
+          "1 = LQI (integradores z, phi, theta)"),
+    PARAM("CTL_LQI_MAX", lqi_max, 0.0F, 400.0F, DEFAULT_LQI_MAX, CTRL_PARAM_LIVE,
+          "limite de cada integrador do LQI (rad/s)"),
 };
 
 /** Quantidade de entradas da tabela. */

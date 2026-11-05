@@ -22,7 +22,8 @@ cd "$(dirname "$0")/.."
 PURE="App/Src/attitude.c App/Src/mtf_parser.c
       App/Src/control/lqg_ert.c App/Src/control/lqg_ert_model.c
       App/Src/control/ctrl_gains.c App/Src/control/ctrl_params.c App/Src/control/meas.c
-      App/Src/control/mixer.c App/Src/control/attitude_mode.c App/Src/control/trim.c App/Src/control/throttle.c"
+      App/Src/control/mixer.c App/Src/control/attitude_mode.c App/Src/control/trim.c App/Src/control/throttle.c App/Src/control/lqi.c
+      App/Src/control/lqi_gains.c"
 REFERENCE="reference/STM32_ert_rtw/STM32.c reference/STM32_ert_rtw/STM32_data.c"
 
 CFLAGS="-std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined
@@ -42,6 +43,7 @@ run_suite() {
   extra=""
   case "$src" in
     *test_lqg_ert.c) extra="$REFERENCE" ;;
+    *test_lqi.c) extra="-Itools/lqi tools/lqi/lqr_design.c tools/lqi/lqi_design.c" ;;
   esac
   if ! gcc $CFLAGS "$@" "$src" $PURE $extra -lm -o "$OUT/$name" 2>"$OUT/$name.log"; then
     echo "BUILD FAIL  $name"
@@ -64,6 +66,17 @@ done
 run_suite test_lqg_ert_float tests/test_lqg_ert.c -DLQG_ERT_SINGLE_PRECISION
 
 echo
+# A tabela do LQI precisa ser a que tools/lqi/lqi_gen gera com os pesos atuais.
+if gcc -std=c11 -O2 -IApp/Inc -Itools/lqi tools/lqi/lqi_gen.c tools/lqi/lqi_design.c \
+      tools/lqi/lqr_design.c App/Src/control/lqg_ert_model.c -lm -o "$OUT/lqi_gen" \
+      2>"$OUT/lqi_gen.log" && "$OUT/lqi_gen" --check App/Src/control/lqi_gains.c >>"$OUT/lqi_gen.log" 2>&1; then
+  echo "PASS  lqi_gains.c confere com tools/lqi (projeto do LQI)"
+else
+  echo "FAIL  lqi_gains.c desatualizado"
+  cat "$OUT/lqi_gen.log"
+  failures=$((failures + 1))
+fi
+
 # As tabelas do firmware precisam ser as da exportação do Simulink.
 if python3 tools/ert_import.py --check >"$OUT/ert_import.log" 2>&1; then
   echo "PASS  lqg_ert_model.c confere com reference/STM32_ert_rtw"

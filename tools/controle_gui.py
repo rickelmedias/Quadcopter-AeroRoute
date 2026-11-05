@@ -22,7 +22,10 @@ em zero, a guinada fica no zero da energização e a altura segue a rampa. A
 posição horizontal **não** é controlada: um pequeno erro de nível faz o drone
 deslizar. Prenda-o.
 
-Compensação automática (marcada por padrão): o LQG do TCC não tem integrador,
+Compensação (escolha no painel): **LQI** (padrão, ``control/lqi.h``) é o LQR
+do TCC com integradores de altura, φ e θ projetados pelo mesmo dlqr; o
+**ajuste lento** é a versão anterior, feita por fora do LQR; **nenhuma** deixa
+o LQR exportado pelo Simulink sozinho. Histórico do ajuste lento: o LQG do TCC não tem integrador,
 então um hover errado (o drone não sai do chão) ou um peso mal distribuído
 (a frente levanta e a traseira fica) deixam erro de altura e de inclinação. O
 firmware soma um ajuste lento à rotação dos motores (``control/trim.h``) e
@@ -163,15 +166,25 @@ def du_por_motor(du_entradas: list[float]) -> list[float]:
     return por_motor
 
 
-def comando_ligar(seco: bool, compensar: bool = True, altura_m: float = ALTURA_M) -> list[str]:
+#: Modos de compensação: rótulo no painel -> (CTL_LQI, CTL_TRIM).
+MODOS_COMPENSACAO = {
+    "lqi": ("LQI: integradores no projeto do LQR", 1, 0),
+    "trim": ("Ajuste lento (versão controle)", 0, 1),
+    "nenhuma": ("Nenhuma: LQR do TCC puro", 0, 0),
+}
+
+
+def comando_ligar(seco: bool, modo: str = "lqi", altura_m: float = ALTURA_M) -> list[str]:
     """Comandos que armam e sobem ``altura_m`` (ensaio a seco ou real).
 
-    ``compensar`` liga o ajuste lento do hover e do equilíbrio (``CTL_TRIM``,
-    ``control/trim.h``): sem ele, um peso mal distribuído ou um hover errado
-    deixam o drone no chão ou inclinado.
+    ``modo`` escolhe a compensação de desequilíbrio e de hover errado (ver
+    ``MODOS_COMPENSACAO``): o LQI (``control/lqi.h``), o ajuste lento
+    (``control/trim.h``) ou nenhuma, o LQR exportado pelo Simulink sem nada.
     """
+    _rotulo, lqi, trim = MODOS_COMPENSACAO[modo]
     return [f"param set FLT_DRY_RUN {1 if seco else 0}",
-            f"param set CTL_TRIM {1 if compensar else 0}",
+            f"param set CTL_LQI {lqi}",
+            f"param set CTL_TRIM {trim}",
             f"hover {min(max(altura_m, ALTURA_MIN_M), ALTURA_M):.2f}"]
 
 
@@ -284,7 +297,7 @@ def executar_tela(porta_inicial: str) -> None:
     porta_var = tk.StringVar(value=porta_inicial)
     situacao_var = tk.StringVar(value="Desconectado")
     seco_var = tk.BooleanVar(value=True)
-    trim_var = tk.BooleanVar(value=True)
+    modo_var = tk.StringVar(value="lqi")
     gravar_var = tk.BooleanVar(value=True)
     w0_var = tk.IntVar(value=W0_PADRAO)
     altura_var = tk.IntVar(value=int(round(ALTURA_PADRAO_M * 100)))  # cm
@@ -377,14 +390,14 @@ def executar_tela(porta_inicial: str) -> None:
             "• Mão no botão de EMERGÊNCIA (barra de espaço)?",
         ):
             return
-        for cmd in comando_ligar(seco_var.get(), trim_var.get(), altura_var.get() / 100):
+        for cmd in comando_ligar(seco_var.get(), modo_var.get(), altura_var.get() / 100):
             mandar(cmd)
         botao_travado_ate[0] = time.monotonic() + TRAVA_BOTAO_S
         escrever_log("LIGAR: " + ("ensaio a seco" if seco_var.get() else "MOTORES REAIS") + f", subindo {altura_var.get()} cm")
 
     def ajustar(nome: str, valor: str) -> None:
         armado = est.estado in (ESTADO_ARMADO, ESTADO_DECOLANDO, ESTADO_HOLD, ESTADO_POUSANDO)
-        if nome == "CTL_W0" and armado and trim_var.get():
+        if nome == "CTL_W0" and armado and modo_var.get() != "nenhuma":
             # Com a compensação ligada, mudar o hover em voo soma um degrau nos
             # quatro motores por cima do que ela já achou (ensaio de 04/11).
             escrever_log("CTL_W0 não muda em voo com a compensação ligada; ajuste antes de LIGAR")
@@ -417,9 +430,10 @@ def executar_tela(porta_inicial: str) -> None:
                 mot = dado
             elif tipo == "texto":
                 escrever_log(dado)
-                if dado.startswith("trim "):
-                    valores["trim"].set(dado[len("trim "):])
-                    ultimo_trim[0] = dado[len("trim "):]
+                for prefixo in ("trim ", "lqi "):
+                    if dado.startswith(prefixo) and "z=" in dado:
+                        valores["trim"].set(dado)
+                        ultimo_trim[0] = dado[len(prefixo):]
                 if arquivo[0] is not None:
                     arquivo[0].write(f"{time.time():.3f};TXT;{dado}\n")
             elif tipo == "bruta" and arquivo[0] is not None:
@@ -559,8 +573,10 @@ def executar_tela(porta_inicial: str) -> None:
               bg="#dc2626", fg="white", activebackground="#7f1d1d", command=emergencia
               ).pack(side="left", padx=16)
     ttk.Checkbutton(acoes, text="Ensaio a seco (motores parados)", variable=seco_var).pack(side="left", padx=12)
-    ttk.Checkbutton(acoes, text="Compensação automática\n(hover + frente/trás/lados)",
-                    variable=trim_var).pack(side="left", padx=12)
+    modos = ttk.LabelFrame(acoes, text="Compensação (hover + frente/trás/lados)", padding=4)
+    modos.pack(side="left", padx=12)
+    for chave, (rotulo, _lqi, _trim) in MODOS_COMPENSACAO.items():
+        ttk.Radiobutton(modos, text=rotulo, value=chave, variable=modo_var).pack(anchor="w")
 
     ajustes = ttk.LabelFrame(raiz, text="Ajustes ao vivo", padding=6)
     ajustes.pack(fill="x", padx=8, pady=4)

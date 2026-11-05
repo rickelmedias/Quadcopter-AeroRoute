@@ -165,6 +165,22 @@
    distribuído (frente leve, traseira pesada) deixam erro de altura e de
    inclinação. Valores calibrados em simulação com perturbações de até
    120 rad/s no hover e 30 rad/s de desequilíbrio. */
+/* ---- LQI (control/lqi.h) ------------------------------------------------- */
+/**
+ * 1 = usa o LQI: o LQR do TCC com integradores de altura, φ e θ, projetado
+ * pelo mesmo dlqr (tools/lqi). Substitui o ajuste lento. Branch controle-lqi.
+ */
+#define DEFAULT_CTL_LQI        1.0F
+/** Maior correção de um integrador do LQI em um motor, em rad/s. */
+#define DEFAULT_LQI_MAX        250.0F
+/**
+ * Anti-windup: no ar, o erro de φ e θ que entra nos integradores do LQI fica
+ * limitado a ± isto, em rad (~4,6°). Perto do equilíbrio o projeto linear não
+ * muda; num empurrão, o integrador não acumula o ângulo inteiro (em simulação o
+ * rebote caiu de 24° para 16°).
+ */
+#define LQI_ATT_ERROR_MAX_RAD  0.08F
+
 /** 1 = liga o ajuste lento (CTL_TRIM). Padrão desligado: o painel liga. */
 #define DEFAULT_CTL_TRIM       0.0F
 /**

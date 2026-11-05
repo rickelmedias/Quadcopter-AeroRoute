@@ -104,6 +104,10 @@ typedef struct {
   float trim_max;
   /** CTL_TRIM_ATT: limite de cada termo de equilíbrio (arfagem e rolagem), em rad/s. */
   float trim_att_max;
+  /** CTL_LQI: 1 = LQI (control/lqi.h) no lugar do LQR do Simulink e do ajuste lento. */
+  float use_lqi;
+  /** CTL_LQI_MAX: maior correção de um integrador do LQI em um motor, em rad/s. */
+  float lqi_max;
 } ctrl_params_t;
 
 /** @brief Regras de um parâmetro. */

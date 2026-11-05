@@ -15,6 +15,7 @@
 #include "control/ctrl_gains.h"
 #include "control/attitude_mode.h"
 #include "control/ctrl_params.h"
+#include "control/lqi.h"
 #include "control/meas.h"
 #include "control/throttle.h"
 #include "control/trim.h"
@@ -145,6 +146,18 @@ static uint32_t land_spindown_ms;
 static trim_state_t trim_learned;
 /** ::trim_learned tem valor. */
 static bool trim_learned_valid;
+/** O LQI está em uso neste passo (CTL_LQI); no lugar do ajuste lento. */
+static bool lqi_active;
+/** Integradores do LQI (control/lqi.h). */
+static lqi_state_t lqi;
+/** Integradores de φ e θ do último instante no ar, nivelado e assentado (como ::trim_learned). */
+static lqi_state_t lqi_learned;
+/** ::lqi_learned tem valor. */
+static bool lqi_learned_valid;
+/** Medidas diretas deste passo que alimentam os integradores do LQI. */
+static float lqi_meas_z, lqi_meas_phi, lqi_meas_theta;
+/** A altura medida deste passo é válida. */
+static bool lqi_meas_range_ok;
 /** Tick do último relato do trim no log. */
 static uint32_t trim_report_ms;
 /** O drone já se soltou do chão nesta decolagem (encerra a rampa de partida do hover). */
@@ -395,10 +408,28 @@ static void enter_hold(void) {
  * O hover real é CTL_W0 + trim.z: se o ajuste for sempre parecido, vale
  * passar esse valor para CTL_W0.
  */
+/**
+ * @brief Correção dos integradores do LQI resumida como o trim: hover (média),
+ *        frente/trás e esquerda/direita, em rad/s.
+ */
+static void lqi_summary(float *z, float *theta, float *phi) {
+  float u[LQG_NU];
+  lqi_output(&lqi, &LQI_GAINS, u);
+  *z = 0.25F * (u[0] + u[1] + u[2] + u[3]);
+  *theta = 0.25F * (u[0] + u[1] - u[2] - u[3]);
+  *phi = 0.25F * (u[0] - u[1] - u[2] + u[3]);
+}
+
 static void report_and_reset_trim(void) {
   if (trim.z != 0.0F || trim.theta != 0.0F || trim.phi != 0.0F) {
     say("trim z=%d th=%d phi=%d rad/s", (int)trim.z, (int)trim.theta, (int)trim.phi);
   }
+  if (lqi.xi[0] != 0.0F || lqi.xi[1] != 0.0F || lqi.xi[2] != 0.0F) {
+    float z, th, ph;
+    lqi_summary(&z, &th, &ph);
+    say("lqi z=%d th=%d phi=%d rad/s", (int)z, (int)th, (int)ph);
+  }
+  lqi_reset(&lqi);
   trim_reset(&trim);
   trim_released = false;
   land_spindown_ms = 0U;
@@ -505,6 +536,12 @@ static void handle_request(const request_t *req, uint32_t now) {
          continua zerada na energização (ver meas_rearm). */
       lqg_ert_init(&lqg);
       meas_rearm(&meas);
+      lqi_reset(&lqi);
+      if (lqi_learned_valid) {
+        lqi.xi[LQI_I_PHI] = lqi_learned.xi[LQI_I_PHI];
+        lqi.xi[LQI_I_THETA] = lqi_learned.xi[LQI_I_THETA];
+        say("lqi: equilibrio inicial do voo anterior");
+      }
       trim_reset(&trim);
       if (trim_learned_valid) {
         trim.theta = trim_learned.theta;
@@ -779,6 +816,40 @@ static void update_trim(bool enabled) {
 }
 
 /**
+ * @brief Avança os integradores do LQI com as medidas diretas do passo.
+ *
+ * Mesmas condições do ajuste lento: só no ar, com motores reais, sem rampa e
+ * sem saturação. A altura só integra com o MTF respondendo.
+ *
+ * @param[in] enabled  O controle está ativo e nada saturou neste passo.
+ */
+static void update_lqi(bool enabled) {
+  const uint32_t now = HAL_GetTick();
+  if (enabled && now - trim_report_ms >= TRIM_REPORT_MS) {
+    trim_report_ms = now;
+    float z, th, ph;
+    lqi_summary(&z, &th, &ph);
+    say("lqi z=%d th=%d phi=%d%s", (int)z, (int)th, (int)ph,
+        lqi_at_limit(&lqi, &LQI_GAINS, prm.lqi_max) ? " NO LIMITE" : "");
+  }
+  if (enabled && lifted && fabsf((float)lqg.x_filt[LQG_X_THETA]) < TRIM_LEARN_LEVEL_RAD &&
+      fabsf((float)lqg.x_filt[LQG_X_PHI]) < TRIM_LEARN_LEVEL_RAD &&
+      fabsf((float)lqg.x_filt[LQG_X_VZ]) < TRIM_SETTLED_VZ) {
+    lqi_learned = lqi;
+    lqi_learned_valid = true;
+  }
+  /* No ar, o erro de ângulo integrado é limitado (anti-windup); no chão entra
+     inteiro, porque é ali que o desequilíbrio precisa ser achado. */
+  const float att_limit = lifted ? LQI_ATT_ERROR_MAX_RAD : INFINITY;
+  const float error[LQI_NI] = {
+      lqi_meas_range_ok ? lqi_meas_z - ref[LQG_R_Z] : NAN,
+      fmaxf(fminf(lqi_meas_phi, att_limit), -att_limit),
+      fmaxf(fminf(lqi_meas_theta, att_limit), -att_limit),
+  };
+  lqi_update(&lqi, &LQI_GAINS, enabled, DT_S, error, prm.lqi_max);
+}
+
+/**
  * @brief Converte du em aceleração dos motores e diz qual entrada foi aplicada.
  *
  * Em voo, a predição do Kalman usa o du que os motores realmente recebem
@@ -804,13 +875,19 @@ static void compute_output(const lqg_real_t du[LQG_NU], float throttle[LQG_NU],
     for (unsigned i = 0U; i < LQG_NU; ++i) {
       throttle[i] = is_armed_state(state) ? prm.mot_idle : 0.0F;
     }
-    update_trim(false);
+    if (lqi_active) update_lqi(false); else update_trim(false);
     return;
   }
 
   const float span = prm.mot_w_at_100 - prm.mot_w_at_0;
+  /* Correção lenta somada ao du: os integradores do LQI ou, sem ele, o ajuste
+     lento. Nos dois casos fica fora da predição do Kalman (ver du_applied). */
   float trim_w[LQG_NU] = {0.0F, 0.0F, 0.0F, 0.0F};
-  if (prm.trim >= 0.5F) trim_values(&trim, trim_w);
+  if (lqi_active) {
+    lqi_output(&lqi, &LQI_GAINS, trim_w);
+  } else if (prm.trim >= 0.5F) {
+    trim_values(&trim, trim_w);
+  }
   for (unsigned i = 0U; i < LQG_NU; ++i) {
     const float w = prm.w0 + (float)du[i] + trim_w[i];
     throttle[i] = span > 0.0F ? (w - prm.mot_w_at_0) / span : 0.0F;
@@ -838,8 +915,13 @@ static void compute_output(const lqg_real_t du[LQG_NU], float throttle[LQG_NU],
     }
   }
   *flags |= FLIGHT_FLAG_CONTROL_ACTIVE;
-  update_trim(!dry_run && !ramping_up && !spinning_down &&
-              (*flags & FLIGHT_FLAG_SATURATED) == 0U);
+  const bool integrate = !dry_run && !ramping_up && !spinning_down &&
+                         (*flags & FLIGHT_FLAG_SATURATED) == 0U;
+  if (lqi_active) {
+    update_lqi(integrate);
+  } else {
+    update_trim(integrate);
+  }
 }
 
 /** @brief Publica a fotografia do passo e, na taxa pedida, a linha EST. */
@@ -900,8 +982,15 @@ static void step(uint32_t step_count) {
   read_sensors(&in);
   lqg_real_t y[LQG_NY];
   const uint8_t meas_flags = meas_update(&meas, &in, &prm, y);
-  const bool use_xy = prm.use_xy >= 0.5F;
+  /* O LQI foi projetado sem a posição horizontal: com ele, x e y saem da malha. */
+  lqi_active = prm.use_lqi >= 0.5F;
+  const bool use_xy = prm.use_xy >= 0.5F && !lqi_active;
   gains_effective = gains;
+  if (lqi_active) lqi_apply_gains(&LQI_GAINS, &gains_effective);
+  lqi_meas_z = (float)y[LQG_Y_Z];
+  lqi_meas_phi = (float)y[LQG_Y_PHI];
+  lqi_meas_theta = (float)y[LQG_Y_THETA];
+  lqi_meas_range_ok = (meas_flags & MEAS_RANGE) != 0U;
   if (!use_xy) {
     attitude_mode_mask_gains(&gains_effective);
     attitude_mode_repeat_prediction(&lqg, y);
