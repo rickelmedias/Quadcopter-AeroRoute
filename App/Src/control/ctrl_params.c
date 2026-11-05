@@ -73,6 +73,14 @@ static const ctrl_param_desc_t TABLE[] = {
           CTRL_PARAM_DISARMED_ONLY, "pitch cru do BNO nivelado (graus)"),
     PARAM("CTL_XY", use_xy, 0.0F, 1.0F, DEFAULT_CTL_XY, CTRL_PARAM_BOOL | CTRL_PARAM_DISARMED_ONLY,
           "1 = LQG segura x,y; 0 = so atitude e altura"),
+    PARAM("CTL_TRIM", trim, 0.0F, 1.0F, DEFAULT_CTL_TRIM, CTRL_PARAM_BOOL | CTRL_PARAM_DISARMED_ONLY,
+          "1 = ajuste lento de hover e equilibrio"),
+    PARAM("CTL_KI_Z", trim_ki_z, 0.0F, 45.0F, DEFAULT_TRIM_KI_Z, CTRL_PARAM_LIVE,
+          "ganho do hover (rad/s por m.s)"),
+    PARAM("CTL_KI_ATT", trim_ki_att, 0.0F, 150.0F, DEFAULT_TRIM_KI_ATT, CTRL_PARAM_LIVE,
+          "ganho do equilibrio (rad/s por rad.s)"),
+    PARAM("CTL_TRIM_MAX", trim_max, 0.0F, 250.0F, DEFAULT_TRIM_MAX, CTRL_PARAM_LIVE,
+          "limite do termo de hover (rad/s)"),
 };
 
 /** Quantidade de entradas da tabela. */

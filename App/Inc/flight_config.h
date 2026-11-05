@@ -124,7 +124,7 @@
  * Se a altura medida passar de ::FLIGHT_MAX_HEIGHT_M mais esta folga, o voo
  * pousa sozinho, em m.
  */
-#define FLIGHT_OVERSHOOT_M     0.10F
+#define FLIGHT_OVERSHOOT_M     0.20F
 /** Menor velocidade de descida no pouso, em m/s (a rampa do pouso nunca é um degrau). */
 #define FLIGHT_LAND_MIN_RATE_M_S 0.03F
 
@@ -145,6 +145,33 @@
  * altura (control/attitude_mode.h). O teste de controle começa em 0.
  */
 #define DEFAULT_CTL_XY         0.0F
+
+/* ---- Ajuste lento do hover e do equilíbrio (control/trim.h) ---------------
+   O LQR do TCC não tem integrador, então um hover errado ou um peso mal
+   distribuído (frente leve, traseira pesada) deixam erro de altura e de
+   inclinação. Valores calibrados em simulação com perturbações de até
+   120 rad/s no hover e 30 rad/s de desequilíbrio. */
+/** 1 = liga o ajuste lento (CTL_TRIM). Padrão desligado: o painel liga. */
+#define DEFAULT_CTL_TRIM       0.0F
+/**
+ * Ganho do hover, em rad/s por (m·s). Acima de ~50 a malha de altura oscila.
+ */
+#define DEFAULT_TRIM_KI_Z      20.0F
+/** Ganho do equilíbrio de arfagem e rolagem, em rad/s por (rad·s). */
+#define DEFAULT_TRIM_KI_ATT    40.0F
+/** Limite do termo de hover, em rad/s. */
+#define DEFAULT_TRIM_MAX       150.0F
+/** Limite de cada termo de equilíbrio (arfagem e rolagem), em rad/s. */
+#define TRIM_ATT_MAX           60.0F
+/**
+ * Rampa do hover enquanto o drone ainda não se soltou do chão, em rad/s por s:
+ * sem ela, sair do chão levaria dezenas de segundos.
+ */
+#define TRIM_GROUND_RATE       10.0F
+/** Altura acima do chão (estimada) que marca o desprendimento, em m. */
+#define TRIM_RELEASE_HEIGHT_M  0.010F
+/** O hover só integra no ar com |vz| abaixo disto, em m/s. */
+#define TRIM_SETTLED_VZ        0.05F
 /** Começa em ensaio a seco: os motores só giram depois de FLT_DRY_RUN = 0. */
 #define DEFAULT_DRY_RUN        1.0F
 

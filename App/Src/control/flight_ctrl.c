@@ -16,6 +16,7 @@
 #include "control/attitude_mode.h"
 #include "control/ctrl_params.h"
 #include "control/meas.h"
+#include "control/trim.h"
 #include "attitude.h"
 #include "bno08x.h"
 #include "flight_config.h"
@@ -126,6 +127,10 @@ static lqg_gains_t gains_effective;
 static uint32_t gains_generation;
 /** Conversão dos sensores. */
 static meas_state_t meas;
+/** Ajuste lento do hover e do equilíbrio (control/trim.h). */
+static trim_state_t trim;
+/** O drone já se soltou do chão nesta decolagem (encerra a rampa de partida do hover). */
+static bool trim_released;
 /** Parâmetros deste passo. */
 static ctrl_params_t prm;
 /** Referência em uso (avança em rampa até o alvo). */
@@ -364,11 +369,26 @@ static void enter_hold(void) {
   state = FLIGHT_STATE_HOLD;
 }
 
+/**
+ * @brief Registra o ajuste lento aprendido e o zera.
+ *
+ * O hover real é CTL_W0 + trim.z: se o ajuste for sempre parecido, vale
+ * passar esse valor para CTL_W0.
+ */
+static void report_and_reset_trim(void) {
+  if (trim.z != 0.0F || trim.theta != 0.0F || trim.phi != 0.0F) {
+    say("trim z=%d th=%d phi=%d rad/s", (int)trim.z, (int)trim.theta, (int)trim.phi);
+  }
+  trim_reset(&trim);
+  trim_released = false;
+}
+
 /** @brief Desarma e volta a STANDBY. */
 static void enter_standby(const char *why) {
   if (!dry_run && motors_owner() == MOTORS_OWNER_FLIGHT) motors_stop(why);
   finish_goal(FLIGHT_REQUEST_FAILED, FLIGHT_REASON_CANCELLED);
   if (is_armed_state(state)) say("voo: desarmado (%s)", why);
+  report_and_reset_trim();
   state = FLIGHT_STATE_STANDBY;
 }
 
@@ -377,6 +397,7 @@ static void enter_failsafe(const char *why, flight_reason_t reason) {
   if (!dry_run) motors_stop(why);
   finish_goal(FLIGHT_REQUEST_FAILED, reason);
   say("FAILSAFE: %s", why);
+  report_and_reset_trim();
   state = FLIGHT_STATE_FAILSAFE;
 }
 
@@ -455,6 +476,8 @@ static void handle_request(const request_t *req, uint32_t now) {
          continua zerada na energização (ver meas_rearm). */
       lqg_ert_init(&lqg);
       meas_rearm(&meas);
+      trim_reset(&trim);
+      trim_released = false;
       memset(ref, 0, sizeof(ref));
       memset(&goal, 0, sizeof(goal));
       origin = req->origin;
@@ -671,6 +694,26 @@ static void check_land(uint8_t flags, const lqg_real_t y[LQG_NY], uint32_t now) 
 }
 
 /**
+ * @brief Avança o ajuste lento do hover e do equilíbrio.
+ *
+ * Só integra no ar, com motores reais, sem saturação e com altura medida. O
+ * desprendimento do chão é detectado pela altura estimada e travado até desarmar.
+ *
+ * @param[in] enabled  O controle está ativo e nada saturou neste passo.
+ */
+static void update_trim(bool enabled) {
+  if (prm.trim < 0.5F) return;
+  const float height = isfinite(z_ground) ? z_ground - (float)lqg.x_filt[LQG_X_Z] : 0.0F;
+  if (enabled && height >= TRIM_RELEASE_HEIGHT_M) trim_released = true;
+  const trim_config_t cfg = {.ki_z = prm.trim_ki_z, .ki_att = prm.trim_ki_att,
+                             .ground_rate = TRIM_GROUND_RATE, .settled_vz = TRIM_SETTLED_VZ,
+                             .max_z = prm.trim_max, .max_att = TRIM_ATT_MAX};
+  trim_update(&trim, &cfg, enabled && mtf_lost_since_ms == 0U, DT_S, !trim_released,
+              (float)lqg.x_filt[LQG_X_VZ], (float)lqg.x_filt[LQG_X_Z] - ref[LQG_R_Z],
+              (float)lqg.x_filt[LQG_X_PHI], (float)lqg.x_filt[LQG_X_THETA]);
+}
+
+/**
  * @brief Converte du em aceleração dos motores e diz qual entrada foi aplicada.
  *
  * Em voo, a predição do Kalman usa o du que os motores realmente recebem
@@ -688,13 +731,15 @@ static void compute_output(const lqg_real_t du[LQG_NU], float throttle[LQG_NU],
   const bool spinning_up = state == FLIGHT_STATE_TAKEOFF && now - armed_ms < SPINUP_MS;
   const bool active = is_airborne_state(state) && !spinning_up;
   const float span = prm.mot_w_at_100 - prm.mot_w_at_0;
+  float trim_w[LQG_NU] = {0.0F, 0.0F, 0.0F, 0.0F};
+  if (prm.trim >= 0.5F) trim_values(&trim, trim_w);
   for (unsigned i = 0U; i < LQG_NU; ++i) {
     du_applied[i] = 0.0;
     if (!active) {
       throttle[i] = is_armed_state(state) ? prm.mot_idle : 0.0F;
       continue;
     }
-    const float w = prm.w0 + (float)du[i];
+    const float w = prm.w0 + (float)du[i] + trim_w[i];
     float thr = span > 0.0F ? (w - prm.mot_w_at_0) / span : 0.0F;
     if (!(thr >= prm.mot_min)) {  /* também pega NaN */
       thr = prm.mot_min;
@@ -705,12 +750,15 @@ static void compute_output(const lqg_real_t du[LQG_NU], float throttle[LQG_NU],
     }
     throttle[i] = thr;
     if (!dry_run) {
-      du_applied[i] = (lqg_real_t)(prm.mot_w_at_0 + thr * span - prm.w0);
+      /* A predição do Kalman recebe só o du: o trim é o novo ponto de hover
+         (compensa um peso que o filtro não conhece), não uma entrada. */
+      du_applied[i] = (lqg_real_t)(prm.mot_w_at_0 + thr * span - prm.w0 - trim_w[i]);
       /* Sem saturar, é exatamente o du do LQG (sem o arredondamento acima). */
       if (thr > prm.mot_min && thr < prm.mot_max) du_applied[i] = du[i];
     }
   }
   if (active) *flags |= FLIGHT_FLAG_CONTROL_ACTIVE;
+  update_trim(active && !dry_run && (*flags & FLIGHT_FLAG_SATURATED) == 0U);
 }
 
 /** @brief Publica a fotografia do passo e, na taxa pedida, a linha EST. */

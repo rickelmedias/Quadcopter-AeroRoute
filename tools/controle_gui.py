@@ -22,8 +22,14 @@ em zero, a guinada fica no zero da energização e a altura segue a rampa. A
 posição horizontal **não** é controlada: um pequeno erro de nível faz o drone
 deslizar. Prenda-o.
 
+Compensação automática (marcada por padrão): o LQG do TCC não tem integrador,
+então um hover errado (o drone não sai do chão) ou um peso mal distribuído
+(a frente levanta e a traseira fica) deixam erro de altura e de inclinação. O
+firmware soma um ajuste lento à rotação dos motores (``control/trim.h``) e
+registra no log o que aprendeu ao pousar (``trim z=.. th=.. phi=..``).
+
 Segurança no firmware: inclinação acima de 20 graus corta os motores; altura
-acima de 25 cm pousa; se o PC calar por 1 s (watchdog), o drone pousa em rampa.
+acima de 35 cm pousa; se o PC calar por 1 s (watchdog), o drone pousa em rampa.
 """
 from __future__ import annotations
 
@@ -136,9 +142,15 @@ def du_por_motor(du_entradas: list[float]) -> list[float]:
     return por_motor
 
 
-def comando_ligar(seco: bool) -> list[str]:
-    """Comandos que armam e sobem ``ALTURA_M`` (ensaio a seco ou real)."""
-    return [f"param set FLT_DRY_RUN {1 if seco else 0}", f"hover {ALTURA_M:.2f}"]
+def comando_ligar(seco: bool, compensar: bool = True) -> list[str]:
+    """Comandos que armam e sobem ``ALTURA_M`` (ensaio a seco ou real).
+
+    ``compensar`` liga o ajuste lento do hover e do equilíbrio (``CTL_TRIM``,
+    ``control/trim.h``): sem ele, um peso mal distribuído ou um hover errado
+    deixam o drone no chão ou inclinado.
+    """
+    return [f"param set FLT_DRY_RUN {1 if seco else 0}",
+            f"param set CTL_TRIM {1 if compensar else 0}", f"hover {ALTURA_M:.2f}"]
 
 
 class Enlace:
@@ -234,6 +246,7 @@ def executar_tela(porta_inicial: str) -> None:
     porta_var = tk.StringVar(value=porta_inicial)
     situacao_var = tk.StringVar(value="Desconectado")
     seco_var = tk.BooleanVar(value=True)
+    trim_var = tk.BooleanVar(value=True)
     gravar_var = tk.BooleanVar(value=True)
     w0_var = tk.IntVar(value=702)
     maxmot_var = tk.IntVar(value=60)
@@ -322,7 +335,7 @@ def executar_tela(porta_inicial: str) -> None:
             "• Mão no botão de EMERGÊNCIA (barra de espaço)?",
         ):
             return
-        for cmd in comando_ligar(seco_var.get()):
+        for cmd in comando_ligar(seco_var.get(), trim_var.get()):
             mandar(cmd)
         escrever_log("LIGAR: " + ("ensaio a seco" if seco_var.get() else "MOTORES REAIS") + f", subindo {ALTURA_M * 100:.0f} cm")
 
@@ -484,6 +497,8 @@ def executar_tela(porta_inicial: str) -> None:
               bg="#dc2626", fg="white", activebackground="#7f1d1d", command=emergencia
               ).pack(side="left", padx=16)
     ttk.Checkbutton(acoes, text="Ensaio a seco (motores parados)", variable=seco_var).pack(side="left", padx=12)
+    ttk.Checkbutton(acoes, text="Compensação automática\n(hover + frente/trás/lados)",
+                    variable=trim_var).pack(side="left", padx=12)
 
     ajustes = ttk.LabelFrame(raiz, text="Ajustes ao vivo", padding=6)
     ajustes.pack(fill="x", padx=8, pady=4)
@@ -496,7 +511,7 @@ def executar_tela(porta_inicial: str) -> None:
     ttk.Label(ajustes, text="Rampa FLT_Z_RATE (cm/s):").grid(row=1, column=0, sticky="w")
     tk.Scale(ajustes, from_=2, to=20, orient="horizontal", length=260, variable=rampa_var,
              command=lambda v: ajustar("FLT_Z_RATE", f"{float(v) / 100:.2f}")).grid(row=1, column=1)
-    ttk.Label(ajustes, text="Se o drone não sai do chão, suba CTL_W0; se dispara, desça.").grid(
+    ttk.Label(ajustes, text="Com a compensação ligada o CTL_W0 só precisa ficar perto; sem ela, suba até levantar.").grid(
         row=1, column=2, columnspan=2, sticky="w", padx=(16, 0))
 
     caixa = tk.Text(raiz, height=8, state="disabled", bg="#111827", fg="#d1d5db")

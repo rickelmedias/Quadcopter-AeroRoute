@@ -94,6 +94,14 @@ typedef struct {
   float zero_pitch_deg;
   /** CTL_XY: 1 = o LQG segura x e y também; 0 = só atitude e altura. */
   float use_xy;
+  /** CTL_TRIM: 1 = liga o ajuste lento do hover e do equilíbrio (control/trim.h). */
+  float trim;
+  /** CTL_KI_Z: ganho do hover, em rad/s por (m·s). */
+  float trim_ki_z;
+  /** CTL_KI_ATT: ganho do equilíbrio de arfagem e rolagem, em rad/s por (rad·s). */
+  float trim_ki_att;
+  /** CTL_TRIM_MAX: limite do termo de hover, em rad/s. */
+  float trim_max;
 } ctrl_params_t;
 
 /** @brief Regras de um parâmetro. */

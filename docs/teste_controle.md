@@ -27,8 +27,36 @@ vira aceleração (≈ g·θ: 1° de erro ≈ 0,17 m/s²), então o drone **desl
 Prenda-o com barbante e teste numa área livre. O zero de roll e pitch
 (`SNS_ZERO_ROLL`/`SNS_ZERO_PITCH`) precisa estar certo.
 
+## Compensação automática (`CTL_TRIM`)
+
+O LQR do TCC não tem integrador. Com a rotação de hover (`CTL_W0`) um pouco
+errada, ou com o peso mal distribuído (frente leve, traseira pesada), o
+proporcional não fecha o erro: no ensaio real a frente chegou a 14° de arfagem
+com a traseira no chão, e o drone não saía do chão a 40% de aceleração. Cada
+10 rad/s de erro no hover valem ~30 cm de erro de altura.
+
+`control/trim.h` soma à rotação de cada motor três termos lentos: **hover**
+(igual nos quatro, integra o erro de altura), **arfagem** (frente +, trás −) e
+**rolagem** (esquerda +, direita −). Detalhes que importam:
+
+- enquanto o drone não se soltou do chão, o hover sobe numa rampa de 10 rad/s
+  por segundo (sem ela levaria dezenas de segundos); depois integra devagar, e
+  só com o drone assentado (|vz| < 0,05 m/s);
+- congela com motor saturado, em ensaio a seco ou sem altura medida; zera ao
+  armar e desarmar; limites de ±150 rad/s (hover) e ±60 rad/s (equilíbrio);
+- o Kalman recebe só o `du`: o ajuste é o novo ponto de hover, não uma entrada;
+- ao pousar, o log mostra `trim z=.. th=.. phi=..`: o hover real é
+  `CTL_W0 + z`. Passe esse valor para `CTL_W0` e a próxima decolagem sai mais
+  rápida; `th` e `phi` mostram o desequilíbrio (conserte o balanço do drone).
+
+Em simulação (`tests/test_trim.c`), com hover errado em +40, +80 e +120 rad/s
+e desequilíbrio de até 30 rad/s, o ajuste converge ao valor da perturbação,
+φ e θ vão a menos de 0,6° e a altura fica em 15 cm ± 1 cm. A caixa
+"Compensação automática" do painel vem marcada. Não faz parte do controle
+validado no MATLAB: desmarque para voltar ao LQG puro.
+
 Proteções do firmware: inclinação > 20° corta os motores; altura acima de
-25 cm pousa; BNO sem dado por 50 ms corta; MTF sem dado por 300 ms pousa;
+35 cm pousa; BNO sem dado por 50 ms corta; MTF sem dado por 300 ms pousa;
 porta USB fechada corta; **PC calado por 1 s (watchdog) pousa em rampa**.
 
 ## Painel

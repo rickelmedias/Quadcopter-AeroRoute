@@ -51,8 +51,9 @@ def test_du_por_motor_segue_o_mixer_do_firmware():
 
 
 def test_comando_ligar():
-    assert g.comando_ligar(True) == ["param set FLT_DRY_RUN 1", "hover 0.15"]
-    assert g.comando_ligar(False) == ["param set FLT_DRY_RUN 0", "hover 0.15"]
+    assert g.comando_ligar(True) == ["param set FLT_DRY_RUN 1", "param set CTL_TRIM 1", "hover 0.15"]
+    assert g.comando_ligar(False, compensar=False) == [
+        "param set FLT_DRY_RUN 0", "param set CTL_TRIM 0", "hover 0.15"]
 
 
 def test_altura_do_painel_igual_ao_limite_do_firmware():
