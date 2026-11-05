@@ -125,6 +125,11 @@
  * pousa sozinho, em m.
  */
 #define FLIGHT_OVERSHOOT_M     0.20F
+/**
+ * Ao encostar no chão, a aceleração desce em rampa até a marcha lenta durante
+ * este tempo antes de desarmar, em ms (em vez de cortar de uma vez).
+ */
+#define FLIGHT_LAND_SPINDOWN_MS 1500U
 /** Menor velocidade de descida no pouso, em m/s (a rampa do pouso nunca é um degrau). */
 #define FLIGHT_LAND_MIN_RATE_M_S 0.03F
 
@@ -159,10 +164,13 @@
 #define DEFAULT_TRIM_KI_Z      20.0F
 /** Ganho do equilíbrio de arfagem e rolagem, em rad/s por (rad·s). */
 #define DEFAULT_TRIM_KI_ATT    40.0F
-/** Limite do termo de hover, em rad/s. */
-#define DEFAULT_TRIM_MAX       150.0F
+/**
+ * Limite do termo de hover, em rad/s. No ensaio de 04/11 o hover médio passou
+ * de 850 rad/s (48% de aceleração) sem o drone levantar por inteiro.
+ */
+#define DEFAULT_TRIM_MAX       250.0F
 /** Limite de cada termo de equilíbrio (arfagem e rolagem), em rad/s. */
-#define TRIM_ATT_MAX           60.0F
+#define TRIM_ATT_MAX           120.0F
 /**
  * Rampa do hover enquanto o drone ainda não se soltou do chão, em rad/s por s:
  * sem ela, sair do chão levaria dezenas de segundos.

@@ -28,6 +28,9 @@ então um hover errado (o drone não sai do chão) ou um peso mal distribuído
 firmware soma um ajuste lento à rotação dos motores (``control/trim.h``) e
 registra no log o que aprendeu ao pousar (``trim z=.. th=.. phi=..``).
 
+Pouso: ao encostar no chão a aceleração desce em rampa até a marcha lenta
+(1,5 s) e só então desarma, em vez de cortar de uma vez.
+
 Segurança no firmware: inclinação acima de 20 graus corta os motores; altura
 acima de 35 cm pousa; se o PC calar por 1 s (watchdog), o drone pousa em rampa.
 """
@@ -248,7 +251,7 @@ def executar_tela(porta_inicial: str) -> None:
     seco_var = tk.BooleanVar(value=True)
     trim_var = tk.BooleanVar(value=True)
     gravar_var = tk.BooleanVar(value=True)
-    w0_var = tk.IntVar(value=702)
+    w0_var = tk.IntVar(value=850)
     maxmot_var = tk.IntVar(value=60)
     rampa_var = tk.IntVar(value=5)
     valores: dict[str, tk.StringVar] = {k: tk.StringVar(value="--") for k in (

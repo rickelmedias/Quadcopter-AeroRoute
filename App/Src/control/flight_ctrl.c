@@ -16,6 +16,7 @@
 #include "control/attitude_mode.h"
 #include "control/ctrl_params.h"
 #include "control/meas.h"
+#include "control/spindown.h"
 #include "control/trim.h"
 #include "attitude.h"
 #include "bno08x.h"
@@ -53,6 +54,8 @@
 #define DEFAULT_POS_TOL_M 0.05F
 /** Tolerância padrão de guinada, em rad. */
 #define DEFAULT_YAW_TOL_RAD 0.05F
+/** Intervalo do relato do trim no log, em ms. */
+#define TRIM_REPORT_MS 2000U
 /** Pedidos que cabem na fila. */
 #define REQUEST_QUEUE_DEPTH 4U
 /** Período do passo, em s. */
@@ -129,6 +132,10 @@ static uint32_t gains_generation;
 static meas_state_t meas;
 /** Ajuste lento do hover e do equilíbrio (control/trim.h). */
 static trim_state_t trim;
+/** Tick em que a descida suave do pouso começou (0 = ainda não). */
+static uint32_t land_spindown_ms;
+/** Tick do último relato do trim no log. */
+static uint32_t trim_report_ms;
 /** O drone já se soltou do chão nesta decolagem (encerra a rampa de partida do hover). */
 static bool trim_released;
 /** Parâmetros deste passo. */
@@ -381,6 +388,7 @@ static void report_and_reset_trim(void) {
   }
   trim_reset(&trim);
   trim_released = false;
+  land_spindown_ms = 0U;
 }
 
 /** @brief Desarma e volta a STANDBY. */
@@ -411,6 +419,7 @@ static void enter_land(flight_reason_t reason) {
   goal.start_ms = HAL_GetTick();
   land_start_ms = goal.start_ms;
   land_touch_ms = 0U;
+  land_spindown_ms = 0U;
   land_start_height = z_ground - ref[LQG_R_Z];
   state = FLIGHT_STATE_LAND;
 }
@@ -478,6 +487,7 @@ static void handle_request(const request_t *req, uint32_t now) {
       meas_rearm(&meas);
       trim_reset(&trim);
       trim_released = false;
+      land_spindown_ms = 0U;
       memset(ref, 0, sizeof(ref));
       memset(&goal, 0, sizeof(goal));
       origin = req->origin;
@@ -671,15 +681,27 @@ static void check_goal(const float x[LQG_NX], uint32_t now) {
   }
 }
 
+/** @brief Começa a descida suave da aceleração (o desarme vem ao fim da rampa). */
+static void begin_spindown(uint32_t now) {
+  if (land_spindown_ms != 0U) return;
+  land_spindown_ms = now != 0U ? now : 1U;
+  say("pouso: reduzindo motores");
+}
+
 /** @brief Termina o pouso ao encostar no chão (ou pelo tempo, sem telêmetro). */
 static void check_land(uint8_t flags, const lqg_real_t y[LQG_NY], uint32_t now) {
   if (state != FLIGHT_STATE_LAND) return;
+  if (land_spindown_ms != 0U) {
+    /* Encostou: a aceleração desce em rampa (compute_output) e só então desarma. */
+    if (now - land_spindown_ms >= FLIGHT_LAND_SPINDOWN_MS) enter_standby("pouso concluido");
+    return;
+  }
   const bool ramp_down = ref[LQG_R_Z] == goal.target[LQG_R_Z];
   if ((flags & MEAS_RANGE) != 0U) {
     const float height = z_ground - (float)y[LQG_Y_Z];
     if (ramp_down && height < prm.land_height) {
       if (land_touch_ms == 0U) land_touch_ms = now;
-      if (now - land_touch_ms > LAND_TOUCH_MS) enter_standby("pouso concluido");
+      if (now - land_touch_ms > LAND_TOUCH_MS) begin_spindown(now);
     } else {
       land_touch_ms = 0U;
     }
@@ -689,7 +711,7 @@ static void check_land(uint8_t flags, const lqg_real_t y[LQG_NY], uint32_t now) 
   float rate = prm.z_rate < LAND_MIN_RATE_M_S ? LAND_MIN_RATE_M_S : prm.z_rate;
   const uint32_t ramp_ms = (uint32_t)(land_start_height / rate * 1000.0F);
   if (now - land_start_ms > ramp_ms + LAND_BLIND_EXTRA_MS) {
-    enter_standby("pouso sem telemetro");
+    begin_spindown(now);
   }
 }
 
@@ -708,6 +730,15 @@ static void update_trim(bool enabled) {
   const trim_config_t cfg = {.ki_z = prm.trim_ki_z, .ki_att = prm.trim_ki_att,
                              .ground_rate = TRIM_GROUND_RATE, .settled_vz = TRIM_SETTLED_VZ,
                              .max_z = prm.trim_max, .max_att = TRIM_ATT_MAX};
+  const uint32_t now = HAL_GetTick();
+  if (enabled && now - trim_report_ms >= TRIM_REPORT_MS) {
+    trim_report_ms = now;
+    const bool at_limit = fabsf(trim.z) >= prm.trim_max - 1.0F ||
+                          fabsf(trim.theta) >= TRIM_ATT_MAX - 1.0F ||
+                          fabsf(trim.phi) >= TRIM_ATT_MAX - 1.0F;
+    say("trim z=%d th=%d phi=%d%s", (int)trim.z, (int)trim.theta, (int)trim.phi,
+        at_limit ? " NO LIMITE" : "");
+  }
   trim_update(&trim, &cfg, enabled && mtf_lost_since_ms == 0U, DT_S, !trim_released,
               (float)lqg.x_filt[LQG_X_VZ], (float)lqg.x_filt[LQG_X_Z] - ref[LQG_R_Z],
               (float)lqg.x_filt[LQG_X_PHI], (float)lqg.x_filt[LQG_X_THETA]);
@@ -731,6 +762,9 @@ static void compute_output(const lqg_real_t du[LQG_NU], float throttle[LQG_NU],
   const bool spinning_up = state == FLIGHT_STATE_TAKEOFF && now - armed_ms < SPINUP_MS;
   const bool active = is_airborne_state(state) && !spinning_up;
   const float span = prm.mot_w_at_100 - prm.mot_w_at_0;
+  const bool spinning_down = state == FLIGHT_STATE_LAND && land_spindown_ms != 0U;
+  const float taper = spinning_down ? spindown_factor(now - land_spindown_ms, FLIGHT_LAND_SPINDOWN_MS)
+                                    : 1.0F;
   float trim_w[LQG_NU] = {0.0F, 0.0F, 0.0F, 0.0F};
   if (prm.trim >= 0.5F) trim_values(&trim, trim_w);
   for (unsigned i = 0U; i < LQG_NU; ++i) {
@@ -748,17 +782,18 @@ static void compute_output(const lqg_real_t du[LQG_NU], float throttle[LQG_NU],
       thr = prm.mot_max;
       *flags |= FLIGHT_FLAG_SATURATED;
     }
+    if (spinning_down) thr = spindown_throttle(thr, prm.mot_idle, taper);
     throttle[i] = thr;
     if (!dry_run) {
       /* A predição do Kalman recebe só o du: o trim é o novo ponto de hover
          (compensa um peso que o filtro não conhece), não uma entrada. */
       du_applied[i] = (lqg_real_t)(prm.mot_w_at_0 + thr * span - prm.w0 - trim_w[i]);
       /* Sem saturar, é exatamente o du do LQG (sem o arredondamento acima). */
-      if (thr > prm.mot_min && thr < prm.mot_max) du_applied[i] = du[i];
+      if (!spinning_down && thr > prm.mot_min && thr < prm.mot_max) du_applied[i] = du[i];
     }
   }
   if (active) *flags |= FLIGHT_FLAG_CONTROL_ACTIVE;
-  update_trim(active && !dry_run && (*flags & FLIGHT_FLAG_SATURATED) == 0U);
+  update_trim(active && !dry_run && !spinning_down && (*flags & FLIGHT_FLAG_SATURATED) == 0U);
 }
 
 /** @brief Publica a fotografia do passo e, na taxa pedida, a linha EST. */

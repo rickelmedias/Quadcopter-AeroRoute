@@ -55,6 +55,20 @@ e desequilíbrio de até 30 rad/s, o ajuste converge ao valor da perturbação,
 "Compensação automática" do painel vem marcada. Não faz parte do controle
 validado no MATLAB: desmarque para voltar ao LQG puro.
 
+**Limites e o ensaio de 04/11.** No primeiro ensaio com a compensação o hover
+médio chegou a 48% (850 rad/s) e a traseira a 53%, contra 44% na frente, e o
+drone ainda levantava só a frente (θ = +16°): os dois ajustes bateram no limite
+(150 e 60 rad/s). Os limites agora são 250 rad/s (hover) e 120 rad/s
+(equilíbrio), e o painel parte de `CTL_W0 = 850`. Uma diferença de ~170 rad/s
+entre traseira e frente significa que o drone está muito pesado atrás (ou que
+os motores de trás empurram menos): **mova a bateria/peso para a frente**, que
+resolve melhor do que qualquer ajuste de software. O log mostra a cada 2 s
+`trim z=.. th=.. phi=..` e avisa `NO LIMITE` quando um termo satura.
+
+**Pouso.** Ao encostar (altura abaixo de `FLT_LAND_H` por 0,5 s) a aceleração
+desce em rampa linear até a marcha lenta em 1,5 s (`FLIGHT_LAND_SPINDOWN_MS`) e
+só então o drone desarma; o ajuste lento congela durante a descida.
+
 Proteções do firmware: inclinação > 20° corta os motores; altura acima de
 35 cm pousa; BNO sem dado por 50 ms corta; MTF sem dado por 300 ms pousa;
 porta USB fechada corta; **PC calado por 1 s (watchdog) pousa em rampa**.
