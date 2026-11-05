@@ -162,6 +162,11 @@ typedef struct {
   bool armed;
   /** Drone no ar. Sem isso, a supervisão de enlace não age. */
   bool airborne;
+  /**
+   * O voo foi armado pela Raspberry Pi. Voo armado pelo console USB tem as
+   * proteções dele (DTR e watchdog) e a supervisão de enlace da Pi não age.
+   */
+  bool commanded_by_pi;
   /** Posição confiável. */
   bool position_valid;
   /** Atitude confiável. */

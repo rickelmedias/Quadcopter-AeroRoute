@@ -136,6 +136,15 @@ static trim_state_t trim;
 static bool lifted;
 /** Tick em que a descida suave do pouso começou (0 = ainda não). */
 static uint32_t land_spindown_ms;
+/**
+ * Equilíbrio (arfagem e rolagem do trim) do último instante em que o drone
+ * estava no ar, nivelado e assentado. O próximo voo começa dele, em vez de
+ * reaprender do zero com o lado leve levantando (ensaio de 04/11). Vale até
+ * reiniciar a placa.
+ */
+static trim_state_t trim_learned;
+/** ::trim_learned tem valor. */
+static bool trim_learned_valid;
 /** Tick do último relato do trim no log. */
 static uint32_t trim_report_ms;
 /** O drone já se soltou do chão nesta decolagem (encerra a rampa de partida do hover). */
@@ -148,8 +157,8 @@ static float ref[LQG_NR];
 static goal_t goal;
 /** Altura (z NED) do chão onde armou, em m. */
 static float z_ground;
-/** Quem armou. */
-static flight_origin_t origin;
+/** Quem armou; lido também pelo DroneLink (flight_ctrl_origin). */
+static volatile flight_origin_t origin;
 /** Tick em que armou. */
 static uint32_t armed_ms;
 /** Tick em que o pouso começou. */
@@ -217,6 +226,8 @@ static float approach(float cur, float target, float max_step) {
 /* ---- API pública (outras tasks) ---------------------------------------- */
 
 bool flight_ctrl_is_armed(void) { return is_armed_state(state); }
+
+flight_origin_t flight_ctrl_origin(void) { return origin; }
 
 flight_request_result_t flight_ctrl_arm(flight_origin_t from) {
   const uint8_t s = state;
@@ -495,6 +506,11 @@ static void handle_request(const request_t *req, uint32_t now) {
       lqg_ert_init(&lqg);
       meas_rearm(&meas);
       trim_reset(&trim);
+      if (trim_learned_valid) {
+        trim.theta = trim_learned.theta;
+        trim.phi = trim_learned.phi;
+        say("trim inicial th=%d phi=%d (voo anterior)", (int)trim.theta, (int)trim.phi);
+      }
       trim_released = false;
       land_spindown_ms = 0U;
       lifted = false;
@@ -749,6 +765,13 @@ static void update_trim(bool enabled) {
                           fabsf(trim.phi) >= prm.trim_att_max - 1.0F;
     say("trim z=%d th=%d phi=%d%s", (int)trim.z, (int)trim.theta, (int)trim.phi,
         at_limit ? " NO LIMITE" : "");
+  }
+  /* Guarda o equilíbrio enquanto o drone está no ar, nivelado e assentado. */
+  if (enabled && lifted && fabsf((float)lqg.x_filt[LQG_X_THETA]) < TRIM_LEARN_LEVEL_RAD &&
+      fabsf((float)lqg.x_filt[LQG_X_PHI]) < TRIM_LEARN_LEVEL_RAD &&
+      fabsf((float)lqg.x_filt[LQG_X_VZ]) < TRIM_SETTLED_VZ) {
+    trim_learned = trim;
+    trim_learned_valid = true;
   }
   trim_update(&trim, &cfg, enabled && mtf_lost_since_ms == 0U, DT_S, !trim_released,
               (float)lqg.x_filt[LQG_X_VZ], (float)lqg.x_filt[LQG_X_Z] - ref[LQG_R_Z],

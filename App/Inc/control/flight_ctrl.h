@@ -166,6 +166,9 @@ bool flight_ctrl_take_leg_event(flight_leg_event_t *out);
 /** @brief Verdadeiro em qualquer estado armado (ARMED até LAND). */
 bool flight_ctrl_is_armed(void);
 
+/** @brief Quem armou o voo atual (vale enquanto armado). */
+flight_origin_t flight_ctrl_origin(void);
+
 /** @brief Nome curto de um estado, para o console. */
 const char *flight_ctrl_state_name(uint8_t state);
 

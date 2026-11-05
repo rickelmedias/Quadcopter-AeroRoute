@@ -197,6 +197,11 @@
  * rebote de +57° para +12° com este limite.
  */
 #define TRIM_ATT_ERROR_MAX_RAD 0.08F
+/**
+ * O equilíbrio é guardado para o próximo voo só com |φ| e |θ| abaixo disto,
+ * em rad (~2°), com o drone no ar e assentado.
+ */
+#define TRIM_LEARN_LEVEL_RAD   0.035F
 /** O hover só integra no ar com |vz| abaixo disto, em m/s. */
 #define TRIM_SETTLED_VZ        0.05F
 /** Começa em ensaio a seco: os motores só giram depois de FLT_DRY_RUN = 0. */

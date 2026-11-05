@@ -129,6 +129,20 @@ cordinhas forçaram θ entre +16° e −12° e um giro rápido de nariz para cim
 (2,3 rad/s) passou do corte de 20°. O painel agora abre com 4 cm e
 `CTL_W0 = 850`.
 
+**Desligava sozinho logo depois de LIGAR.** A supervisão de enlace do DroneLink
+(Raspberry Pi) pedia HOLD e pouso assim que o drone entrava em DECOLANDO, porque
+a Pi não estava ligada; isso valia até para voo armado pelo console USB. Agora
+ela só age em voo armado pela Pi (`flight_snapshot_t::commanded_by_pi`).
+
+**Os FAILSAFE por inclinação** de 04/11 aconteceram todos com o alvo acima do
+teto das cordinhas (a altura parava em +4 a +6 cm): o hover empurra contra elas
+e elas puxam torto. Escolha a altura abaixo do teto ou afrouxe as cordinhas.
+
+**Equilíbrio lembrado entre voos.** O firmware guarda a arfagem e a rolagem do
+trim do último instante em que o drone estava no ar, nivelado (|φ|, |θ| < 2°) e
+assentado, e o próximo LIGAR começa delas (`trim inicial th=.. phi=..` no log),
+em vez de o lado leve levantar enquanto reaprende. Vale até reiniciar a placa.
+
 **Rigidez da atitude (decisão pendente).** O ganho de arfagem/rolagem do LQR
 do TCC é macio: 50,6 rad/s por radiano, ou seja, um empurrão constante de
 10 rad/s (≈1% de aceleração entre frente e trás) inclina o drone 11° até o
