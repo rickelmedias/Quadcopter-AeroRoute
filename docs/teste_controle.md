@@ -120,6 +120,15 @@ o equilíbrio acumulou durante o empurrão e, quando ela voltou, passou do ponto
   `CTL_W0` travado durante o voo com a compensação ligada e, ao pousar, a
   sugestão `CTL_W0 = CTL_W0 + z` para o próximo voo.
 
+**Ensaio de 04/11, 5ª rodada (melhor até aqui).** De 5 s a 41 s voou nivelado
+(θ ±1°, φ 0 a +2°, guinada estável) subindo devagar até +5 cm; o equilíbrio
+frente/trás precisou só de ~−23 rad/s (antes −120) e o hover nivelado ficou em
+`CTL_W0 + z` ≈ 850 rad/s. Depois a altura parou em +6 cm (teto das cordinhas)
+com o alvo ainda em 15 cm: o hover seguiu somando contra elas (z 86 → 152), as
+cordinhas forçaram θ entre +16° e −12° e um giro rápido de nariz para cima
+(2,3 rad/s) passou do corte de 20°. O painel agora abre com 4 cm e
+`CTL_W0 = 850`.
+
 **Rigidez da atitude (decisão pendente).** O ganho de arfagem/rolagem do LQR
 do TCC é macio: 50,6 rad/s por radiano, ou seja, um empurrão constante de
 10 rad/s (≈1% de aceleração entre frente e trás) inclina o drone 11° até o

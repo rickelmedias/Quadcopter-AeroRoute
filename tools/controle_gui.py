@@ -59,6 +59,12 @@ PORTA_PADRAO = "/dev/ttyACM0"
 ALTURA_M = 0.15
 #: Menor altura escolhível no painel, em m.
 ALTURA_MIN_M = 0.03
+#: Altura com que o painel abre, em m. Na bancada de 04/11 as cordinhas deixam o
+#: drone subir só ~6 cm; acima disso a compensação de hover empurra contra elas.
+ALTURA_PADRAO_M = 0.04
+#: CTL_W0 com que o painel abre, em rad/s: o hover aprendido no ensaio de 04/11
+#: (768 + 80 de compensação com o drone nivelado no ar).
+W0_PADRAO = 850
 #: Prazo do watchdog do firmware, em ms.
 WATCHDOG_MS = 1000
 #: Intervalo entre mensagens de "estou vivo", em s.
@@ -280,8 +286,8 @@ def executar_tela(porta_inicial: str) -> None:
     seco_var = tk.BooleanVar(value=True)
     trim_var = tk.BooleanVar(value=True)
     gravar_var = tk.BooleanVar(value=True)
-    w0_var = tk.IntVar(value=768)
-    altura_var = tk.IntVar(value=int(round(ALTURA_M * 100)))  # cm
+    w0_var = tk.IntVar(value=W0_PADRAO)
+    altura_var = tk.IntVar(value=int(round(ALTURA_PADRAO_M * 100)))  # cm
     ultimo_trim = [""]
     armado_antes = [False]
     maxmot_var = tk.IntVar(value=80)
