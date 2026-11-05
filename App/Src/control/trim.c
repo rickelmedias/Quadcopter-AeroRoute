@@ -40,6 +40,11 @@ void trim_update(trim_state_t *t, const trim_config_t *cfg, bool enabled, float 
   } else if (!grounded && fabsf(vz) < cfg->settled_vz) {
     z_step = cfg->ki_z * z_error * dt;
   }
+  /* Com a arfagem ou a rolagem no limite, mais empuxo igual nos quatro só
+     iria para o lado leve (ensaio de 04/11: a frente subiu e a traseira
+     voltou ao chão). O hover então só pode descer até elas saírem do limite. */
+  const bool attitude_at_limit = fabsf(t->theta) >= cfg->max_att || fabsf(t->phi) >= cfg->max_att;
+  if (attitude_at_limit && z_step > 0.0F) z_step = 0.0F;
   t->z = clamp(t->z + z_step, cfg->max_z);
   t->theta = clamp(t->theta - cfg->ki_att * theta * dt, cfg->max_att);
   t->phi = clamp(t->phi - cfg->ki_att * phi * dt, cfg->max_att);

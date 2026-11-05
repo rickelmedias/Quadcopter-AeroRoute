@@ -102,6 +102,8 @@ typedef struct {
   float trim_ki_att;
   /** CTL_TRIM_MAX: limite do termo de hover, em rad/s. */
   float trim_max;
+  /** CTL_TRIM_ATT: limite de cada termo de equilíbrio (arfagem e rolagem), em rad/s. */
+  float trim_att_max;
 } ctrl_params_t;
 
 /** @brief Regras de um parâmetro. */

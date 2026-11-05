@@ -259,7 +259,7 @@ def executar_tela(porta_inicial: str) -> None:
     maxmot_var = tk.IntVar(value=80)
     rampa_var = tk.IntVar(value=5)
     valores: dict[str, tk.StringVar] = {k: tk.StringVar(value="--") for k in (
-        "estado", "sensores", "modo", "roll", "pitch", "yaw", "altura", "ref", "subida")}
+        "estado", "sensores", "modo", "roll", "pitch", "yaw", "altura", "ref", "subida", "trim")}
     barras_du: dict[int, tk.Canvas] = {}
     textos_motor: dict[int, tk.StringVar] = {n: tk.StringVar(value="--") for n in (1, 2, 3, 4)}
 
@@ -370,6 +370,8 @@ def executar_tela(porta_inicial: str) -> None:
                 mot = dado
             elif tipo == "texto":
                 escrever_log(dado)
+                if dado.startswith("trim "):
+                    valores["trim"].set(dado[len("trim "):])
                 if arquivo[0] is not None:
                     arquivo[0].write(f"{time.time():.3f};TXT;{dado}\n")
             elif tipo == "bruta" and arquivo[0] is not None:
@@ -475,6 +477,7 @@ def executar_tela(porta_inicial: str) -> None:
         ("Altura medida (MTF-01)", "altura"),
         ("Altura de referência (rampa)", "ref"),
         ("Subida", "subida"),
+        ("Compensação (rad/s): hover, frente/trás, lados", "trim"),
     ]
     for i, (texto, chave) in enumerate(linhas):
         ttk.Label(medidas, text=texto).grid(row=i, column=0, sticky="w", padx=4, pady=1)

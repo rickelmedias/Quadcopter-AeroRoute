@@ -739,13 +739,13 @@ static void update_trim(bool enabled) {
   if (enabled && height >= TRIM_RELEASE_HEIGHT_M) trim_released = true;
   const trim_config_t cfg = {.ki_z = prm.trim_ki_z, .ki_att = prm.trim_ki_att,
                              .ground_rate = TRIM_GROUND_RATE, .settled_vz = TRIM_SETTLED_VZ,
-                             .max_z = prm.trim_max, .max_att = TRIM_ATT_MAX};
+                             .max_z = prm.trim_max, .max_att = prm.trim_att_max};
   const uint32_t now = HAL_GetTick();
   if (enabled && now - trim_report_ms >= TRIM_REPORT_MS) {
     trim_report_ms = now;
     const bool at_limit = fabsf(trim.z) >= prm.trim_max - 1.0F ||
-                          fabsf(trim.theta) >= TRIM_ATT_MAX - 1.0F ||
-                          fabsf(trim.phi) >= TRIM_ATT_MAX - 1.0F;
+                          fabsf(trim.theta) >= prm.trim_att_max - 1.0F ||
+                          fabsf(trim.phi) >= prm.trim_att_max - 1.0F;
     say("trim z=%d th=%d phi=%d%s", (int)trim.z, (int)trim.theta, (int)trim.phi,
         at_limit ? " NO LIMITE" : "");
   }

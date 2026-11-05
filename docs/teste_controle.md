@@ -88,6 +88,23 @@ traseira não sobe com 60%. Como o empuxo cresce com o quadrado da rotação, a
 traseira carrega mais de 1,8× o que a frente carrega. Os dois motores de trás
 pedem o mesmo, então não é um motor fraco: é o centro de gravidade atrás.
 
+**Ensaio de 04/11, 3ª rodada.** A rampa de partida e o pouso suave
+funcionaram, e entre 22 s e 33 s o drone ficou com as duas pontas no ar, quase
+nivelado (θ entre −1° e +5°). A traseira voltou ao chão porque a compensação de
+arfagem saturou em −120 rad/s (`NO LIMITE` no log) enquanto a de hover
+continuava subindo nos quatro motores (de 135 para 183 rad/s): sem margem na
+arfagem, o empuxo extra foi para a frente, que é leve, e θ subiu devagar até
+16°. Correções:
+
+- o hover não sobe enquanto a arfagem ou a rolagem estiverem no limite;
+- o limite de equilíbrio virou o parâmetro `CTL_TRIM_ATT` (padrão 250 rad/s);
+- o ganho de equilíbrio `CTL_KI_ATT` passou de 40 para 80 (corrige mais rápido
+  quando algo empurra o drone);
+- o painel mostra a compensação atual.
+
+Em simulação, com o desequilíbrio medido (~125 rad/s por lado e hover +170
+rad/s), o limite antigo nunca nivelava e o novo leva a 15 cm com θ ≈ 0°.
+
 **Pouso.** Ao encostar (altura abaixo de `FLT_LAND_H` por 0,5 s) a aceleração
 desce em rampa linear até a marcha lenta em 1,5 s (`FLIGHT_LAND_SPINDOWN_MS`) e
 só então o drone desarma; o ajuste lento congela durante a descida.

@@ -21,6 +21,9 @@
  * isso, enquanto o drone ainda está no chão e o alvo está acima, `z` sobe numa
  * rampa fixa (`ground_rate`) até ele se soltar; no ar volta o integrador lento.
  *
+ * Enquanto a arfagem ou a rolagem estiverem no limite, o hover não sobe: mais
+ * empuxo igual nos quatro iria todo para o lado leve.
+ *
  * Não é parte do controle validado no MATLAB: é um acréscimo do teste, ligado
  * por CTL_TRIM (padrão desligado). Código puro, testado em tests/test_trim.c.
  */

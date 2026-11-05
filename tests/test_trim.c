@@ -19,8 +19,8 @@
 #include <string.h>
 
 /** Configuração usada no firmware (flight_config.h). */
-static const trim_config_t CFG = {.ki_z = 20.0F, .ki_att = 40.0F, .ground_rate = 10.0F,
-                                  .settled_vz = 0.05F, .max_z = 150.0F, .max_att = 60.0F};
+static const trim_config_t CFG = {.ki_z = 20.0F, .ki_att = 80.0F, .ground_rate = 10.0F,
+                                  .settled_vz = 0.05F, .max_z = 250.0F, .max_att = 250.0F};
 
 /** @brief Os sinais do trim batem com as colunas da matriz B (efeito sobre θ e φ). */
 static void test_signs_match_b_matrix(void) {
@@ -40,8 +40,10 @@ static void test_signs_match_b_matrix(void) {
 static void test_limits_and_freeze(void) {
   trim_state_t t;
   trim_reset(&t);
-  for (int k = 0; k < 20000; ++k) trim_update(&t, &CFG, true, 0.01F, true, 0.0F, 0.1F, 0.3F, 0.3F);
+  for (int k = 0; k < 40000; ++k) trim_update(&t, &CFG, true, 0.01F, true, 0.0F, 0.1F, 0.0F, 0.0F);
   assert(t.z == CFG.max_z);                              /* rampa de partida, no limite */
+  trim_reset(&t);
+  for (int k = 0; k < 20000; ++k) trim_update(&t, &CFG, true, 0.01F, false, 0.0F, 0.0F, 0.3F, 0.3F);
   assert(t.theta == -CFG.max_att && t.phi == -CFG.max_att);
   trim_reset(&t);
   trim_update(&t, &CFG, false, 0.01F, true, 0.0F, 0.1F, 0.3F, 0.3F);  /* desabilitado */
@@ -53,6 +55,14 @@ static void test_limits_and_freeze(void) {
   assert(t.z == 0.0F);
   trim_update(&t, &CFG, true, 0.01F, false, 0.0F, 0.1F, 0.0F, 0.0F);
   assert(t.z > 0.0F);
+
+  /* Arfagem no limite: o hover não sobe (nem no chão), mas pode descer. */
+  trim_reset(&t);
+  t.theta = -CFG.max_att;
+  trim_update(&t, &CFG, true, 0.01F, true, 0.0F, 0.1F, 0.0F, 0.2F);
+  assert(t.z == 0.0F);
+  trim_update(&t, &CFG, true, 0.01F, false, 0.0F, -0.1F, 0.0F, 0.2F);
+  assert(t.z < 0.0F);
 }
 
 /** Ruído uniforme em [-1, 1]. */
@@ -120,7 +130,9 @@ static void simulate(double dh, double dth, double dph) {
   assert(fabs(x[LQG_X_THETA]) < 0.01 && fabs(x[LQG_X_PHI]) < 0.01);    /* < 0,6 grau */
   assert(fabs((ground - x[LQG_X_Z]) - 0.15) < 0.01);                    /* 15 cm, erro < 1 cm */
   assert(fabs(tr.z - dh) < 5.0 && fabs(tr.theta - dth) < 3.0 && fabs(tr.phi - dph) < 3.0);
-  assert(max_height < 0.30);                                            /* abaixo do corte de pouso */
+  assert(max_height < 0.30);
+  printf("  hover %+.0f, desequilibrio %+.0f/%+.0f: altura %.3f m, trim z=%.1f th=%.1f phi=%.1f\n",
+         dh, dth, dph, ground - x[LQG_X_Z], tr.z, tr.theta, tr.phi);                                            /* abaixo do corte de pouso */
 }
 
 int main(void) {
@@ -129,6 +141,7 @@ int main(void) {
   simulate(40.0, 15.0, 5.0);
   simulate(80.0, 25.0, 10.0);
   simulate(120.0, 30.0, -20.0);
+  simulate(170.0, 125.0, 0.0);  /* desequilíbrio medido no ensaio de 04/11 */
   printf("test_trim: ok\n");
   return 0;
 }

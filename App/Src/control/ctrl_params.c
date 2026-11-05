@@ -81,6 +81,8 @@ static const ctrl_param_desc_t TABLE[] = {
           "ganho do equilibrio (rad/s por rad.s)"),
     PARAM("CTL_TRIM_MAX", trim_max, 0.0F, 250.0F, DEFAULT_TRIM_MAX, CTRL_PARAM_LIVE,
           "limite do termo de hover (rad/s)"),
+    PARAM("CTL_TRIM_ATT", trim_att_max, 0.0F, 400.0F, DEFAULT_TRIM_ATT_MAX, CTRL_PARAM_LIVE,
+          "limite do equilibrio (rad/s)"),
 };
 
 /** Quantidade de entradas da tabela. */

@@ -171,14 +171,18 @@
  */
 #define DEFAULT_TRIM_KI_Z      20.0F
 /** Ganho do equilíbrio de arfagem e rolagem, em rad/s por (rad·s). */
-#define DEFAULT_TRIM_KI_ATT    40.0F
+#define DEFAULT_TRIM_KI_ATT    80.0F
 /**
  * Limite do termo de hover, em rad/s. No ensaio de 04/11 o hover médio passou
  * de 850 rad/s (48% de aceleração) sem o drone levantar por inteiro.
  */
 #define DEFAULT_TRIM_MAX       250.0F
-/** Limite de cada termo de equilíbrio (arfagem e rolagem), em rad/s. */
-#define TRIM_ATT_MAX           120.0F
+/**
+ * Limite de cada termo de equilíbrio (arfagem e rolagem), em rad/s. No ensaio
+ * de 04/11 a traseira precisou de ~125 rad/s a mais de cada lado (14% de
+ * aceleração entre traseira e frente) e o limite de 120 saturou.
+ */
+#define DEFAULT_TRIM_ATT_MAX   250.0F
 /**
  * Rampa do hover enquanto o drone ainda não se soltou do chão, em rad/s por s:
  * sem ela, sair do chão levaria dezenas de segundos.
