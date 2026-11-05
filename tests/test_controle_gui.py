@@ -51,14 +51,14 @@ def test_du_por_motor_segue_o_mixer_do_firmware():
 
 
 def test_comando_ligar():
-    assert g.comando_ligar(True) == ["param set FLT_DRY_RUN 1", "param set CTL_TRIM 1", "hover 0.15"]
+    assert g.comando_ligar(True) == ["param set FLT_DRY_RUN 1", "param set CTL_TRIM 1", "hover 0.25"]
     assert g.comando_ligar(False, compensar=False) == [
-        "param set FLT_DRY_RUN 0", "param set CTL_TRIM 0", "hover 0.15"]
+        "param set FLT_DRY_RUN 0", "param set CTL_TRIM 0", "hover 0.25"]
 
 
 def test_comando_ligar_respeita_a_altura_escolhida():
     assert g.comando_ligar(True, True, 0.05)[-1] == "hover 0.05"
-    assert g.comando_ligar(True, True, 0.50)[-1] == "hover 0.15"  # nunca acima do limite
+    assert g.comando_ligar(True, True, 0.50)[-1] == "hover 0.25"  # nunca acima do limite
     assert g.comando_ligar(True, True, 0.0)[-1] == "hover 0.03"
 
 

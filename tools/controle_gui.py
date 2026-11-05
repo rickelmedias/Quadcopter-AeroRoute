@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Painel do teste de controle: sobe 15 cm em rampa, segura e pousa em rampa.
+"""Painel do teste de controle: sobe até 25 cm em rampa, segura e pousa em rampa.
 
 Fala com o console USB do firmware (``App/Inc/usb_console.h``) pela porta serial
 do STM32 (CDC, normalmente ``/dev/ttyACM0``) e mostra a telemetria do LQG:
@@ -10,8 +10,8 @@ Depende de ``pyserial`` e de ``tkinter``.
 
 O que o painel faz:
 
-* **LIGAR** arma e sobe 15 cm em rampa (o firmware limita qualquer pedido a
-  15 cm e usa a altura lida pelo MTF-01); **DESLIGAR** pousa em rampa e desarma.
+* **LIGAR** arma e sobe em rampa até a altura escolhida (o firmware limita
+  qualquer pedido a 25 cm e usa a altura lida pelo MTF-01); **DESLIGAR** pousa em rampa e desarma.
 * **EMERGÊNCIA** (ou barra de espaço / Esc) corta os motores na hora.
 * **Ensaio a seco** (marcado por padrão): o controle roda e a tela mostra o que
   cada motor receberia, mas os motores não giram. Use com o drone na mão para
@@ -31,7 +31,7 @@ registra no log o que aprendeu ao pousar (``trim z=.. th=.. phi=..``).
 Pouso: ao encostar no chão a aceleração desce em rampa até a marcha lenta
 (1,5 s) e só então desarma, em vez de cortar de uma vez.
 
-Altura: escolha no painel (3 a 15 cm) uma altura que as cordinhas da bancada
+Altura: escolha no painel (3 a 25 cm) uma altura que as cordinhas da bancada
 deixem alcançar. Se o drone fica preso abaixo do alvo, a compensação de hover
 continua somando empuxo contra as cordinhas, que puxam torto.
 
@@ -39,7 +39,7 @@ CTL_W0: com a compensação ligada, ajuste só antes de LIGAR. Ao pousar, o pain
 sugere o próximo valor (``CTL_W0 + z`` aprendido).
 
 Segurança no firmware: inclinação acima de 20 graus corta os motores; altura
-acima de 35 cm pousa; se o PC calar por 1 s (watchdog), o drone pousa em rampa.
+acima de 45 cm pousa; se o PC calar por 1 s (watchdog), o drone pousa em rampa.
 """
 from __future__ import annotations
 
@@ -56,7 +56,7 @@ from serial.tools import list_ports
 #: Porta padrão do STM32 (CDC).
 PORTA_PADRAO = "/dev/ttyACM0"
 #: Maior altura da subida, em m (o firmware também limita a este valor).
-ALTURA_M = 0.15
+ALTURA_M = 0.25
 #: Menor altura escolhível no painel, em m.
 ALTURA_MIN_M = 0.03
 #: Altura com que o painel abre, em m. Na bancada de 04/11 as cordinhas deixam o

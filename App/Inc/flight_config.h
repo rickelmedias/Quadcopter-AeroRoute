@@ -115,9 +115,10 @@
 
 /**
  * Maior altura que qualquer pedido de decolagem ou trecho aceita, em m. O
- * teste de controle sobe só 15 cm (lidos pelo MTF-01).
+ * teste de controle sobe no máximo 25 cm (lidos pelo MTF-01); o painel escolhe
+ * a altura de cada voo abaixo disso.
  */
-#define FLIGHT_MAX_HEIGHT_M    0.15F
+#define FLIGHT_MAX_HEIGHT_M    0.25F
 /** Folga numérica ao comparar uma altura pedida com ::FLIGHT_MAX_HEIGHT_M, em m. */
 #define FLIGHT_HEIGHT_TOL_M    0.001F
 /**
