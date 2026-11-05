@@ -87,6 +87,14 @@ static const ctrl_param_desc_t TABLE[] = {
           "1 = LQI (integradores z, phi, theta)"),
     PARAM("CTL_LQI_MAX", lqi_max, 0.0F, 400.0F, DEFAULT_LQI_MAX, CTRL_PARAM_LIVE,
           "limite de cada integrador do LQI (rad/s)"),
+    PARAM("CTL_FF_TH", ff_theta, -300.0F, 300.0F, DEFAULT_CTL_FF_TH, CTRL_PARAM_DISARMED_ONLY,
+          "desequilibrio fixo: + frente, - tras (rad/s)"),
+    PARAM("CTL_FF_PHI", ff_phi, -300.0F, 300.0F, DEFAULT_CTL_FF_PHI, CTRL_PARAM_DISARMED_ONLY,
+          "desequilibrio fixo: + esquerda, - direita"),
+    PARAM("CTL_LQG_AJ", lqg_adjusted, 0.0F, 1.0F, DEFAULT_CTL_LQG_AJ,
+          CTRL_PARAM_BOOL | CTRL_PARAM_DISARMED_ONLY, "1 = LQG ajustado (pesos Q novos)"),
+    PARAM("CTL_DIST", use_dist, 0.0F, 1.0F, DEFAULT_CTL_DIST,
+          CTRL_PARAM_BOOL | CTRL_PARAM_DISARMED_ONLY, "1 = estimador de perturbacao"),
 };
 
 /** Quantidade de entradas da tabela. */

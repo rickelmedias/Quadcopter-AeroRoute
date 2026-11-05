@@ -142,10 +142,38 @@ ela só age em voo armado pela Pi (`flight_snapshot_t::commanded_by_pi`).
 teto das cordinhas (a altura parava em +4 a +6 cm): o hover empurra contra elas
 e elas puxam torto. Escolha a altura abaixo do teto ou afrouxe as cordinhas.
 
-**Equilíbrio lembrado entre voos.** O firmware guarda a arfagem e a rolagem do
-trim do último instante em que o drone estava no ar, nivelado (|φ|, |θ| < 2°) e
-assentado, e o próximo LIGAR começa delas (`trim inicial th=.. phi=..` no log),
-em vez de o lado leve levantar enquanto reaprende. Vale até reiniciar a placa.
+**Desequilíbrio fixo (`CTL_FF_TH`).** A traseira precisa de ~90 rad/s a mais
+que a frente em cada motor. Esse valor entra nos motores desde a rampa de
+decolagem, em todos os modos; os integradores do LQI começam do zero a cada voo
+e corrigem só o resto (ver docs/controle_lqi.md, "Ajuste depois dos ensaios de
+05/11").
+
+**Equilíbrio lembrado entre voos (só no ajuste lento).** No modo "ajuste
+lento", o firmware guarda a arfagem e a rolagem do trim do último instante em
+que o drone estava em HOLD, com a altura a menos de 1,5 cm do alvo, nivelado
+(|φ|, |θ| < 2°) e assentado, e o próximo LIGAR começa delas (`trim inicial
+th=.. phi=..` no log). Vale até reiniciar a placa. No LQI isso foi retirado em
+05/11: preso nas cordinhas, ele guardou θ = −128 e φ = −10 rad/s (o hover de
+verdade estava em cerca de −85 e 0) e o voo seguinte saía inclinado.
+
+**Subida presa.** Se, na decolagem, o alvo fica mais de 4 cm acima da altura
+medida e o drone não sobe 2 cm em 3 s (já fora do chão), o voo para de subir:
+segura na altura medida, devolve o empuxo que o integrador acumulou desde o
+travamento e escreve `altura nao sobe (preso?): HOLD em .. cm`. Nos ensaios de
+05/11, com alvos de 15 a 25 cm, a altura parou em 2–5 cm, o integrador de
+altura passou de 120 rad/s, os motores de 57% e todos acabaram em FAILSAFE de
+inclinação. A primeira versão do detector olhava a velocidade vertical do
+Kalman e não disparou: preso, o filtro estimava 4–5 cm/s de subida (o modelo
+prevê o que o LQR pede; a altura medida só corrige a posição). Agora ele e o
+pouso usam a altura do MTF filtrada (0,3 s) e a velocidade derivada dela.
+Reproduzido nos logs de 05/11, ele teria segurado os 14 voos presos de 7 a 23 s
+antes do corte.
+
+**Pouso.** O integrador de altura guarda o empuxo extra do hover e desfaz
+devagar. Em 05/11, ao pousar, a referência chegava ao chão em menos de 1 s, mas
+o drone ficava 3–5 s parado no alto e depois caía de uma vez. Agora, no pouso,
+se o drone está mais de 1 cm acima da referência e desce a menos de 3 cm/s, a
+correção de hover dos integradores cai 20 rad/s por segundo até ele descer.
 
 **Rigidez da atitude (decisão pendente).** O ganho de arfagem/rolagem do LQR
 do TCC é macio: 50,6 rad/s por radiano, ou seja, um empurrão constante de

@@ -28,7 +28,13 @@ Ci(2, 2) = 1;   % phi
 Ci(3, 3) = 1;   % theta
 Aa = [Ar, zeros(8, 3); Ts * Ci, eye(3)];
 Ba = [Br; zeros(3, 4)];
-Qa = blkdiag(Q(sub, sub), diag([1000 10000 10000]));   % int_z, int_phi, int_theta
+% Atitude mais firme que a do TCC (ensaios de 05/11): phi e theta 500 -> 8000,
+% p e q 10 -> 100. Em simulacao com o motor atrasando 40/80/120 ms, o rebote de
+% um empurrao caiu de 16/22/28 graus para 7/11/11; com 16000 ja oscila a 120 ms.
+Ql = Q;
+Ql(4, 4) = 8000;  Ql(5, 5) = 8000;     % phi, theta
+Ql(10, 10) = 100; Ql(11, 11) = 100;    % p, q
+Qa = blkdiag(Ql(sub, sub), diag([1000 10000 10000]));   % int_z, int_phi, int_theta
 
 Ka = dlqr(Aa, Ba, Qa, R);
 

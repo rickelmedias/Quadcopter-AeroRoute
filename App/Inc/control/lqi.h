@@ -104,6 +104,22 @@ void lqi_update(lqi_state_t *s, const lqi_gains_t *g, bool enabled, float dt,
 void lqi_output(const lqi_state_t *s, const lqi_gains_t *g, float out[LQG_NU]);
 
 /**
+ * @brief Tira @p delta_rad_s da correção de hover (média nos quatro motores)
+ *        do integrador de altura.
+ *
+ * Usado no pouso: o integrador de altura guarda o empuxo extra do hover e
+ * desfaz devagar (Ki pequeno); se o drone fica parado acima da referência,
+ * ele é descontado diretamente. Não passa do limite negativo de ::lqi_update.
+ *
+ * @param[in,out] s            Integradores.
+ * @param[in]     g            Ganhos.
+ * @param[in]     delta_rad_s  Quanto tirar, em rad/s (>= 0).
+ * @param[in]     limit_rad_s  O mesmo limite de ::lqi_update.
+ */
+void lqi_reduce_hover(lqi_state_t *s, const lqi_gains_t *g, float delta_rad_s,
+                      float limit_rad_s);
+
+/**
  * @brief Diz se algum integrador está no limite.
  *
  * @param[in] s            Integradores.

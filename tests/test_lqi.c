@@ -6,6 +6,7 @@
 #include "control/lqg_ert.h"
 #include "control/lqg_ert_model.h"
 #include "control/lqi.h"
+#include "control/lqi_tuning.h"
 #include "lqi_design.h"
 #include "lqr_design.h"
 
@@ -23,7 +24,7 @@ static void test_dlqr_reproduces_simulink(void) {
     for (unsigned j = 0U; j < LQG_NU; ++j) B[i * LQG_NU + j] = LQG_ERT_B[i][j];
   }
   lqi_weights_t w;
-  lqi_default_weights(&w);
+  lqi_tcc_weights(&w);
   assert(lqr_dlqr((int)LQG_NX, (int)LQG_NU, A, B, w.q, w.r, K) > 0);
   double worst = 0.0, scale = 0.0;
   for (unsigned i = 0U; i < LQG_NU; ++i) {
@@ -83,6 +84,99 @@ static void test_integrator_signs_and_limits(void) {
   const float bad[LQI_NI] = {NAN, NAN, NAN};
   lqi_update(&s, &LQI_GAINS, true, 0.01F, bad, 100.0F);
   assert(memcmp(&before, &s, sizeof(s)) == 0);
+}
+
+/** @brief O desconto do pouso tira exatamente o pedido do hover e respeita o limite. */
+static void test_reduce_hover(void) {
+  lqi_state_t s;
+  lqi_reset(&s);
+  const float below[LQI_NI] = {0.1F, 0.02F, -0.03F};
+  lqi_update(&s, &LQI_GAINS, true, 5.0F, below, 250.0F);
+  float u[LQG_NU], v[LQG_NU];
+  lqi_output(&s, &LQI_GAINS, u);
+  lqi_reduce_hover(&s, &LQI_GAINS, 10.0F, 250.0F);
+  lqi_output(&s, &LQI_GAINS, v);
+  /* Cai 10 rad/s em cada motor; φ e θ não mudam. */
+  for (unsigned i = 0U; i < LQG_NU; ++i) assert(fabsf((u[i] - v[i]) - 10.0F) < 1e-3F);
+  assert(s.xi[LQI_I_PHI] != 0.0F && s.xi[LQI_I_THETA] != 0.0F);
+
+  /* Não passa do limite negativo, e delta <= 0 não mexe. */
+  lqi_reset(&s);
+  for (int k = 0; k < 1000; ++k) lqi_reduce_hover(&s, &LQI_GAINS, 10.0F, 100.0F);
+  lqi_output(&s, &LQI_GAINS, u);
+  for (unsigned i = 0U; i < LQG_NU; ++i) assert(fabsf(u[i] + 100.0F) < 1e-2F);
+  const lqi_state_t before = s;
+  lqi_reduce_hover(&s, &LQI_GAINS, 0.0F, 100.0F);
+  lqi_reduce_hover(&s, &LQI_GAINS, NAN, 100.0F);
+  assert(memcmp(&before, &s, sizeof(s)) == 0);
+}
+
+/** @brief Prepara no lqi_tuning todos os valores de @p g; pula o de índice @p skip. */
+static void stage_all(const lqi_gains_t *g, int skip) {
+  lqi_tuning_begin();
+  int k = 0;
+  for (unsigned r = 0U; r < LQG_NU; ++r) {
+    for (unsigned c = 0U; c < LQG_NX; ++c, ++k) {
+      if (k != skip) assert(lqi_tuning_stage(LQI_TUNING_KX, r, c, (float)g->Kx[r][c]) == LQI_TUNING_OK);
+    }
+  }
+  for (unsigned r = 0U; r < LQG_NU; ++r) {
+    for (unsigned c = 0U; c < LQG_NR; ++c, ++k) {
+      if (k != skip) assert(lqi_tuning_stage(LQI_TUNING_KFD, r, c, (float)g->Kfd[r][c]) == LQI_TUNING_OK);
+    }
+  }
+  for (unsigned r = 0U; r < LQG_NU; ++r) {
+    for (unsigned c = 0U; c < LQI_NI; ++c, ++k) {
+      if (k != skip) assert(lqi_tuning_stage(LQI_TUNING_KI, r, c, (float)g->Ki[r][c]) == LQI_TUNING_OK);
+    }
+  }
+  assert(k == (int)LQI_TUNING_VALUES);
+}
+
+/** @brief Envio de ganhos do LQI: só troca com tudo, finito e CRC certo. */
+static void test_tuning(void) {
+  lqi_tuning_init();
+  assert(lqi_tuning_is_default());
+  const uint32_t default_crc = lqi_tuning_active_crc();
+  assert(default_crc == lqi_tuning_crc(&LQI_GAINS));
+  printf("lqi_default_crc=%08X\n", (unsigned)default_crc);
+
+  /* Pesos diferentes: o dobro em φ e θ. */
+  lqi_weights_t w;
+  lqi_default_weights(&w);
+  w.q[LQG_X_PHI] *= 2.0;
+  w.q[LQG_X_THETA] *= 2.0;
+  lqi_gains_t g;
+  assert(lqi_design(&w, &g) > 0);
+  const uint32_t crc = lqi_tuning_crc(&g);
+  uint32_t computed = 0U;
+
+  stage_all(&g, 17);  /* falta um */
+  assert(lqi_tuning_commit(crc, &computed) == LQI_TUNING_INCOMPLETE);
+  stage_all(&g, -1);
+  assert(lqi_tuning_commit(crc ^ 1U, &computed) == LQI_TUNING_CRC_MISMATCH && computed == crc);
+  assert(lqi_tuning_is_default());
+  assert(lqi_tuning_stage(LQI_TUNING_KI, 4U, 0U, 1.0F) == LQI_TUNING_BAD_INDEX);
+  assert(lqi_tuning_stage(LQI_TUNING_KI, 0U, 3U, 1.0F) == LQI_TUNING_BAD_INDEX);
+  assert(lqi_tuning_stage(LQI_TUNING_COUNT, 0U, 0U, 1.0F) == LQI_TUNING_BAD_INDEX);
+
+  const uint32_t before = lqi_tuning_generation();
+  assert(lqi_tuning_commit(crc, &computed) == LQI_TUNING_OK);
+  assert(!lqi_tuning_is_default() && lqi_tuning_active_crc() == crc);
+  assert(lqi_tuning_generation() == before + 1U);
+  lqi_gains_t active;
+  lqi_tuning_copy_active(&active, NULL);
+  assert(fabs(active.Kx[0][LQG_X_PHI] - g.Kx[0][LQG_X_PHI]) < 1e-4 * fabs(g.Kx[0][LQG_X_PHI]));
+  assert(fabs(active.Kx[0][LQG_X_PHI]) > fabs(LQI_GAINS.Kx[0][LQG_X_PHI]));
+  /* O commit consome o preparo. */
+  assert(lqi_tuning_commit(crc, NULL) == LQI_TUNING_INCOMPLETE);
+
+  stage_all(&g, -1);
+  assert(lqi_tuning_stage(LQI_TUNING_KX, 0U, 0U, NAN) == LQI_TUNING_OK);
+  assert(lqi_tuning_commit(crc, NULL) == LQI_TUNING_NOT_FINITE);
+
+  lqi_tuning_restore_default();
+  assert(lqi_tuning_is_default() && lqi_tuning_active_crc() == default_crc);
 }
 
 /** Ruído uniforme em [-1, 1]. */
@@ -167,6 +261,8 @@ int main(void) {
   test_dlqr_reproduces_simulink();
   test_table_matches_design();
   test_integrator_signs_and_limits();
+  test_reduce_hover();
+  test_tuning();
   simulate(30.0, 125.0, 10.0, 0.0, 30.0);
   simulate(30.0, 125.0, 10.0, 0.04, 30.0);
   simulate(30.0, 125.0, 10.0, 0.08, 30.0);

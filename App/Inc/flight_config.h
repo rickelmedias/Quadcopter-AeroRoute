@@ -141,6 +141,40 @@
 #define FLIGHT_LIFTED_HEIGHT_M 0.03F
 /** Menor velocidade de descida no pouso, em m/s (a rampa do pouso nunca é um degrau). */
 #define FLIGHT_LAND_MIN_RATE_M_S 0.03F
+/**
+ * No pouso, com o drone mais de ::FLIGHT_LAND_ABOVE_M acima da referência e
+ * descendo a menos de ::FLIGHT_LAND_DESCENT_M_S, a correção de hover dos
+ * integradores (LQI ou ajuste lento) cai a esta taxa, em rad/s por s. O
+ * integrador de altura sozinho desfaz devagar demais: no ensaio de 05/11 o
+ * drone ficou 3–5 s parado no alto com a referência já no chão.
+ */
+#define FLIGHT_LAND_BLEED_RATE 20.0F
+/** Drone acima da referência no pouso, em m (ver ::FLIGHT_LAND_BLEED_RATE). */
+#define FLIGHT_LAND_ABOVE_M    0.01F
+/** Descida que já conta como "está descendo" no pouso, em m/s (ver ::FLIGHT_LAND_BLEED_RATE). */
+#define FLIGHT_LAND_DESCENT_M_S 0.03F
+/**
+ * Decolagem ou trecho com o alvo mais de ::FLIGHT_STUCK_ERROR_M acima da
+ * altura medida e sem subir ::FLIGHT_STUCK_RISE_M em ::FLIGHT_STUCK_MS: o
+ * drone está preso (cordinhas, teto). O voo passa a segurar na altura medida
+ * e o empuxo acumulado desde o travamento é devolvido. Sem isso o integrador
+ * de altura crescia até o corte por inclinação (ensaio de 05/11: motores a 57%
+ * e FAILSAFE). Usa a altura do MTF filtrada, não a velocidade do Kalman: preso,
+ * o filtro estimava subida de 4–5 cm/s com a altura parada.
+ */
+#define FLIGHT_STUCK_ERROR_M   0.04F
+/** Subida que conta como progresso e recomeça a contagem, em m (ver ::FLIGHT_STUCK_ERROR_M). */
+#define FLIGHT_STUCK_RISE_M    0.02F
+/** Tempo travado até segurar na altura medida, em ms (ver ::FLIGHT_STUCK_ERROR_M). */
+#define FLIGHT_STUCK_MS        3000U
+/** Altura medida a partir da qual o drone conta como fora do chão para o travamento, em m. */
+#define FLIGHT_STUCK_MIN_HEIGHT_M 0.015F
+/**
+ * Constante de tempo do filtro da altura medida (MTF) e da velocidade vertical
+ * derivada dela, em s. Usados pelo travamento e pelo pouso no lugar da
+ * velocidade do Kalman, que fica enviesada quando o drone não segue o modelo.
+ */
+#define FLIGHT_MEAS_Z_TAU_S    0.3F
 
 /** Altura padrão do hover, em m. */
 #define DEFAULT_HOVER_HEIGHT_M 0.15F
@@ -168,9 +202,21 @@
 /* ---- LQI (control/lqi.h) ------------------------------------------------- */
 /**
  * 1 = usa o LQI: o LQR do TCC com integradores de altura, φ e θ, projetado
- * pelo mesmo dlqr (tools/lqi). Substitui o ajuste lento. Branch controle-lqi.
+ * pelo mesmo dlqr (tools/lqi). Ficou para comparação; o padrão é o LQG
+ * melhorado (CTL_LQG_AJ = 1 e CTL_DIST = 1).
  */
-#define DEFAULT_CTL_LQI        1.0F
+#define DEFAULT_CTL_LQI        0.0F
+/**
+ * 1 = LQG ajustado: Kd e Kfd do mesmo projeto do TCC com Q mais firme em altura
+ * e atitude (tools/lqg_ajustado.py); o Kalman continua o do Simulink.
+ */
+#define DEFAULT_CTL_LQG_AJ     1.0F
+/**
+ * 1 = estimador de perturbação ("LQG melhorado", control/lqg_dist.h): o
+ * Kalman também estima o hover errado e os desequilíbrios, e o controle os
+ * cancela.
+ */
+#define DEFAULT_CTL_DIST       1.0F
 /** Maior correção de um integrador do LQI em um motor, em rad/s. */
 #define DEFAULT_LQI_MAX        250.0F
 /**
@@ -180,6 +226,19 @@
  * rebote caiu de 24° para 16°).
  */
 #define LQI_ATT_ERROR_MAX_RAD  0.08F
+
+/**
+ * Desequilíbrio frente/trás fixo somado aos motores desde a decolagem, em
+ * rad/s por motor (+ na frente, − atrás). É o ponto de operação do drone com a
+ * traseira pesada: nos ensaios de 05/11 o integrador de θ do LQI parava em
+ * −82 a −105 rad/s em todo hover (traseira ~10% de aceleração acima da
+ * frente). Sem ele, a decolagem saía com os quatro motores iguais e a frente
+ * levantava sozinha no fim da rampa (θ de +2° a +18° em 0,2 s, 7 de 13 voos em
+ * FAILSAFE). Os integradores corrigem só o que sobrar.
+ */
+#define DEFAULT_CTL_FF_TH      (-90.0F)
+/** Desequilíbrio esquerda/direita fixo, em rad/s (+ na esquerda). Nos ensaios, ~0. */
+#define DEFAULT_CTL_FF_PHI     0.0F
 
 /** 1 = liga o ajuste lento (CTL_TRIM). Padrão desligado: o painel liga. */
 #define DEFAULT_CTL_TRIM       0.0F
@@ -218,6 +277,12 @@
  * em rad (~2°), com o drone no ar e assentado.
  */
 #define TRIM_LEARN_LEVEL_RAD   0.035F
+/**
+ * ... e só em HOLD com a altura medida a menos disto do alvo, em m. Na
+ * decolagem presa nas cordinhas (05/11) ele guardou θ = −128 e φ = −10 rad/s,
+ * contra cerca de −85 e 0 do hover de verdade, e o voo seguinte saía torto.
+ */
+#define TRIM_LEARN_Z_ERROR_M   0.015F
 /** O hover só integra no ar com |vz| abaixo disto, em m/s. */
 #define TRIM_SETTLED_VZ        0.05F
 /** Começa em ensaio a seco: os motores só giram depois de FLT_DRY_RUN = 0. */

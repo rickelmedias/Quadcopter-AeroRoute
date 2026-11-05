@@ -31,8 +31,15 @@ typedef struct {
 } lqi_weights_t;
 
 /**
- * @brief Pesos padrão: os do TCC mais os integradores escolhidos em simulação
- *        (∫z = 1000, ∫φ = ∫θ = 10000).
+ * @brief Pesos do TCC (os que reproduzem o Kd do Simulink) mais os
+ *        integradores escolhidos em simulação (∫z = 1000, ∫φ = ∫θ = 10000).
+ */
+void lqi_tcc_weights(lqi_weights_t *w);
+
+/**
+ * @brief Pesos padrão do LQI: os de ::lqi_tcc_weights com a atitude mais
+ *        firme (φ, θ = 8000 e p, q = 100), escolhidos depois dos ensaios de
+ *        05/11 (ver docs/controle_lqi.md).
  */
 void lqi_default_weights(lqi_weights_t *w);
 

@@ -108,6 +108,14 @@ typedef struct {
   float use_lqi;
   /** CTL_LQI_MAX: maior correção de um integrador do LQI em um motor, em rad/s. */
   float lqi_max;
+  /** CTL_FF_TH: desequilíbrio frente/trás fixo, em rad/s (+ na frente, − atrás). */
+  float ff_theta;
+  /** CTL_FF_PHI: desequilíbrio esquerda/direita fixo, em rad/s (+ na esquerda, − na direita). */
+  float ff_phi;
+  /** CTL_LQG_AJ: 1 = Kd e Kfd do LQG ajustado (control/lqg_dist.h) no lugar dos do Simulink. */
+  float lqg_adjusted;
+  /** CTL_DIST: 1 = estimador de perturbação ("LQG melhorado", control/lqg_dist.h). */
+  float use_dist;
 } ctrl_params_t;
 
 /** @brief Regras de um parâmetro. */

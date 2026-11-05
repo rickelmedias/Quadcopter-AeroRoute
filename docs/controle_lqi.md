@@ -107,6 +107,63 @@ de Ki. Para mudar os pesos, altere `lqi_default_weights()` em
 `tools/lqi/lqi_design.c` (e o `.m`), regenere com `tools/lqi/lqi_gen` e rode
 `tests/run.sh`.
 
+## Ajuste depois dos ensaios de 05/11
+
+Três mudanças, todas a partir dos logs de 05/11 (`tools/logs/controle_20261105_*.log`):
+
+1. **Atitude mais firme.** Os pesos padrão do LQI passaram a ser os do TCC com
+   φ, θ = 8000 (eram 500) e p, q = 100 (eram 10): K_φ/θ vai de 71 para 150
+   rad/s por rad e K_p/q de 13 para 23. Na simulação de `tests/test_lqi.c`
+   (desequilíbrio de 125 rad/s, empurrão de 1,5 s), o rebote cai assim:
+
+   | atraso do motor | TCC (500/10) | novo (8000/100) | 16000/100 |
+   |---|---|---|---|
+   | 40 ms | 16,0° | 6,7° | 5,9° |
+   | 80 ms | 22,3° | 11,1° | 9,9° |
+   | 120 ms | 28,5° | 10,7° | instável |
+
+   O valor de 8000 deixa margem para um motor mais lento que o esperado.
+   `lqi_tcc_weights()` continua com os pesos do TCC (os que reproduzem o
+   Simulink); `lqi_default_weights()`, `projeto_lqi.m` e `tools/lqi_projeto.py`
+   têm os novos.
+2. **Desequilíbrio fixo (`CTL_FF_TH`, padrão −90 rad/s).** Em todo hover o
+   integrador de θ parava em −82 a −105 rad/s (traseira ~10% de aceleração
+   acima da frente). Sem esse valor desde o início, a decolagem saía com os
+   quatro motores iguais e a frente levantava sozinha no fim da rampa: θ de +2°
+   a +18° em 0,2 s, FAILSAFE em 7 de 13 voos. Agora ele entra nos motores desde
+   a rampa de partida, fora do Kalman, e os integradores corrigem só o resto.
+   `CTL_FF_PHI` faz o mesmo entre os lados (padrão 0).
+3. **Sem equilíbrio lembrado no LQI.** Ele trouxe, duas vezes, valores de voos
+   presos nas cordinhas. Cada voo começa com os integradores em zero, por cima
+   do desequilíbrio fixo.
+
+Para ajustar `CTL_FF_TH`: num hover estável, o log mostra `lqi z=.. th=..`. Se
+`th` ficar longe de 0, some esse valor ao `CTL_FF_TH` (o painel tem o controle).
+
+## Testar outros pesos sem regravar
+
+O painel (`tools/controle_gui.py`) tem o quadro "Pesos do LQI", com os pesos de
+Q (z, φ, θ, ψ, vz, p, q, r), R e os três integradores. "Calcular" mostra os
+ganhos que resultam; "Enviar ao drone" manda Kx, Kfd e Ki ao STM32; "Padrão"
+volta à tabela de `lqi_gains.c`.
+
+- O cálculo é `tools/lqi_projeto.py`, o mesmo `dlqr` (algoritmo de duplicação)
+  de `tools/lqi/lqr_design.c` em Python puro (sem numpy). Com os pesos padrão
+  ele reproduz `lqi_gains.c` com erro relativo de 1e-15 (`tests/run.sh` confere).
+- O envio usa o console USB: `lqi begin`, 76 linhas `lqi set kx|kfd|ki L C V` e
+  `lqi commit <crc>`. O firmware (`control/lqi_tuning.h`) só troca os ganhos se
+  os 76 valores chegaram, são finitos e o CRC-32 (o mesmo do envio pela Pi)
+  confere. Responde `lqi ganhos do painel crc=..` e o voo escreve
+  `lqi: ganhos do painel em uso`.
+- Só com o drone desarmado: os integradores ξ guardam o equilíbrio na escala do
+  Ki antigo, então trocar Ki em voo daria um degrau. Pelo mesmo motivo, o
+  equilíbrio lembrado do voo anterior é descartado na troca.
+- Os ganhos enviados valem até reiniciar a placa. O log do ensaio registra os
+  pesos e os ganhos de cada envio (`painel: enviando ganhos do LQI ..`).
+
+Mudar os pesos continua sendo o projeto do TCC (o mesmo modelo A, B e o mesmo
+`dlqr`); só a escolha de Q e R muda.
+
 ## O que o LQI não resolve
 
 - **Decolagem torta:** no chão a traseira está apoiada e nenhum controle vê o

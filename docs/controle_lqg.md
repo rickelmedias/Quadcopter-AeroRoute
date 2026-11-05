@@ -280,7 +280,8 @@ Simulink. Tudo continua no histórico do Git (commit `16269e9`).
 - Confirmar ω0 com o script do MATLAB e medir a curva do motor.
 - Conferir os sinais dos sensores na bancada (seção 9).
 - O LQR do TCC não tem ação integral: um ω0 ou uma curva de motor errados
-  aparecem como erro permanente de altura. O ajuste de `CTL_W0` em voo corrige.
+  aparecem como erro permanente de altura. O LQG melhorado (seção 12) estima
+  e cancela essa perturbação.
 - x e y não são observáveis (só a velocidade é medida): a posição deriva
   devagar, como no modelo.
 - Os parâmetros não são gravados na flash; a Pi reaplica perfis.
@@ -288,3 +289,108 @@ Simulink. Tudo continua no histórico do Git (commit `16269e9`).
   montar o divisor e ligar o CURR do ESC, ajuste `POWER_VBAT_DIVIDER` e
   `POWER_CURRENT_A_PER_V` e mude as chaves para 1. Ainda não há failsafe de
   bateria baixa.
+
+## 12. LQG ajustado e LQG melhorado (ensaios de 05/11)
+
+O painel (`tools/controle_gui.py`) tem quatro modos. Os três primeiros são
+LQG (Kalman + LQR, princípio da separação); o quarto é só comparação.
+
+| Modo | Parâmetros | O que é |
+|---|---|---|
+| LQG original | `CTL_LQG_AJ 0`, `CTL_DIST 0`, `CTL_FF_TH 0` | O LQG do TCC exportado pelo Simulink. |
+| LQG original ajustado | `CTL_LQG_AJ 1`, `CTL_DIST 0` | Mesmo projeto, outros pesos Q, e o desequilíbrio fixo do drone real. |
+| LQG melhorado (padrão) | `CTL_LQG_AJ 1`, `CTL_DIST 1` | O ajustado com o Kalman estimando a perturbação constante. |
+| LQI | `CTL_LQI 1` | LQR com integradores (docs/controle_lqi.md). |
+
+### Por que o LQG do TCC não basta no drone real
+
+O LQR é proporcional ao estado: só gera correção se houver erro. No modelo do
+TCC o centro de gravidade está no centro, os motores são iguais e ω0 é exato,
+então o equilíbrio é com erro zero. No drone real há forças constantes que o
+modelo não tem (medidas em 05/11):
+
+- traseira mais pesada: o hover pede ~90 rad/s a mais atrás que na frente em
+  cada motor (~10% de aceleração);
+- ω0 incerto: o hover real ficou entre 790 e 840 rad/s, e muda com a bateria;
+- motores diferentes no mesmo DShot.
+
+Com essas forças, o equilíbrio do LQR fica onde o erro produz exatamente a
+correção que as cancela: erro = força / ganho. Isso só vai a zero se a força
+for conhecida (ponto de operação certo) ou estimada (princípio do modelo
+interno: para rejeitar uma perturbação constante desconhecida, o controlador
+precisa de um modelo dela: um integrador, como no LQI, ou um estado de
+perturbação no estimador, como no LQG melhorado).
+
+### LQG original ajustado
+
+Mesmo projeto do TCC (`tools/lqg_ajustado.py`, que com os pesos do TCC
+reproduz o Kd do Simulink com erro de 1e-12): `Kd = dlqr(A, B, Q, R)`,
+`Kfd = inv(Cr (I − A + B Kd)^-1 B)`, Kalman do Simulink. Duas mudanças:
+
+1. **Pesos Q** (R = 0,1 I igual): z 500 → 5000, vz 5 → 50, φ e θ 500 → 8000,
+   p e q 10 → 100. Os ganhos ficam K_z = 110 (era 35), K_φ/θ = 142 (era 51).
+2. **Ponto de operação real** (`CTL_FF_TH = −90`): a diferença de rotação
+   frente/trás do hover entra fixa nos motores desde a decolagem. É a
+   linearização em torno do equilíbrio real em vez do ideal. Sem ela, 7 de 13
+   decolagens de 05/11 deram FAILSAFE: com os quatro motores iguais a frente
+   levanta sozinha no fim da rampa.
+
+Limite: o hover (ω0) continua tendo que estar certo. Em simulação, 30 rad/s
+de erro em ω0 deixam o drone no chão ou 14–20 cm acima do alvo.
+
+### LQG melhorado: Kalman com estimação de perturbação
+
+Cada canal (altura, φ, θ) ganha um Kalman com uma perturbação constante d nos
+motores, no padrão do canal (os quatro iguais; frente contra trás; esquerda
+contra direita), com o mesmo A, B do Simulink:
+
+```
+[pos; vel; d][k+1] = [A_pp  A_pv  -4 b_p ;  A_vp  A_vv  -4 b_v ;  0  0  1] [pos; vel; d][k] + [b_p; b_v; 0] U[k]
+U = Σ_j padrão_j · u_j        y = pos (altura)  ou  [pos; vel] (φ, p e θ, q do BNO)
+```
+
+O ganho é o de regime (`M = P C' (C P C' + Rn)^-1`), com o Qn e o Rn do
+Kalman do TCC; só a variância de d é nova: 0,1 (rad/s)² por passo na altura e
+1e-3 na atitude. O controle soma `d̂ · padrão_j` a cada motor, cancelando a
+perturbação estimada. Como no TCC, a predição do Kalman principal recebe só o
+du do LQR. Os ganhos são gerados por `tools/lqg_ajustado.py`
+(`App/Src/control/lqg_ajustado_gains.c`); o código é
+`App/Src/control/lqg_dist.c`.
+
+Em regime, `d̂` converge para a perturbação real, o erro vai a zero e o log
+mostra o valor (`dist z=.. th=.. phi=..`): `z` é quanto o `CTL_W0` está
+errado e `th` quanto o `CTL_FF_TH` está errado, em rad/s por motor.
+
+### Simulação (`tests/test_lqg_dist.c`)
+
+Modelo do TCC, Kalman do TCC, ruído nos sensores, motor de primeira ordem,
+chão, subida em rampa até 20 cm, hover errado `dh`, desequilíbrio residual
+(depois do `CTL_FF_TH`) e um empurrão de 30 rad/s por 1,5 s:
+
+| Modo | ω0 errado | desequilíbrio | atraso | erro de altura | θ, φ | rebote |
+|---|---|---|---|---|---|---|
+| original | +30 | 15 / 10 | 40 ms | não decola | −17°, −11° | 51° |
+| ajustado | +30 | 15 / 10 | 40 ms | não decola | −6°, −4° | 18° |
+| melhorado | +30 | 15 / 10 | 40 ms | 0 | 0, 0 | 8,3° |
+| melhorado | −30 | −15 / −10 | 80 ms | 0 (pico 35,6 cm) | 0, 0 | 12,7° |
+| melhorado | +30 | 105 / 10 (sem FF) | 40 ms | 0 | 0, 0 | 8,3° |
+| melhorado | +30 | 15 / 10 | 120 ms | 0 | 0, 0 | 11,4° |
+| LQI | +30 | 15 / 10 | 40 ms | 0 | 0, 0 | 6,7° |
+
+Com variância 1e-2 na atitude a malha oscila com o motor atrasando 120 ms; por
+isso 1e-3.
+
+No chão o estimador não aprende: o apoio segura o drone e a correção leria
+isso como empuxo sobrando. Na primeira versão (ensaio de 05/11) o d̂ de altura
+foi a −160 rad/s na rampa de partida e o drone não decolava. Agora ele fica
+congelado até o drone subir 1 cm; com o alvo acima, o hover sobe 10 rad/s por
+segundo até lá (como o ajuste lento). Por isso o `CTL_W0` ainda importa: 30
+rad/s acima do hover real levam o drone a ~36 cm num alvo de 20 cm antes de o
+estimador achar o excesso.
+
+### Proteções (iguais em todos os modos)
+
+Corte por inclinação acima de 20°, subida presa (segura onde está se não sobe
+2 cm em 3 s), pouso que desconta o hover estimado se o drone não desce, e o
+watchdog do PC. A perturbação estimada só muda no ar, com motores reais, sem
+rampa e sem saturação, e fica limitada a `CTL_LQI_MAX` (250 rad/s por motor).

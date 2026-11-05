@@ -7,6 +7,7 @@
 #include "control/ctrl_gains.h"
 #include "control/ctrl_params.h"
 #include "control/flight_ctrl.h"
+#include "control/lqi_tuning.h"
 #include "motors.h"
 #include "power.h"
 #include "sensor_log.h"
@@ -22,8 +23,8 @@
 
 /** Maior linha aceita, em caracteres. */
 #define LINE_MAX 64U
-/** Palavras por linha. */
-#define MAX_ARGS 5
+/** Palavras por linha (`lqi set <matriz> <linha> <coluna> <valor>` usa 6). */
+#define MAX_ARGS 6
 /** Tempo máximo de espera pelo voo armar antes de decolar, em ms. */
 #define ARM_WAIT_MS 200U
 /** Tempo máximo de um trecho pedido pelo console, em ms. */
@@ -105,6 +106,8 @@ static void help(void) {
   log_text("voo: hover [h] | dry [h] | land | hold | lqg");
   log_text("goto <x> <y> <z> | move <dx> <dy> [dz] | yaw <graus>");
   log_text("param list|get N|set N V | gains [default]");
+  log_text("lqi [default|begin] | lqi set kx|kfd|ki L C V");
+  log_text("lqi commit <crc hex>: troca os ganhos do LQI");
   log_text("wd <ms>: sem linha por <ms> pousa (bancada: para); ping");
   log_text("stop, disarm ou Enter vazio: para tudo");
 }
@@ -260,6 +263,49 @@ static bool flight_command(int argc, char **argv) {
 
 /* ---- Ajuste ------------------------------------------------------------ */
 
+/**
+ * @brief Envio dos ganhos do LQI pelo painel (control/lqi_tuning.h).
+ *
+ * `lqi set` não responde quando dá certo: são 76 linhas seguidas, e o CRC do
+ * commit já diz se alguma se perdeu.
+ */
+static void lqi_command(int argc, char **argv) {
+  const char *sub = argc > 1 ? argv[1] : "";
+  if (!strcmp(sub, "begin")) {
+    lqi_tuning_begin();
+    return;
+  }
+  if (!strcmp(sub, "set") && argc >= 6) {
+    static const char *const names[LQI_TUNING_COUNT] = {"kx", "kfd", "ki"};
+    lqi_tuning_matrix_t m = LQI_TUNING_COUNT;
+    for (unsigned i = 0U; i < LQI_TUNING_COUNT; ++i) {
+      if (!strcmp(argv[2], names[i])) m = (lqi_tuning_matrix_t)i;
+    }
+    const lqi_tuning_status_t s = lqi_tuning_stage(m, (unsigned)strtoul(argv[3], NULL, 10),
+                                                   (unsigned)strtoul(argv[4], NULL, 10),
+                                                   strtof(argv[5], NULL));
+    if (s != LQI_TUNING_OK) say("lqi set: %s", lqi_tuning_status_text(s));
+    return;
+  }
+  if (!strcmp(sub, "commit") || !strcmp(sub, "default")) {
+    /* Os integradores guardam o equilíbrio na escala do Ki em uso. */
+    if (flight_ctrl_is_armed()) { say("lqi: desarme antes"); return; }
+    if (!strcmp(sub, "default")) {
+      lqi_tuning_restore_default();
+    } else {
+      uint32_t computed = 0U;
+      const uint32_t expected = argc > 2 ? (uint32_t)strtoul(argv[2], NULL, 16) : 0U;
+      const lqi_tuning_status_t s = lqi_tuning_commit(expected, &computed);
+      if (s != LQI_TUNING_OK) {
+        say("lqi commit: %s (crc=%08lX)", lqi_tuning_status_text(s), (unsigned long)computed);
+        return;
+      }
+    }
+  }
+  say("lqi ganhos %s crc=%08lX", lqi_tuning_is_default() ? "padrao" : "do painel",
+      (unsigned long)lqi_tuning_active_crc());
+}
+
 /** @brief Comandos de parâmetros e ganhos; devolve false se não for um deles. */
 static bool tuning_command(int argc, char **argv) {
   const char *c = argv[0];
@@ -284,6 +330,10 @@ static bool tuning_command(int argc, char **argv) {
     if (argc >= 2 && !strcmp(argv[1], "default")) ctrl_gains_restore_default();
     say("ganhos %s crc=%08lX", ctrl_gains_active_is_default() ? "do Simulink" : "da Pi",
         (unsigned long)ctrl_gains_active_crc());
+    return true;
+  }
+  if (!strcmp(c, "lqi")) {
+    lqi_command(argc, argv);
     return true;
   }
   return false;

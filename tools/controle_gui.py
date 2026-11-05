@@ -22,14 +22,15 @@ em zero, a guinada fica no zero da energização e a altura segue a rampa. A
 posição horizontal **não** é controlada: um pequeno erro de nível faz o drone
 deslizar. Prenda-o.
 
-Compensação (escolha no painel): **LQI** (padrão, ``control/lqi.h``) é o LQR
-do TCC com integradores de altura, φ e θ projetados pelo mesmo dlqr; o
-**ajuste lento** é a versão anterior, feita por fora do LQR; **nenhuma** deixa
-o LQR exportado pelo Simulink sozinho. Histórico do ajuste lento: o LQG do TCC não tem integrador,
-então um hover errado (o drone não sai do chão) ou um peso mal distribuído
-(a frente levanta e a traseira fica) deixam erro de altura e de inclinação. O
-firmware soma um ajuste lento à rotação dos motores (``control/trim.h``) e
-registra no log o que aprendeu ao pousar (``trim z=.. th=.. phi=..``).
+Modo de controle (escolha no painel, ver docs/controle_lqg.md):
+
+* **LQG original**: o LQG do TCC exportado pelo Simulink, sem nada a mais.
+* **LQG original ajustado**: o mesmo projeto com outros pesos Q (altura e
+  atitude mais firmes) e o desequilíbrio fixo frente/trás (CTL_FF_TH).
+* **LQG melhorado** (padrão): o ajustado com o Kalman estimando também a
+  perturbação constante (hover errado, peso fora do centro) e o controle
+  cancelando-a (``control/lqg_dist.h``). Relata ``dist z=.. th=.. phi=..``.
+* **LQI**: o LQR com integradores (``control/lqi.h``), só para comparação.
 
 Pouso: ao encostar no chão a aceleração desce em rampa até a marcha lenta
 (1,5 s) e só então desarma, em vez de cortar de uma vez.
@@ -40,6 +41,11 @@ continua somando empuxo contra as cordinhas, que puxam torto.
 
 CTL_W0: com a compensação ligada, ajuste só antes de LIGAR. Ao pousar, o painel
 sugere o próximo valor (``CTL_W0 + z`` aprendido).
+
+Ganhos do LQI: o quadro "Pesos do LQI" recalcula Kx, Kfd e Ki com outros pesos
+Q/R pelo mesmo dlqr do projeto (``tools/lqi_projeto.py``, sem numpy) e envia
+ao STM32 com CRC (``control/lqi_tuning.h``). Só desarmado. Valem até reiniciar
+a placa ou clicar em "Padrão".
 
 Segurança no firmware: inclinação acima de 20 graus corta os motores; altura
 acima de 45 cm pousa; se o PC calar por 1 s (watchdog), o drone pousa em rampa.
@@ -56,6 +62,8 @@ from pathlib import Path
 import serial
 from serial.tools import list_ports
 
+import lqi_projeto
+
 #: Porta padrão do STM32 (CDC).
 PORTA_PADRAO = "/dev/ttyACM0"
 #: Maior altura da subida, em m (o firmware também limita a este valor).
@@ -65,9 +73,13 @@ ALTURA_MIN_M = 0.03
 #: Altura com que o painel abre, em m. Na bancada de 04/11 as cordinhas deixam o
 #: drone subir só ~6 cm; acima disso a compensação de hover empurra contra elas.
 ALTURA_PADRAO_M = 0.04
-#: CTL_W0 com que o painel abre, em rad/s: o hover aprendido no ensaio de 04/11
-#: (768 + 80 de compensação com o drone nivelado no ar).
-W0_PADRAO = 850
+#: CTL_W0 com que o painel abre, em rad/s. Nos hovers de 05/11 os motores
+#: ficaram em 45–48% em média (790–840 rad/s, perto do chão); o LQI corrige
+#: o resto. Mais alto não ajuda a subir: preso nas cordinhas, só empurra contra elas.
+W0_PADRAO = 820
+#: CTL_FF_TH com que o painel abre, em rad/s: desequilíbrio frente/trás fixo
+#: (o mesmo padrão do firmware, ver DEFAULT_CTL_FF_TH em flight_config.h).
+FF_TH_PADRAO = -90
 #: Prazo do watchdog do firmware, em ms.
 WATCHDOG_MS = 1000
 #: Intervalo entre mensagens de "estou vivo", em s.
@@ -166,26 +178,77 @@ def du_por_motor(du_entradas: list[float]) -> list[float]:
     return por_motor
 
 
-#: Modos de compensação: rótulo no painel -> (CTL_LQI, CTL_TRIM).
-MODOS_COMPENSACAO = {
-    "lqi": ("LQI: integradores no projeto do LQR", 1, 0),
-    "trim": ("Ajuste lento (versão controle)", 0, 1),
-    "nenhuma": ("Nenhuma: LQR do TCC puro", 0, 0),
+@dataclass(frozen=True)
+class Modo:
+    """Um modo de controle do painel e os parâmetros que ele liga no firmware."""
+
+    rotulo: str
+    lqi: int        # CTL_LQI: integradores no projeto do LQR
+    ajustado: int   # CTL_LQG_AJ: Kd/Kfd com os pesos Q ajustados
+    dist: int       # CTL_DIST: estimador de perturbação
+    ff: bool        # usa o desequilíbrio fixo CTL_FF_TH (senão manda 0)
+    integra: bool   # tem integrador/estimador: CTL_W0 não muda em voo
+
+
+#: Modos de controle, do LQG do TCC ao LQI (ver docs/controle_lqg.md).
+MODOS = {
+    "original": Modo("LQG original (TCC, Simulink)", 0, 0, 0, False, False),
+    "ajustado": Modo("LQG original ajustado (Q novo + desequilíbrio fixo)", 0, 1, 0, True, False),
+    "melhorado": Modo("LQG melhorado (+ estimador de perturbação)", 0, 1, 1, True, True),
+    "lqi": Modo("LQI (só comparação)", 1, 0, 0, True, True),
 }
+#: Modo com que o painel abre.
+MODO_PADRAO = "melhorado"
 
 
-def comando_ligar(seco: bool, modo: str = "lqi", altura_m: float = ALTURA_M) -> list[str]:
+def comando_ligar(seco: bool, modo: str = MODO_PADRAO, altura_m: float = ALTURA_M,
+                  ff_th: int = 0) -> list[str]:
     """Comandos que armam e sobem ``altura_m`` (ensaio a seco ou real).
 
-    ``modo`` escolhe a compensação de desequilíbrio e de hover errado (ver
-    ``MODOS_COMPENSACAO``): o LQI (``control/lqi.h``), o ajuste lento
-    (``control/trim.h``) ou nenhuma, o LQR exportado pelo Simulink sem nada.
+    ``modo`` é uma chave de ``MODOS``. ``ff_th`` é o desequilíbrio fixo
+    frente/trás (CTL_FF_TH), mandado só nos modos que o usam; o LQG original
+    vai sem ele, como no TCC. O ajuste lento (CTL_TRIM) fica desligado.
     """
-    _rotulo, lqi, trim = MODOS_COMPENSACAO[modo]
+    m = MODOS[modo]
     return [f"param set FLT_DRY_RUN {1 if seco else 0}",
-            f"param set CTL_LQI {lqi}",
-            f"param set CTL_TRIM {trim}",
+            f"param set CTL_LQI {m.lqi}",
+            "param set CTL_TRIM 0",
+            f"param set CTL_LQG_AJ {m.ajustado}",
+            f"param set CTL_DIST {m.dist}",
+            f"param set CTL_FF_TH {ff_th if m.ff else 0}",
             f"hover {min(max(altura_m, ALTURA_MIN_M), ALTURA_M):.2f}"]
+
+
+#: Campos do quadro de pesos do LQI: (rótulo, chave). As chaves de Q são os
+#: nomes dos estados em ``lqi_projeto.Pesos.q``.
+CAMPOS_PESOS = [("z", "z"), ("φ", "phi"), ("θ", "theta"), ("ψ", "psi"), ("vz", "vz"),
+                ("p", "p"), ("q", "q"), ("r", "r"), ("R", "R"), ("∫z", "int_z"),
+                ("∫φ", "int_phi"), ("∫θ", "int_theta")]
+#: Pausa entre as linhas do envio de ganhos, em s: o console do STM32 recebe
+#: num buffer de 256 bytes e as 78 linhas juntas passariam disso.
+PAUSA_ENVIO_S = 0.005
+
+
+def textos_pesos(pesos: lqi_projeto.Pesos) -> dict[str, str]:
+    """Valor de cada campo do quadro de pesos."""
+    out = {k: f"{v:g}" for k, v in pesos.q.items()}
+    out.update(R=f"{pesos.r:g}", int_z=f"{pesos.q_int_z:g}", int_phi=f"{pesos.q_int_phi:g}",
+               int_theta=f"{pesos.q_int_theta:g}")
+    return out
+
+
+def pesos_de_textos(textos: dict[str, str]) -> lqi_projeto.Pesos:
+    """Pesos a partir dos campos do quadro (vírgula decimal aceita).
+
+    Raises:
+        ValueError: campo vazio ou não numérico.
+    """
+    def num(chave: str) -> float:
+        return float(textos[chave].strip().replace(",", "."))
+
+    padrao = lqi_projeto.Pesos()
+    return lqi_projeto.Pesos(q={k: num(k) for k in padrao.q}, r=num("R"), q_int_z=num("int_z"),
+                             q_int_phi=num("int_phi"), q_int_theta=num("int_theta"))
 
 
 def sugestao_w0(w0_atual: float, texto_trim: str) -> int | None:
@@ -284,7 +347,7 @@ def executar_tela(porta_inicial: str) -> None:
 
     raiz = tk.Tk()
     raiz.title("Teste de controle · LQG atitude + altura")
-    raiz.geometry("1040x800")
+    raiz.geometry("1040x920")
 
     enlace: Enlace | None = None
     est = Estimativa()
@@ -297,9 +360,10 @@ def executar_tela(porta_inicial: str) -> None:
     porta_var = tk.StringVar(value=porta_inicial)
     situacao_var = tk.StringVar(value="Desconectado")
     seco_var = tk.BooleanVar(value=True)
-    modo_var = tk.StringVar(value="lqi")
+    modo_var = tk.StringVar(value=MODO_PADRAO)
     gravar_var = tk.BooleanVar(value=True)
     w0_var = tk.IntVar(value=W0_PADRAO)
+    ff_th_var = tk.IntVar(value=FF_TH_PADRAO)
     altura_var = tk.IntVar(value=int(round(ALTURA_PADRAO_M * 100)))  # cm
     ultimo_trim = [""]
     armado_antes = [False]
@@ -307,6 +371,9 @@ def executar_tela(porta_inicial: str) -> None:
     rampa_var = tk.IntVar(value=5)
     valores: dict[str, tk.StringVar] = {k: tk.StringVar(value="--") for k in (
         "estado", "sensores", "modo", "roll", "pitch", "yaw", "altura", "ref", "subida", "trim")}
+    pesos_vars = {chave: tk.StringVar(value=texto)
+                  for chave, texto in textos_pesos(lqi_projeto.Pesos()).items()}
+    resumo_lqi_var = tk.StringVar(value="ganhos padrão: " + lqi_projeto.projetar(lqi_projeto.Pesos()).resumo())
     barras_du: dict[int, tk.Canvas] = {}
     textos_motor: dict[int, tk.StringVar] = {n: tk.StringVar(value="--") for n in (1, 2, 3, 4)}
 
@@ -337,7 +404,8 @@ def executar_tela(porta_inicial: str) -> None:
         situacao_var.set(f"Conectado em {porta_var.get()}")
         for cmd in ("stop", "log on", f"wd {WATCHDOG_MS}", f"param set LOG_EST_HZ {TAXA_EST_HZ}",
                     "param set FLT_DRY_RUN 1", f"param set FLT_HOVER_H {ALTURA_M:.2f}",
-                    f"param set CTL_W0 {w0_var.get()}", f"param set MOT_MAX {maxmot_var.get() / 100:.2f}",
+                    f"param set CTL_W0 {w0_var.get()}", f"param set CTL_FF_TH {ff_th_var.get()}",
+                    f"param set MOT_MAX {maxmot_var.get() / 100:.2f}",
                     f"param set FLT_Z_RATE {rampa_var.get() / 100:.2f}"):
             mandar(cmd)
         if gravar_var.get():
@@ -390,19 +458,68 @@ def executar_tela(porta_inicial: str) -> None:
             "• Mão no botão de EMERGÊNCIA (barra de espaço)?",
         ):
             return
-        for cmd in comando_ligar(seco_var.get(), modo_var.get(), altura_var.get() / 100):
+        for cmd in comando_ligar(seco_var.get(), modo_var.get(), altura_var.get() / 100,
+                                 ff_th_var.get()):
             mandar(cmd)
         botao_travado_ate[0] = time.monotonic() + TRAVA_BOTAO_S
         escrever_log("LIGAR: " + ("ensaio a seco" if seco_var.get() else "MOTORES REAIS") + f", subindo {altura_var.get()} cm")
 
     def ajustar(nome: str, valor: str) -> None:
         armado = est.estado in (ESTADO_ARMADO, ESTADO_DECOLANDO, ESTADO_HOLD, ESTADO_POUSANDO)
-        if nome == "CTL_W0" and armado and modo_var.get() != "nenhuma":
+        if nome == "CTL_W0" and armado and MODOS[modo_var.get()].integra:
             # Com a compensação ligada, mudar o hover em voo soma um degrau nos
             # quatro motores por cima do que ela já achou (ensaio de 04/11).
             escrever_log("CTL_W0 não muda em voo com a compensação ligada; ajuste antes de LIGAR")
             return
         mandar(f"param set {nome} {valor}")
+
+    def registrar(texto: str) -> None:
+        """Mostra no painel e grava no log do ensaio."""
+        escrever_log(texto)
+        if arquivo[0] is not None:
+            arquivo[0].write(f"{time.time():.3f};TXT;painel: {texto}\n")
+
+    def calcular_lqi() -> lqi_projeto.Ganhos | None:
+        try:
+            pesos = pesos_de_textos({k: v.get() for k, v in pesos_vars.items()})
+            ganhos = lqi_projeto.projetar(pesos)
+        except (ValueError, ArithmeticError) as erro:
+            escrever_log(f"pesos do LQI inválidos: {erro}")
+            return None
+        resumo_lqi_var.set("calculado: " + ganhos.resumo())
+        return ganhos
+
+    def enviar_lqi() -> None:
+        if enlace is None:
+            escrever_log("conecte antes de enviar ganhos")
+            return
+        if est.estado not in (ESTADO_STANDBY, ESTADO_FAILSAFE):
+            escrever_log("ganhos do LQI só mudam com o drone desarmado")
+            return
+        ganhos = calcular_lqi()
+        if ganhos is None:
+            return
+        pesos = pesos_de_textos({k: v.get() for k, v in pesos_vars.items()})
+        linhas = lqi_projeto.comandos(ganhos)
+        alvo = enlace
+
+        def enviar() -> None:
+            for linha in linhas:
+                if not alvo.enviar(linha):
+                    return
+                time.sleep(PAUSA_ENVIO_S)
+
+        threading.Thread(target=enviar, daemon=True).start()
+        registrar(f"enviando ganhos do LQI ({linhas[-1].split()[-1]}): {pesos.resumo()}")
+        registrar("ganhos: " + ganhos.resumo())
+
+    def padrao_lqi() -> None:
+        for chave, texto in textos_pesos(lqi_projeto.Pesos()).items():
+            pesos_vars[chave].set(texto)
+        resumo_lqi_var.set("ganhos padrão: " + lqi_projeto.projetar(lqi_projeto.Pesos()).resumo())
+        if enlace is not None:
+            mandar("lqi default")
+            registrar("ganhos do LQI: padrão")
 
     # ---- laço periódico --------------------------------------------------
 
@@ -430,7 +547,7 @@ def executar_tela(porta_inicial: str) -> None:
                 mot = dado
             elif tipo == "texto":
                 escrever_log(dado)
-                for prefixo in ("trim ", "lqi "):
+                for prefixo in ("trim ", "lqi ", "dist "):
                     if dado.startswith(prefixo) and "z=" in dado:
                         valores["trim"].set(dado)
                         ultimo_trim[0] = dado[len(prefixo):]
@@ -573,10 +690,10 @@ def executar_tela(porta_inicial: str) -> None:
               bg="#dc2626", fg="white", activebackground="#7f1d1d", command=emergencia
               ).pack(side="left", padx=16)
     ttk.Checkbutton(acoes, text="Ensaio a seco (motores parados)", variable=seco_var).pack(side="left", padx=12)
-    modos = ttk.LabelFrame(acoes, text="Compensação (hover + frente/trás/lados)", padding=4)
+    modos = ttk.LabelFrame(acoes, text="Modo de controle", padding=4)
     modos.pack(side="left", padx=12)
-    for chave, (rotulo, _lqi, _trim) in MODOS_COMPENSACAO.items():
-        ttk.Radiobutton(modos, text=rotulo, value=chave, variable=modo_var).pack(anchor="w")
+    for chave, modo in MODOS.items():
+        ttk.Radiobutton(modos, text=modo.rotulo, value=chave, variable=modo_var).pack(anchor="w")
 
     ajustes = ttk.LabelFrame(raiz, text="Ajustes ao vivo", padding=6)
     ajustes.pack(fill="x", padx=8, pady=4)
@@ -596,6 +713,29 @@ def executar_tela(porta_inicial: str) -> None:
              command=lambda v: ajustar("FLT_Z_RATE", f"{float(v) / 100:.2f}")).grid(row=1, column=1)
     ttk.Label(ajustes, text="Com a compensação ligada o CTL_W0 só precisa ficar perto; sem ela, suba até levantar.").grid(
         row=1, column=2, columnspan=2, sticky="w", padx=(16, 0))
+    ttk.Label(ajustes, text="Frente/trás fixo CTL_FF_TH (rad/s, − = traseira mais forte):").grid(
+        row=3, column=0, sticky="w")
+    tk.Scale(ajustes, from_=-200, to=200, orient="horizontal", length=260, variable=ff_th_var,
+             command=lambda v: ajustar("CTL_FF_TH", str(int(float(v))))).grid(row=3, column=1)
+    ttk.Label(ajustes, text="Só desarmado. Ajuste até o 'lqi th=' do log ficar perto de 0 no hover.").grid(
+        row=3, column=2, columnspan=2, sticky="w", padx=(16, 0))
+
+    quadro_lqi = ttk.LabelFrame(
+        raiz, text="Pesos do LQI (Q e R do dlqr; padrão = TCC + integradores) · só desarmado",
+        padding=6)
+    quadro_lqi.pack(fill="x", padx=8, pady=4)
+    for i, (rotulo, chave) in enumerate(CAMPOS_PESOS):
+        linha, coluna = divmod(i, 6)
+        ttk.Label(quadro_lqi, text=rotulo).grid(row=linha, column=2 * coluna, sticky="e", padx=(8, 2))
+        ttk.Entry(quadro_lqi, textvariable=pesos_vars[chave], width=8).grid(
+            row=linha, column=2 * coluna + 1, sticky="w")
+    botoes_lqi = ttk.Frame(quadro_lqi)
+    botoes_lqi.grid(row=0, column=12, rowspan=2, padx=(16, 0))
+    ttk.Button(botoes_lqi, text="Calcular", command=calcular_lqi).pack(fill="x")
+    ttk.Button(botoes_lqi, text="Enviar ao drone", command=enviar_lqi).pack(fill="x", pady=2)
+    ttk.Button(botoes_lqi, text="Padrão", command=padrao_lqi).pack(fill="x")
+    ttk.Label(quadro_lqi, textvariable=resumo_lqi_var, font=("TkFixedFont", 10)).grid(
+        row=2, column=0, columnspan=13, sticky="w", pady=(4, 0))
 
     caixa = tk.Text(raiz, height=8, state="disabled", bg="#111827", fg="#d1d5db")
     caixa.pack(fill="both", expand=True, padx=8, pady=(4, 8))

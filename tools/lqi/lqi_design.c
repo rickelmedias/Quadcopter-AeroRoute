@@ -19,13 +19,23 @@ static const unsigned SUBSYSTEM[] = {LQG_X_Z, LQG_X_PHI, LQG_X_THETA, LQG_X_PSI,
 /** Posição de z, φ e θ dentro do subsistema (o que cada integrador integra). */
 static const unsigned INTEGRATED[LQI_NI] = {0U, 1U, 2U};
 
-void lqi_default_weights(lqi_weights_t *w) {
+void lqi_tcc_weights(lqi_weights_t *w) {
   static const double q_tcc[LQG_NX] = {5, 5, 500, 500, 500, 50, 5, 5, 5, 10, 10, 5};
   memcpy(w->q, q_tcc, sizeof(w->q));
   for (unsigned i = 0U; i < LQG_NU; ++i) w->r[i] = 0.1;
   w->q_int[LQI_I_Z] = 1000.0;
   w->q_int[LQI_I_PHI] = 10000.0;
   w->q_int[LQI_I_THETA] = 10000.0;
+}
+
+void lqi_default_weights(lqi_weights_t *w) {
+  lqi_tcc_weights(w);
+  /* Ensaios de 05/11: a atitude do TCC é macia (50,6 rad/s por rad) e um
+     empurrão inclinava o drone até o corte. Em simulação com o motor
+     atrasando 40/80/120 ms, o rebote caiu de 16/22/28° para 7/11/11°; com
+     φ, θ = 16000 a malha já oscila a 120 ms. */
+  w->q[LQG_X_PHI] = w->q[LQG_X_THETA] = 8000.0;
+  w->q[LQG_X_P] = w->q[LQG_X_Q] = 100.0;
 }
 
 int lqi_design(const lqi_weights_t *w, lqi_gains_t *out) {

@@ -16,6 +16,8 @@
 #include "control/attitude_mode.h"
 #include "control/ctrl_params.h"
 #include "control/lqi.h"
+#include "control/lqi_tuning.h"
+#include "control/lqg_dist.h"
 #include "control/meas.h"
 #include "control/throttle.h"
 #include "control/trim.h"
@@ -55,6 +57,8 @@
 #define DEFAULT_POS_TOL_M 0.05F
 /** Tolerância padrão de guinada, em rad. */
 #define DEFAULT_YAW_TOL_RAD 0.05F
+/** Erro de altura que ainda conta como "alvo acima" para a rampa do estimador no chão, em m. */
+#define DIST_GROUND_ERROR_M 0.02F
 /** Intervalo do relato do trim no log, em ms. */
 #define TRIM_REPORT_MS 2000U
 /** Pedidos que cabem na fila. */
@@ -139,9 +143,9 @@ static bool lifted;
 static uint32_t land_spindown_ms;
 /**
  * Equilíbrio (arfagem e rolagem do trim) do último instante em que o drone
- * estava no ar, nivelado e assentado. O próximo voo começa dele, em vez de
- * reaprender do zero com o lado leve levantando (ensaio de 04/11). Vale até
- * reiniciar a placa.
+ * estava em HOLD, na altura do alvo, nivelado e assentado. O próximo voo
+ * começa dele, em vez de reaprender do zero com o lado leve levantando (ensaio
+ * de 04/11). Vale até reiniciar a placa.
  */
 static trim_state_t trim_learned;
 /** ::trim_learned tem valor. */
@@ -150,14 +154,36 @@ static bool trim_learned_valid;
 static bool lqi_active;
 /** Integradores do LQI (control/lqi.h). */
 static lqi_state_t lqi;
-/** Integradores de φ e θ do último instante no ar, nivelado e assentado (como ::trim_learned). */
-static lqi_state_t lqi_learned;
-/** ::lqi_learned tem valor. */
-static bool lqi_learned_valid;
+/** Ganhos do LQI em uso: os padrão ou os enviados pelo painel (control/lqi_tuning.h). */
+static lqi_gains_t lqi_gains;
+/** Geração de ::lqi_gains. */
+static uint32_t lqi_gains_generation;
+/** O estimador de perturbação está em uso neste passo (CTL_DIST, sem LQI). */
+static bool dist_active;
+/** Estimador de perturbação do "LQG melhorado" (control/lqg_dist.h). */
+static lqg_dist_t dist;
+/** O drone já se soltou do chão neste voo: o estimador pode aprender. */
+static bool dist_released;
 /** Medidas diretas deste passo que alimentam os integradores do LQI. */
 static float lqi_meas_z, lqi_meas_phi, lqi_meas_theta;
 /** A altura medida deste passo é válida. */
 static bool lqi_meas_range_ok;
+/** Altura medida (z NED) filtrada, em m (::FLIGHT_MEAS_Z_TAU_S). */
+static float meas_z_smooth;
+/** Velocidade vertical (z NED) derivada de ::meas_z_smooth e filtrada, em m/s. */
+static float meas_vz;
+/** ::meas_z_smooth já tem valor neste armar. */
+static bool meas_z_tracking;
+/** Tick em que a altura parou de acompanhar o alvo na subida (0 = acompanhando). */
+static uint32_t stuck_since_ms;
+/** Altura filtrada no começo da contagem do travamento (z NED), em m. */
+static float stuck_z0;
+/** Integrador de altura do LQI quando o travamento começou. */
+static float stuck_xi_z;
+/** Hover do ajuste lento quando o travamento começou, em rad/s. */
+static float stuck_trim_z;
+/** Perturbação de altura estimada quando o travamento começou, em rad/s. */
+static float stuck_dist_z;
 /** Tick do último relato do trim no log. */
 static uint32_t trim_report_ms;
 /** O drone já se soltou do chão nesta decolagem (encerra a rampa de partida do hover). */
@@ -414,7 +440,7 @@ static void enter_hold(void) {
  */
 static void lqi_summary(float *z, float *theta, float *phi) {
   float u[LQG_NU];
-  lqi_output(&lqi, &LQI_GAINS, u);
+  lqi_output(&lqi, &lqi_gains, u);
   *z = 0.25F * (u[0] + u[1] + u[2] + u[3]);
   *theta = 0.25F * (u[0] + u[1] - u[2] - u[3]);
   *phi = 0.25F * (u[0] - u[1] - u[2] + u[3]);
@@ -429,6 +455,11 @@ static void report_and_reset_trim(void) {
     lqi_summary(&z, &th, &ph);
     say("lqi z=%d th=%d phi=%d rad/s", (int)z, (int)th, (int)ph);
   }
+  if (dist.started[LQG_DIST_Z] || dist.started[LQG_DIST_THETA]) {
+    say("dist z=%d th=%d phi=%d rad/s", (int)lqg_dist_get(&dist, LQG_DIST_Z),
+        (int)lqg_dist_get(&dist, LQG_DIST_THETA), (int)lqg_dist_get(&dist, LQG_DIST_PHI));
+  }
+  lqg_dist_reset(&dist);
   lqi_reset(&lqi);
   trim_reset(&trim);
   trim_released = false;
@@ -536,12 +567,12 @@ static void handle_request(const request_t *req, uint32_t now) {
          continua zerada na energização (ver meas_rearm). */
       lqg_ert_init(&lqg);
       meas_rearm(&meas);
+      /* O LQI começa do zero a cada voo, por cima do desequilíbrio fixo
+         (CTL_FF_TH/PHI). Lembrar os integradores do voo anterior já trouxe
+         valores de quando o drone estava preso (05/11). */
       lqi_reset(&lqi);
-      if (lqi_learned_valid) {
-        lqi.xi[LQI_I_PHI] = lqi_learned.xi[LQI_I_PHI];
-        lqi.xi[LQI_I_THETA] = lqi_learned.xi[LQI_I_THETA];
-        say("lqi: equilibrio inicial do voo anterior");
-      }
+      lqg_dist_reset(&dist);
+      dist_released = false;
       trim_reset(&trim);
       if (trim_learned_valid) {
         trim.theta = trim_learned.theta;
@@ -550,6 +581,8 @@ static void handle_request(const request_t *req, uint32_t now) {
       }
       trim_released = false;
       land_spindown_ms = 0U;
+      stuck_since_ms = 0U;
+      meas_z_tracking = false;
       lifted = false;
       memset(ref, 0, sizeof(ref));
       memset(&goal, 0, sizeof(goal));
@@ -751,6 +784,100 @@ static void check_goal(const float x[LQG_NX], uint32_t now) {
 }
 
 
+/**
+ * @brief Filtra a altura medida e deriva dela a velocidade vertical.
+ *
+ * O Kalman não serve para dizer se o drone sobe ou desce quando algo o segura:
+ * o modelo prevê o movimento que o LQR pede, a altura medida só corrige a
+ * posição, e a velocidade estimada fica enviesada (05/11: 4–5 cm/s de subida
+ * com o drone parado nas cordinhas). Sem medida neste passo, mantém o valor.
+ *
+ * @param[in] flags  Medidas válidas neste passo.
+ * @param[in] y      Medidas.
+ */
+static void track_height(uint8_t flags, const lqg_real_t y[LQG_NY]) {
+  if ((flags & MEAS_RANGE) == 0U) return;
+  const float z = (float)y[LQG_Y_Z];
+  if (!meas_z_tracking) {
+    meas_z_smooth = z;
+    meas_vz = 0.0F;
+    meas_z_tracking = true;
+    return;
+  }
+  const float a = DT_S / FLIGHT_MEAS_Z_TAU_S;
+  const float previous = meas_z_smooth;
+  meas_z_smooth += a * (z - meas_z_smooth);
+  meas_vz += a * ((meas_z_smooth - previous) / DT_S - meas_vz);
+}
+
+/**
+ * @brief Na subida, segura na altura medida se o drone parou de subir.
+ *
+ * Preso por cordinhas ou num teto, o drone não acompanha a referência e o
+ * integrador de altura cresce sem parar, até a inclinação passar do corte
+ * (ensaio de 05/11). Ver ::FLIGHT_STUCK_ERROR_M. Só na decolagem e nos
+ * trechos: em HOLD o integrador precisa poder crescer (bateria caindo).
+ *
+ * @param[in] now  Tick atual.
+ */
+static void check_stuck(uint32_t now) {
+  const bool chasing = state == FLIGHT_STATE_TAKEOFF || state == FLIGHT_STATE_EXECUTING_LEG;
+  const float z = meas_z_smooth;
+  const bool behind = chasing && !dry_run && meas_z_tracking && isfinite(z_ground) &&
+                      z_ground - z >= FLIGHT_STUCK_MIN_HEIGHT_M &&
+                      z - ref[LQG_R_Z] > FLIGHT_STUCK_ERROR_M;
+  if (!behind) {
+    stuck_since_ms = 0U;
+    return;
+  }
+  /* Começa (ou recomeça, se subiu) a contagem guardando o empuxo de agora. */
+  if (stuck_since_ms == 0U || stuck_z0 - z > FLIGHT_STUCK_RISE_M) {
+    stuck_since_ms = now != 0U ? now : 1U;
+    stuck_z0 = z;
+    stuck_xi_z = lqi.xi[LQI_I_Z];
+    stuck_dist_z = lqg_dist_get(&dist, LQG_DIST_Z);
+    stuck_trim_z = trim.z;
+    return;
+  }
+  if (now - stuck_since_ms < FLIGHT_STUCK_MS) return;
+  /* O empuxo acumulado desde o travamento só empurrava contra o que prende. */
+  if (lqi.xi[LQI_I_Z] > stuck_xi_z) lqi.xi[LQI_I_Z] = stuck_xi_z;
+  if (lqg_dist_get(&dist, LQG_DIST_Z) > stuck_dist_z) lqg_dist_set(&dist, LQG_DIST_Z, stuck_dist_z);
+  if (trim.z > stuck_trim_z) trim.z = stuck_trim_z;
+  ref[LQG_R_Z] = z;
+  finish_goal(FLIGHT_REQUEST_FAILED, FLIGHT_REASON_OUT_OF_BOUNDS);
+  enter_hold();
+  stuck_since_ms = 0U;
+  say("altura nao sobe (preso?): HOLD em %d cm", (int)((z_ground - z) * 100.0F));
+}
+
+/**
+ * @brief No pouso, desconta o hover dos integradores se o drone não desce.
+ *
+ * O integrador de altura guarda o empuxo extra do hover e desfaz devagar: com
+ * a referência já no chão, o drone ficava parado no alto e a descida só vinha
+ * de repente (ensaio de 05/11). Ver ::FLIGHT_LAND_BLEED_RATE. Sem integrador
+ * (nem LQI nem ajuste lento) não há o que descontar.
+ */
+static void land_bleed(void) {
+  if (state != FLIGHT_STATE_LAND || land_spindown_ms != 0U || dry_run || !meas_z_tracking) {
+    return;
+  }
+  /* z NED: a referência maior que a medida é o drone acima dela. A velocidade
+     é a medida (track_height): a do Kalman acha que ele desce quando o LQR pede. */
+  const bool above = ref[LQG_R_Z] - meas_z_smooth > FLIGHT_LAND_ABOVE_M;
+  const bool descending = meas_vz > FLIGHT_LAND_DESCENT_M_S;
+  if (!above || descending) return;
+  const float delta = FLIGHT_LAND_BLEED_RATE * DT_S;
+  if (lqi_active) {
+    lqi_reduce_hover(&lqi, &lqi_gains, delta, prm.lqi_max);
+  } else if (dist_active) {
+    lqg_dist_set(&dist, LQG_DIST_Z, fmaxf(lqg_dist_get(&dist, LQG_DIST_Z) - delta, -prm.lqi_max));
+  } else if (prm.trim >= 0.5F) {
+    trim.z = fmaxf(trim.z - delta, -prm.trim_max);
+  }
+}
+
 /** @brief Termina o pouso ao encostar no chão (ou pelo tempo, sem telêmetro). */
 static void check_land(uint8_t flags, const lqg_real_t y[LQG_NY], uint32_t now) {
   if (state != FLIGHT_STATE_LAND) return;
@@ -779,6 +906,20 @@ static void check_land(uint8_t flags, const lqg_real_t y[LQG_NY], uint32_t now) 
 }
 
 /**
+ * @brief O equilíbrio deste passo vale para o próximo voo.
+ *
+ * Só em HOLD, com a altura medida no alvo, nivelado e assentado: na subida
+ * presa (05/11) o equilíbrio guardado era o de quem empurra uma cordinha.
+ */
+static bool balance_is_learnable(void) {
+  return lifted && state == FLIGHT_STATE_HOLD && lqi_meas_range_ok &&
+         fabsf(lqi_meas_z - ref[LQG_R_Z]) < TRIM_LEARN_Z_ERROR_M &&
+         fabsf((float)lqg.x_filt[LQG_X_THETA]) < TRIM_LEARN_LEVEL_RAD &&
+         fabsf((float)lqg.x_filt[LQG_X_PHI]) < TRIM_LEARN_LEVEL_RAD &&
+         fabsf((float)lqg.x_filt[LQG_X_VZ]) < TRIM_SETTLED_VZ;
+}
+
+/**
  * @brief Avança o ajuste lento do hover e do equilíbrio.
  *
  * Só integra no ar, com motores reais, sem saturação e com altura medida. O
@@ -803,10 +944,7 @@ static void update_trim(bool enabled) {
     say("trim z=%d th=%d phi=%d%s", (int)trim.z, (int)trim.theta, (int)trim.phi,
         at_limit ? " NO LIMITE" : "");
   }
-  /* Guarda o equilíbrio enquanto o drone está no ar, nivelado e assentado. */
-  if (enabled && lifted && fabsf((float)lqg.x_filt[LQG_X_THETA]) < TRIM_LEARN_LEVEL_RAD &&
-      fabsf((float)lqg.x_filt[LQG_X_PHI]) < TRIM_LEARN_LEVEL_RAD &&
-      fabsf((float)lqg.x_filt[LQG_X_VZ]) < TRIM_SETTLED_VZ) {
+  if (enabled && balance_is_learnable()) {
     trim_learned = trim;
     trim_learned_valid = true;
   }
@@ -830,13 +968,7 @@ static void update_lqi(bool enabled) {
     float z, th, ph;
     lqi_summary(&z, &th, &ph);
     say("lqi z=%d th=%d phi=%d%s", (int)z, (int)th, (int)ph,
-        lqi_at_limit(&lqi, &LQI_GAINS, prm.lqi_max) ? " NO LIMITE" : "");
-  }
-  if (enabled && lifted && fabsf((float)lqg.x_filt[LQG_X_THETA]) < TRIM_LEARN_LEVEL_RAD &&
-      fabsf((float)lqg.x_filt[LQG_X_PHI]) < TRIM_LEARN_LEVEL_RAD &&
-      fabsf((float)lqg.x_filt[LQG_X_VZ]) < TRIM_SETTLED_VZ) {
-    lqi_learned = lqi;
-    lqi_learned_valid = true;
+        lqi_at_limit(&lqi, &lqi_gains, prm.lqi_max) ? " NO LIMITE" : "");
   }
   /* No ar, o erro de ângulo integrado é limitado (anti-windup); no chão entra
      inteiro, porque é ali que o desequilíbrio precisa ser achado. */
@@ -846,7 +978,38 @@ static void update_lqi(bool enabled) {
       fmaxf(fminf(lqi_meas_phi, att_limit), -att_limit),
       fmaxf(fminf(lqi_meas_theta, att_limit), -att_limit),
   };
-  lqi_update(&lqi, &LQI_GAINS, enabled, DT_S, error, prm.lqi_max);
+  lqi_update(&lqi, &lqi_gains, enabled, DT_S, error, prm.lqi_max);
+}
+
+/**
+ * @brief Prediz o estimador de perturbação com o comando aplicado e relata.
+ *
+ * Mesmas condições dos integradores: a perturbação só muda no ar, com motores
+ * reais, sem rampa e sem saturação; a de altura só com o MTF respondendo.
+ * Posição e velocidade do estimador continuam acompanhando sempre.
+ *
+ * @param[in] enabled  O controle está ativo e nada saturou neste passo.
+ * @param[in] u        Desvio aplicado em u1..u4 sem o desequilíbrio fixo, em rad/s.
+ */
+static void update_dist(bool enabled, const float u[LQG_NU]) {
+  const uint32_t now = HAL_GetTick();
+  if (enabled && now - trim_report_ms >= TRIM_REPORT_MS) {
+    trim_report_ms = now;
+    say("dist z=%d th=%d phi=%d", (int)lqg_dist_get(&dist, LQG_DIST_Z),
+        (int)lqg_dist_get(&dist, LQG_DIST_THETA), (int)lqg_dist_get(&dist, LQG_DIST_PHI));
+  }
+  /* No chão o apoio segura o drone, e o estimador leria isso como empuxo
+     sobrando (05/11: d̂ de altura em −160 rad/s e o drone não decolava). Até
+     ele se soltar, nada é estimado; com o alvo acima, o hover sobe numa rampa
+     fixa, como no ajuste lento. */
+  const float height = isfinite(z_ground) ? z_ground - meas_z_smooth : 0.0F;
+  if (enabled && meas_z_tracking && height >= TRIM_RELEASE_HEIGHT_M) dist_released = true;
+  lqg_dist_predict(&dist, u, !enabled || !dist_released, !lqi_meas_range_ok, prm.lqi_max);
+  if (enabled && !dist_released && meas_z_tracking &&
+      meas_z_smooth - ref[LQG_R_Z] > DIST_GROUND_ERROR_M) {
+    lqg_dist_set(&dist, LQG_DIST_Z,
+                 fminf(lqg_dist_get(&dist, LQG_DIST_Z) + TRIM_GROUND_RATE * DT_S, prm.lqi_max));
+  }
 }
 
 /**
@@ -875,19 +1038,36 @@ static void compute_output(const lqg_real_t du[LQG_NU], float throttle[LQG_NU],
     for (unsigned i = 0U; i < LQG_NU; ++i) {
       throttle[i] = is_armed_state(state) ? prm.mot_idle : 0.0F;
     }
-    if (lqi_active) update_lqi(false); else update_trim(false);
+    if (lqi_active) {
+      update_lqi(false);
+    } else if (dist_active) {
+      const float idle[LQG_NU] = {0.0F, 0.0F, 0.0F, 0.0F};
+      update_dist(false, idle);
+    } else {
+      update_trim(false);
+    }
     return;
   }
 
+  land_bleed();
   const float span = prm.mot_w_at_100 - prm.mot_w_at_0;
-  /* Correção lenta somada ao du: os integradores do LQI ou, sem ele, o ajuste
-     lento. Nos dois casos fica fora da predição do Kalman (ver du_applied). */
-  float trim_w[LQG_NU] = {0.0F, 0.0F, 0.0F, 0.0F};
+  /* Somado ao du: o desequilíbrio fixo (CTL_FF_TH/PHI, o ponto de operação do
+     drone com a traseira pesada) e a correção lenta: os integradores do LQI,
+     a perturbação estimada (LQG melhorado) ou o ajuste lento. Tudo fica fora
+     da predição do Kalman (ver du_applied): é um peso que o modelo não
+     conhece, não uma entrada. */
+  float trim_w[LQG_NU];
+  const trim_state_t feedforward = {.z = 0.0F, .theta = prm.ff_theta, .phi = prm.ff_phi};
+  trim_values(&feedforward, trim_w);
+  float slow_w[LQG_NU] = {0.0F, 0.0F, 0.0F, 0.0F};
   if (lqi_active) {
-    lqi_output(&lqi, &LQI_GAINS, trim_w);
+    lqi_output(&lqi, &lqi_gains, slow_w);
+  } else if (dist_active) {
+    lqg_dist_output(&dist, slow_w);
   } else if (prm.trim >= 0.5F) {
-    trim_values(&trim, trim_w);
+    trim_values(&trim, slow_w);
   }
+  for (unsigned i = 0U; i < LQG_NU; ++i) trim_w[i] += slow_w[i];
   for (unsigned i = 0U; i < LQG_NU; ++i) {
     const float w = prm.w0 + (float)du[i] + trim_w[i];
     throttle[i] = span > 0.0F ? (w - prm.mot_w_at_0) / span : 0.0F;
@@ -919,6 +1099,10 @@ static void compute_output(const lqg_real_t du[LQG_NU], float throttle[LQG_NU],
                          (*flags & FLIGHT_FLAG_SATURATED) == 0U;
   if (lqi_active) {
     update_lqi(integrate);
+  } else if (dist_active) {
+    float u[LQG_NU];
+    for (unsigned i = 0U; i < LQG_NU; ++i) u[i] = (float)du_applied[i] + slow_w[i];
+    update_dist(integrate, u);
   } else {
     update_trim(integrate);
   }
@@ -968,6 +1152,11 @@ static void step(uint32_t step_count) {
     ctrl_gains_copy_active(&gains, &gains_generation);
     if (is_armed_state(state)) say("voo: ganhos novos em uso");
   }
+  /* Ganhos do LQI só trocam desarmado: o ξ em voo está na escala do Ki. */
+  if (lqi_tuning_generation() != lqi_gains_generation && !is_armed_state(state)) {
+    lqi_tuning_copy_active(&lqi_gains, &lqi_gains_generation);
+    say("lqi: ganhos %s em uso", lqi_tuning_is_default() ? "padrao" : "do painel");
+  }
 
   /* Depois de um armar, os pedidos seguintes esperam o próximo passo: a
      decolagem precisa da altura do chão, que só é medida neste passo. */
@@ -984,9 +1173,14 @@ static void step(uint32_t step_count) {
   const uint8_t meas_flags = meas_update(&meas, &in, &prm, y);
   /* O LQI foi projetado sem a posição horizontal: com ele, x e y saem da malha. */
   lqi_active = prm.use_lqi >= 0.5F;
+  dist_active = !lqi_active && prm.use_dist >= 0.5F;
   const bool use_xy = prm.use_xy >= 0.5F && !lqi_active;
   gains_effective = gains;
-  if (lqi_active) lqi_apply_gains(&LQI_GAINS, &gains_effective);
+  if (lqi_active) {
+    lqi_apply_gains(&lqi_gains, &gains_effective);
+  } else if (prm.lqg_adjusted >= 0.5F) {
+    lqg_dist_apply_gains(&gains_effective);
+  }
   lqi_meas_z = (float)y[LQG_Y_Z];
   lqi_meas_phi = (float)y[LQG_Y_PHI];
   lqi_meas_theta = (float)y[LQG_Y_THETA];
@@ -1015,6 +1209,11 @@ static void step(uint32_t step_count) {
     lifted = true;
   }
   supervise(meas_flags, y, now);
+  track_height(meas_flags, y);
+  if (dist_active && is_armed_state(state)) {
+    lqg_dist_correct(&dist, y, (meas_flags & MEAS_RANGE) != 0U);
+  }
+  check_stuck(now);
   update_reference(now);
 
   lqg_real_t r[LQG_NR];
@@ -1054,6 +1253,7 @@ static void flight_task(void *argument) {
   lqg_ert_init(&lqg);
   meas_reset(&meas);
   ctrl_gains_copy_active(&gains, &gains_generation);
+  lqi_tuning_copy_active(&lqi_gains, &lqi_gains_generation);
   state = FLIGHT_STATE_STANDBY;
   uint32_t count = 0U;
   TickType_t wake = xTaskGetTickCount();
@@ -1071,6 +1271,7 @@ static StackType_t flight_stack[1024];
 bool flight_ctrl_start(void) {
   ctrl_params_init();
   ctrl_gains_init();
+  lqi_tuning_init();
   requests = xQueueCreateStatic(REQUEST_QUEUE_DEPTH, sizeof(request_t), requests_storage,
                                 &requests_memory);
   return requests != NULL &&

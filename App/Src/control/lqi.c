@@ -42,6 +42,16 @@ void lqi_output(const lqi_state_t *s, const lqi_gains_t *g, float out[LQG_NU]) {
   }
 }
 
+void lqi_reduce_hover(lqi_state_t *s, const lqi_gains_t *g, float delta_rad_s,
+                      float limit_rad_s) {
+  /* Correção média por unidade de ξ_z: -Ki_z (positivo, sobe os quatro). */
+  float per_xi = 0.0F;
+  for (unsigned i = 0U; i < LQG_NU; ++i) per_xi -= 0.25F * (float)g->Ki[i][LQI_I_Z];
+  if (!(per_xi > 0.0F) || !(delta_rad_s > 0.0F)) return;
+  const float floor_xi = -xi_limit(g, LQI_I_Z, limit_rad_s);
+  s->xi[LQI_I_Z] = fmaxf(s->xi[LQI_I_Z] - delta_rad_s / per_xi, floor_xi);
+}
+
 bool lqi_at_limit(const lqi_state_t *s, const lqi_gains_t *g, float limit_rad_s) {
   for (unsigned k = 0U; k < LQI_NI; ++k) {
     const float limit = xi_limit(g, k, limit_rad_s);
