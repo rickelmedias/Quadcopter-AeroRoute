@@ -21,6 +21,13 @@
  * isso, enquanto o drone ainda está no chão e o alvo está acima, `z` sobe numa
  * rampa fixa (`ground_rate`) até ele se soltar; no ar volta o integrador lento.
  *
+ * No ar, o erro de ângulo que entra no equilíbrio é limitado (`att_error_max`):
+ * um empurrão passageiro (uma cordinha, um toque) faz o ângulo saltar por um
+ * instante e, sem esse limite, o equilíbrio acumulava demais e o drone passava
+ * do ponto para o outro lado quando o empurrão acabava (ensaio de 04/11: +16°
+ * seguido de −20,5° e corte). No chão o erro inteiro conta, porque é ali que o
+ * desequilíbrio de peso precisa ser achado.
+ *
  * Enquanto a arfagem ou a rolagem estiverem no limite, o hover não sobe: mais
  * empuxo igual nos quatro iria todo para o lado leve.
  *
@@ -50,6 +57,7 @@ typedef struct {
   float settled_vz;  /**< `z` só integra no ar com |vz| abaixo disto, em m/s (assentado). */
   float max_z;       /**< Limite de |z|, em rad/s. */
   float max_att;     /**< Limite de |theta| e |phi|, em rad/s. */
+  float att_error_max; /**< No ar, o erro de ângulo integrado é limitado a ± isto, em rad. */
 } trim_config_t;
 
 /** @brief Zera os termos. */

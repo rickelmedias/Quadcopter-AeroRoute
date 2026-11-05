@@ -190,6 +190,12 @@
 #define TRIM_GROUND_RATE       10.0F
 /** Altura acima do chão (estimada) que marca o desprendimento, em m. */
 #define TRIM_RELEASE_HEIGHT_M  0.010F
+/**
+ * No ar, o erro de ângulo integrado pelo equilíbrio fica limitado a ± isto, em
+ * rad (~4,6°). Em simulação, um empurrão que inclina o drone e some reduziu o
+ * rebote de +57° para +12° com este limite.
+ */
+#define TRIM_ATT_ERROR_MAX_RAD 0.08F
 /** O hover só integra no ar com |vz| abaixo disto, em m/s. */
 #define TRIM_SETTLED_VZ        0.05F
 /** Começa em ensaio a seco: os motores só giram depois de FLT_DRY_RUN = 0. */

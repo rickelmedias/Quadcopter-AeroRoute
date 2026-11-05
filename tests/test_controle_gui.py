@@ -56,6 +56,18 @@ def test_comando_ligar():
         "param set FLT_DRY_RUN 0", "param set CTL_TRIM 0", "hover 0.15"]
 
 
+def test_comando_ligar_respeita_a_altura_escolhida():
+    assert g.comando_ligar(True, True, 0.05)[-1] == "hover 0.05"
+    assert g.comando_ligar(True, True, 0.50)[-1] == "hover 0.15"  # nunca acima do limite
+    assert g.comando_ligar(True, True, 0.0)[-1] == "hover 0.03"
+
+
+def test_sugestao_w0():
+    assert g.sugestao_w0(768, "z=132 th=-145 phi=-18 rad/s") == 900
+    assert g.sugestao_w0(768, "z=-10 th=0 phi=0 NO LIMITE") == 758
+    assert g.sugestao_w0(768, "sem nada") is None
+
+
 def test_altura_do_painel_igual_ao_limite_do_firmware():
     config = (RAIZ / "App/Inc/flight_config.h").read_text()
     limite = float(re.search(r"#define FLIGHT_MAX_HEIGHT_M\s+([0-9.]+)F", config).group(1))

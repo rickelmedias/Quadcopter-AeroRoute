@@ -739,7 +739,8 @@ static void update_trim(bool enabled) {
   if (enabled && height >= TRIM_RELEASE_HEIGHT_M) trim_released = true;
   const trim_config_t cfg = {.ki_z = prm.trim_ki_z, .ki_att = prm.trim_ki_att,
                              .ground_rate = TRIM_GROUND_RATE, .settled_vz = TRIM_SETTLED_VZ,
-                             .max_z = prm.trim_max, .max_att = prm.trim_att_max};
+                             .max_z = prm.trim_max, .max_att = prm.trim_att_max,
+                             .att_error_max = TRIM_ATT_ERROR_MAX_RAD};
   const uint32_t now = HAL_GetTick();
   if (enabled && now - trim_report_ms >= TRIM_REPORT_MS) {
     trim_report_ms = now;

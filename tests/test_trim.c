@@ -20,7 +20,8 @@
 
 /** Configuração usada no firmware (flight_config.h). */
 static const trim_config_t CFG = {.ki_z = 20.0F, .ki_att = 80.0F, .ground_rate = 10.0F,
-                                  .settled_vz = 0.05F, .max_z = 250.0F, .max_att = 250.0F};
+                                  .settled_vz = 0.05F, .max_z = 250.0F, .max_att = 250.0F,
+                                  .att_error_max = 0.08F};
 
 /** @brief Os sinais do trim batem com as colunas da matriz B (efeito sobre θ e φ). */
 static void test_signs_match_b_matrix(void) {
@@ -63,6 +64,15 @@ static void test_limits_and_freeze(void) {
   assert(t.z == 0.0F);
   trim_update(&t, &CFG, true, 0.01F, false, 0.0F, -0.1F, 0.0F, 0.2F);
   assert(t.z < 0.0F);
+
+  /* No ar, um ângulo grande integra como se fosse o limite; no chão, inteiro. */
+  trim_state_t air, ground;
+  trim_reset(&air);
+  trim_reset(&ground);
+  trim_update(&air, &CFG, true, 1.0F, false, 0.0F, 0.0F, 0.0F, 0.3F);
+  trim_update(&ground, &CFG, true, 1.0F, true, 0.0F, 0.0F, 0.0F, 0.3F);
+  assert(fabsf(air.theta + CFG.ki_att * 0.08F) < 1e-4F);
+  assert(fabsf(ground.theta + CFG.ki_att * 0.3F) < 1e-4F);
 }
 
 /** Ruído uniforme em [-1, 1]. */
@@ -74,7 +84,20 @@ static double noise(void) { return (rand() / (double)RAND_MAX - 0.5) * 2.0; }
  *
  * O Kalman recebe só o du (o trim é o novo ponto de hover).
  */
+static void simulate_push(double dh, double dth, double dph, double push, double *rebound_deg);
+
+/** @brief Decolagem sem empurrão (ver simulate_push). */
 static void simulate(double dh, double dth, double dph) {
+  double rebound;
+  simulate_push(dh, dth, dph, 0.0, &rebound);
+}
+
+/**
+ * @brief Decolagem e, depois de assentado, um empurrão de @p push rad/s na
+ *        arfagem por 1,5 s. @p rebound_deg recebe a maior arfagem do lado
+ *        oposto depois do empurrão.
+ */
+static void simulate_push(double dh, double dth, double dph, double push, double *rebound_deg) {
   srand(7);
   lqg_gains_t g = LQG_ERT_DEFAULT_GAINS;
   attitude_mode_mask_gains(&g);
@@ -90,7 +113,8 @@ static void simulate(double dh, double dth, double dph) {
   x[LQG_X_Z] = ground;
   double zref = ground, max_height = 0.0;
   int released = 0;
-  for (int k = 0; k < 4000; ++k) {
+  *rebound_deg = 0.0;
+  for (int k = 0; k < 6000; ++k) {
     if (k >= 100) zref = fmax(zref - 0.05 * LQG_TS_S, ground - 0.15);
     lqg_real_t y[LQG_NY], du[LQG_NU];
     const lqg_real_t r[LQG_NR] = {0.0, 0.0, zref, 0.0};
@@ -107,6 +131,7 @@ static void simulate(double dh, double dth, double dph) {
     trim_values(&tr, tv);
     lqg_ert_update(&f, &g, du);
     if (ground - f.x_filt[LQG_X_Z] >= 0.010) released = 1;
+    const double extra = (k >= 4000 && k < 4150) ? push : 0.0;
     trim_update(&tr, &CFG, k >= 100, 0.01F, !released, (float)f.x_filt[LQG_X_VZ],
                 (float)(f.x_filt[LQG_X_Z] - zref), (float)f.x_filt[LQG_X_PHI],
                 (float)f.x_filt[LQG_X_THETA]);
@@ -115,7 +140,7 @@ static void simulate(double dh, double dth, double dph) {
       double sum = 0.0;
       for (unsigned j = 0U; j < LQG_NX; ++j) sum += LQG_ERT_A[i][j] * x[j];
       for (unsigned j = 0U; j < LQG_NU; ++j) {
-        const double input = du[j] + tv[j] - dh - dth * theta_sign[j] - dph * phi_sign[j];
+        const double input = du[j] + tv[j] - dh - (dth + extra) * theta_sign[j] - dph * phi_sign[j];
         sum += LQG_ERT_B[i][j] * input;
       }
       next[i] = sum;
@@ -126,6 +151,7 @@ static void simulate(double dh, double dth, double dph) {
       if (x[LQG_X_VZ] > 0.0) x[LQG_X_VZ] = 0.0;
     }
     max_height = fmax(max_height, ground - x[LQG_X_Z]);
+    if (k >= 4150) *rebound_deg = fmax(*rebound_deg, x[LQG_X_THETA] * 57.29578);
   }
   assert(fabs(x[LQG_X_THETA]) < 0.01 && fabs(x[LQG_X_PHI]) < 0.01);    /* < 0,6 grau */
   assert(fabs((ground - x[LQG_X_Z]) - 0.15) < 0.01);                    /* 15 cm, erro < 1 cm */
@@ -142,6 +168,10 @@ int main(void) {
   simulate(80.0, 25.0, 10.0);
   simulate(120.0, 30.0, -20.0);
   simulate(170.0, 125.0, 0.0);  /* desequilíbrio medido no ensaio de 04/11 */
+  double rebound;
+  simulate_push(170.0, 125.0, 0.0, 60.0, &rebound);  /* empurrão de 1,5 s */
+  printf("  rebote depois do empurrao: %.1f graus\n", rebound);
+  assert(rebound < 15.0);
   printf("test_trim: ok\n");
   return 0;
 }

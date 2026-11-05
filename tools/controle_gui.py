@@ -31,6 +31,13 @@ registra no log o que aprendeu ao pousar (``trim z=.. th=.. phi=..``).
 Pouso: ao encostar no chão a aceleração desce em rampa até a marcha lenta
 (1,5 s) e só então desarma, em vez de cortar de uma vez.
 
+Altura: escolha no painel (3 a 15 cm) uma altura que as cordinhas da bancada
+deixem alcançar. Se o drone fica preso abaixo do alvo, a compensação de hover
+continua somando empuxo contra as cordinhas, que puxam torto.
+
+CTL_W0: com a compensação ligada, ajuste só antes de LIGAR. Ao pousar, o painel
+sugere o próximo valor (``CTL_W0 + z`` aprendido).
+
 Segurança no firmware: inclinação acima de 20 graus corta os motores; altura
 acima de 35 cm pousa; se o PC calar por 1 s (watchdog), o drone pousa em rampa.
 """
@@ -48,8 +55,10 @@ from serial.tools import list_ports
 
 #: Porta padrão do STM32 (CDC).
 PORTA_PADRAO = "/dev/ttyACM0"
-#: Altura da subida pedida, em m (o firmware também limita a este valor).
+#: Maior altura da subida, em m (o firmware também limita a este valor).
 ALTURA_M = 0.15
+#: Menor altura escolhível no painel, em m.
+ALTURA_MIN_M = 0.03
 #: Prazo do watchdog do firmware, em ms.
 WATCHDOG_MS = 1000
 #: Intervalo entre mensagens de "estou vivo", em s.
@@ -148,15 +157,31 @@ def du_por_motor(du_entradas: list[float]) -> list[float]:
     return por_motor
 
 
-def comando_ligar(seco: bool, compensar: bool = True) -> list[str]:
-    """Comandos que armam e sobem ``ALTURA_M`` (ensaio a seco ou real).
+def comando_ligar(seco: bool, compensar: bool = True, altura_m: float = ALTURA_M) -> list[str]:
+    """Comandos que armam e sobem ``altura_m`` (ensaio a seco ou real).
 
     ``compensar`` liga o ajuste lento do hover e do equilíbrio (``CTL_TRIM``,
     ``control/trim.h``): sem ele, um peso mal distribuído ou um hover errado
     deixam o drone no chão ou inclinado.
     """
     return [f"param set FLT_DRY_RUN {1 if seco else 0}",
-            f"param set CTL_TRIM {1 if compensar else 0}", f"hover {ALTURA_M:.2f}"]
+            f"param set CTL_TRIM {1 if compensar else 0}",
+            f"hover {min(max(altura_m, ALTURA_MIN_M), ALTURA_M):.2f}"]
+
+
+def sugestao_w0(w0_atual: float, texto_trim: str) -> int | None:
+    """Novo ``CTL_W0`` a partir da última mensagem ``trim z=.. th=.. phi=..``.
+
+    O hover real é ``CTL_W0 + z``: começar o próximo voo já nele deixa a
+    compensação de hover perto de zero. None se o texto não tiver ``z=``.
+    """
+    for parte in texto_trim.split():
+        if parte.startswith("z="):
+            try:
+                return int(round(w0_atual + float(parte[2:])))
+            except ValueError:
+                return None
+    return None
 
 
 class Enlace:
@@ -256,6 +281,9 @@ def executar_tela(porta_inicial: str) -> None:
     trim_var = tk.BooleanVar(value=True)
     gravar_var = tk.BooleanVar(value=True)
     w0_var = tk.IntVar(value=768)
+    altura_var = tk.IntVar(value=int(round(ALTURA_M * 100)))  # cm
+    ultimo_trim = [""]
+    armado_antes = [False]
     maxmot_var = tk.IntVar(value=80)
     rampa_var = tk.IntVar(value=5)
     valores: dict[str, tk.StringVar] = {k: tk.StringVar(value="--") for k in (
@@ -338,17 +366,23 @@ def executar_tela(porta_inicial: str) -> None:
             return
         if not seco_var.get() and not messagebox.askokcancel(
             "Soltar os motores?",
-            f"Ensaio a seco DESLIGADO: os motores vão girar e o drone vai subir {ALTURA_M * 100:.0f} cm.\n\n"
+            f"Ensaio a seco DESLIGADO: os motores vão girar e o drone vai subir {altura_var.get()} cm.\n\n"
             "• Drone PRESO (barbante) e em área livre?\n• Hélices conferidas?\n"
             "• Mão no botão de EMERGÊNCIA (barra de espaço)?",
         ):
             return
-        for cmd in comando_ligar(seco_var.get(), trim_var.get()):
+        for cmd in comando_ligar(seco_var.get(), trim_var.get(), altura_var.get() / 100):
             mandar(cmd)
         botao_travado_ate[0] = time.monotonic() + TRAVA_BOTAO_S
-        escrever_log("LIGAR: " + ("ensaio a seco" if seco_var.get() else "MOTORES REAIS") + f", subindo {ALTURA_M * 100:.0f} cm")
+        escrever_log("LIGAR: " + ("ensaio a seco" if seco_var.get() else "MOTORES REAIS") + f", subindo {altura_var.get()} cm")
 
     def ajustar(nome: str, valor: str) -> None:
+        armado = est.estado in (ESTADO_ARMADO, ESTADO_DECOLANDO, ESTADO_HOLD, ESTADO_POUSANDO)
+        if nome == "CTL_W0" and armado and trim_var.get():
+            # Com a compensação ligada, mudar o hover em voo soma um degrau nos
+            # quatro motores por cima do que ela já achou (ensaio de 04/11).
+            escrever_log("CTL_W0 não muda em voo com a compensação ligada; ajuste antes de LIGAR")
+            return
         mandar(f"param set {nome} {valor}")
 
     # ---- laço periódico --------------------------------------------------
@@ -363,6 +397,13 @@ def executar_tela(porta_inicial: str) -> None:
             except queue.Empty:
                 break
             if tipo == "est":
+                armado = dado.estado in (ESTADO_ARMADO, ESTADO_DECOLANDO, ESTADO_HOLD, ESTADO_POUSANDO)
+                if armado_antes[0] and not armado and ultimo_trim[0]:
+                    sugestao = sugestao_w0(w0_var.get(), ultimo_trim[0])
+                    if sugestao is not None:
+                        escrever_log(f"sugestão para o próximo voo: CTL_W0 = {sugestao} "
+                                     f"(hover aprendido: {ultimo_trim[0]})")
+                armado_antes[0] = armado
                 est = dado
                 if est.estado == ESTADO_STANDBY or chao_m[0] is None:
                     chao_m[0] = est.altura_m
@@ -372,6 +413,7 @@ def executar_tela(porta_inicial: str) -> None:
                 escrever_log(dado)
                 if dado.startswith("trim "):
                     valores["trim"].set(dado[len("trim "):])
+                    ultimo_trim[0] = dado[len("trim "):]
                 if arquivo[0] is not None:
                     arquivo[0].write(f"{time.time():.3f};TXT;{dado}\n")
             elif tipo == "bruta" and arquivo[0] is not None:
@@ -400,7 +442,7 @@ def executar_tela(porta_inicial: str) -> None:
         valores["altura"].set(f"{est.altura_m * 1000:6.0f} mm")
         valores["ref"].set(f"{-est.ref[2] * 1000:6.0f} mm")
         subida = 0.0 if chao_m[0] is None else est.altura_m - chao_m[0]
-        valores["subida"].set(f"{subida * 100:+5.1f} cm de {ALTURA_M * 100:.0f}")
+        valores["subida"].set(f"{subida * 100:+5.1f} cm de {altura_var.get()}")
         du = du_por_motor(est.du)
         for n in (1, 2, 3, 4):
             c = barras_du[n]
@@ -426,7 +468,7 @@ def executar_tela(porta_inicial: str) -> None:
             return "DESLIGAR (pousar em rampa)"
         if est.estado == ESTADO_POUSANDO:
             return "Pousando..."
-        return f"LIGAR (subir {ALTURA_M * 100:.0f} cm)"
+        return f"LIGAR (subir {altura_var.get()} cm)"
 
     def tique() -> None:
         consumir_eventos()
@@ -522,6 +564,11 @@ def executar_tela(porta_inicial: str) -> None:
     ttk.Label(ajustes, text="Limite de aceleração MOT_MAX (%):").grid(row=0, column=2, sticky="w", padx=(16, 0))
     tk.Scale(ajustes, from_=20, to=100, orient="horizontal", length=200, variable=maxmot_var,
              command=lambda v: ajustar("MOT_MAX", f"{float(v) / 100:.2f}")).grid(row=0, column=3)
+    ttk.Label(ajustes, text="Altura da subida (cm):").grid(row=2, column=0, sticky="w")
+    tk.Scale(ajustes, from_=int(ALTURA_MIN_M * 100), to=int(round(ALTURA_M * 100)), orient="horizontal",
+             length=260, variable=altura_var).grid(row=2, column=1)
+    ttk.Label(ajustes, text="Fique abaixo do que as cordinhas deixam subir.").grid(
+        row=2, column=2, columnspan=2, sticky="w", padx=(16, 0))
     ttk.Label(ajustes, text="Rampa FLT_Z_RATE (cm/s):").grid(row=1, column=0, sticky="w")
     tk.Scale(ajustes, from_=2, to=20, orient="horizontal", length=260, variable=rampa_var,
              command=lambda v: ajustar("FLT_Z_RATE", f"{float(v) / 100:.2f}")).grid(row=1, column=1)

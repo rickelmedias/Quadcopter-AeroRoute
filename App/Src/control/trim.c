@@ -46,8 +46,10 @@ void trim_update(trim_state_t *t, const trim_config_t *cfg, bool enabled, float 
   const bool attitude_at_limit = fabsf(t->theta) >= cfg->max_att || fabsf(t->phi) >= cfg->max_att;
   if (attitude_at_limit && z_step > 0.0F) z_step = 0.0F;
   t->z = clamp(t->z + z_step, cfg->max_z);
-  t->theta = clamp(t->theta - cfg->ki_att * theta * dt, cfg->max_att);
-  t->phi = clamp(t->phi - cfg->ki_att * phi * dt, cfg->max_att);
+  const float theta_used = grounded ? theta : clamp(theta, cfg->att_error_max);
+  const float phi_used = grounded ? phi : clamp(phi, cfg->att_error_max);
+  t->theta = clamp(t->theta - cfg->ki_att * theta_used * dt, cfg->max_att);
+  t->phi = clamp(t->phi - cfg->ki_att * phi_used * dt, cfg->max_att);
 }
 
 void trim_values(const trim_state_t *t, float out[TRIM_INPUTS]) {

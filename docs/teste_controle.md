@@ -105,6 +105,38 @@ arfagem, o empuxo extra foi para a frente, que é leve, e θ subiu devagar até
 Em simulação, com o desequilíbrio medido (~125 rad/s por lado e hover +170
 rad/s), o limite antigo nunca nivelava e o novo leva a 15 cm com θ ≈ 0°.
 
+**Ensaio de 04/11, 4ª rodada.** Até 38 s ficou nivelado (θ ±2°, φ ±4°) com as
+duas pontas no ar, mas a ~5 cm do chão: as cordinhas não deixavam chegar aos
+15 cm. Depois, `CTL_W0` subiu de 772 para 832 em voo e a compensação de hover
+somou mais ~40 rad/s; com +100 rad/s nos quatro motores a altura quase não mudou,
+ou seja, o drone puxava contra as cordinhas. Aos 48,5 s a traseira caiu (θ +16°),
+o equilíbrio acumulou durante o empurrão e, quando ela voltou, passou do ponto
+(θ −20,5°): corte por inclinação. Correções:
+
+- no ar, o erro de ângulo integrado pelo equilíbrio fica limitado a ±4,6°
+  (`TRIM_ATT_ERROR_MAX_RAD`); em simulação o rebote depois de um empurrão caiu
+  de ~57° para ~14°;
+- painel: altura escolhível de 3 a 15 cm (use uma que as cordinhas permitam),
+  `CTL_W0` travado durante o voo com a compensação ligada e, ao pousar, a
+  sugestão `CTL_W0 = CTL_W0 + z` para o próximo voo.
+
+**Rigidez da atitude (decisão pendente).** O ganho de arfagem/rolagem do LQR
+do TCC é macio: 50,6 rad/s por radiano, ou seja, um empurrão constante de
+10 rad/s (≈1% de aceleração entre frente e trás) inclina o drone 11° até o
+integrador alcançar. Recalculando o `dlqr` com pesos maiores em φ, θ, p e q
+(mesmo modelo A, B do Simulink):
+
+| Pesos de φ/θ e p/q | Kd θ | Kd q | ωn / ζ da atitude | Inclinação por 10 rad/s |
+|---|---|---|---|---|
+| TCC (500 / 10) | 50,6 | 11,4 | 6,9 rad/s / 0,78 | 11,3° |
+| ×4 | 82,1 | 16,1 | 8,8 / 0,86 | 7,0° |
+| ×10 | 117,8 | 21,3 | 10,5 / 0,95 | 4,9° |
+| ×40 | 205,4 | 33,6 | 13,9 / 1,14 | 2,8° |
+
+Altura (Kd z = 35,1, Kd vz = 50,2) não muda. Ganhos maiores também amplificam
+o ruído do giroscópio e o atraso dos ESCs, que o modelo não tem; ×10 é o passo
+sugerido.
+
 **Pouso.** Ao encostar (altura abaixo de `FLT_LAND_H` por 0,5 s) a aceleração
 desce em rampa linear até a marcha lenta em 1,5 s (`FLIGHT_LAND_SPINDOWN_MS`) e
 só então o drone desarma; o ajuste lento congela durante a descida.
