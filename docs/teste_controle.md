@@ -123,7 +123,11 @@ o equilíbrio acumulou durante o empurrão e, quando ela voltou, passou do ponto
 **Ensaio de 04/11, 5ª rodada (melhor até aqui).** De 5 s a 41 s voou nivelado
 (θ ±1°, φ 0 a +2°, guinada estável) subindo devagar até +5 cm; o equilíbrio
 frente/trás precisou só de ~−23 rad/s (antes −120) e o hover nivelado ficou em
-`CTL_W0 + z` ≈ 850 rad/s. Depois a altura parou em +6 cm (teto das cordinhas)
+`CTL_W0 + z` ≈ 850 rad/s. **Correção:** nesse ensaio uma pessoa apoiava com a
+mão o lado que subia, então os −23 rad/s não medem o desequilíbrio real; o
+valor sem apoio é o dos ensaios anteriores (~−120 rad/s, traseira ~60% contra
+frente ~45%). O equilíbrio lembrado entre voos também aprende com a mão
+apoiando: reinicie a placa antes de um ensaio sem apoio. Depois a altura parou em +6 cm (teto das cordinhas)
 com o alvo ainda em 15 cm: o hover seguiu somando contra elas (z 86 → 152), as
 cordinhas forçaram θ entre +16° e −12° e um giro rápido de nariz para cima
 (2,3 rad/s) passou do corte de 20°. O painel agora abre com 4 cm e
