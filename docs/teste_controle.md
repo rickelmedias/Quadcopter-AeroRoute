@@ -65,6 +65,29 @@ os motores de trás empurram menos): **mova a bateria/peso para a frente**, que
 resolve melhor do que qualquer ajuste de software. O log mostra a cada 2 s
 `trim z=.. th=.. phi=..` e avisa `NO LIMITE` quando um termo satura.
 
+**Ensaio de 04/11, 2ª rodada.** Três problemas, todos corrigidos:
+
+1. *"Com CTL_W0 = 800 ele ligava os motores de uma vez e desarmava."* Ao fim
+   da marcha lenta a aceleração saltava de 5% para ~48%; a frente (leve)
+   pulava a 23° com 2,7 rad/s e o corte de inclinação (20°) desarmava. Agora a
+   aceleração entra em **rampa de 2 s** (`FLIGHT_TAKEOFF_RAMP_MS`) e a
+   referência de altura só começa a subir depois dela.
+2. *A traseira não segurava ao soltar.* Os motores traseiros ficavam no teto
+   `MOT_MAX` = 60% (flag de saturação acesa) e cada motor era cortado sozinho,
+   então a diferença traseira/frente que segura o nível sumia. Agora o teto é
+   80% e a **dessaturação desloca os quatro juntos** (`control/throttle.h`):
+   o nível tem prioridade sobre o empuxo total.
+3. *Pouso pedido logo após armar* (clique duplo virou DESLIGAR): o estado ia a
+   POUSANDO com o controle ativo e sem marcha lenta, saltando para 47%. Agora,
+   se o drone ainda não subiu 3 cm, o pouso vai direto para a descida suave; o
+   painel também ignora cliques por 1,5 s depois de LIGAR e grava as mensagens
+   de texto (FAILSAFE, trim, pouso) no log.
+
+O desequilíbrio medido continua grande: a frente se sustenta com ~45% e a
+traseira não sobe com 60%. Como o empuxo cresce com o quadrado da rotação, a
+traseira carrega mais de 1,8× o que a frente carrega. Os dois motores de trás
+pedem o mesmo, então não é um motor fraco: é o centro de gravidade atrás.
+
 **Pouso.** Ao encostar (altura abaixo de `FLT_LAND_H` por 0,5 s) a aceleração
 desce em rampa linear até a marcha lenta em 1,5 s (`FLIGHT_LAND_SPINDOWN_MS`) e
 só então o drone desarma; o ajuste lento congela durante a descida.

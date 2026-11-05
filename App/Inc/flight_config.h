@@ -49,7 +49,7 @@
 /** Aceleração mínima com o controle ligado (fração 0..1). */
 #define DEFAULT_MOT_MIN   0.03F
 /** Aceleração máxima com o controle ligado (fração 0..1). */
-#define DEFAULT_MOT_MAX   0.6F
+#define DEFAULT_MOT_MAX   0.8F
 /** Aceleração com o drone armado e parado no chão (fração 0..1). */
 #define DEFAULT_MOT_IDLE  0.05F
 
@@ -130,6 +130,14 @@
  * este tempo antes de desarmar, em ms (em vez de cortar de uma vez).
  */
 #define FLIGHT_LAND_SPINDOWN_MS 1500U
+/**
+ * Depois da marcha lenta, a aceleração do controle entra em rampa durante
+ * este tempo, em ms. Sem ela, o salto de 5% para o hover fazia o lado mais
+ * leve pular e passar do corte de inclinação (ensaio de 04/11 com CTL_W0 = 800).
+ */
+#define FLIGHT_TAKEOFF_RAMP_MS 2000U
+/** Altura estimada acima da qual o drone conta como "saiu do chão", em m. */
+#define FLIGHT_LIFTED_HEIGHT_M 0.03F
 /** Menor velocidade de descida no pouso, em m/s (a rampa do pouso nunca é um degrau). */
 #define FLIGHT_LAND_MIN_RATE_M_S 0.03F
 

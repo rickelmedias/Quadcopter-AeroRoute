@@ -16,7 +16,7 @@
 #include "control/attitude_mode.h"
 #include "control/ctrl_params.h"
 #include "control/meas.h"
-#include "control/spindown.h"
+#include "control/throttle.h"
 #include "control/trim.h"
 #include "attitude.h"
 #include "bno08x.h"
@@ -132,6 +132,8 @@ static uint32_t gains_generation;
 static meas_state_t meas;
 /** Ajuste lento do hover e do equilíbrio (control/trim.h). */
 static trim_state_t trim;
+/** O drone já subiu ::FLIGHT_LIFTED_HEIGHT_M nesta decolagem. */
+static bool lifted;
 /** Tick em que a descida suave do pouso começou (0 = ainda não). */
 static uint32_t land_spindown_ms;
 /** Tick do último relato do trim no log. */
@@ -424,6 +426,13 @@ static void enter_land(flight_reason_t reason) {
   state = FLIGHT_STATE_LAND;
 }
 
+/** @brief Começa a descida suave da aceleração (o desarme vem ao fim da rampa). */
+static void begin_spindown(uint32_t now) {
+  if (land_spindown_ms != 0U) return;
+  land_spindown_ms = now != 0U ? now : 1U;
+  say("pouso: reduzindo motores");
+}
+
 /**
  * @brief Converte um trecho no alvo local.
  * @return false se o trecho não faz sentido (altura abaixo do chão etc.).
@@ -488,6 +497,7 @@ static void handle_request(const request_t *req, uint32_t now) {
       trim_reset(&trim);
       trim_released = false;
       land_spindown_ms = 0U;
+      lifted = false;
       memset(ref, 0, sizeof(ref));
       memset(&goal, 0, sizeof(goal));
       origin = req->origin;
@@ -545,7 +555,12 @@ static void handle_request(const request_t *req, uint32_t now) {
         enter_standby("pouso no chao");
       } else if (is_airborne_state(state) && state != FLIGHT_STATE_LAND) {
         enter_land(req->reason);
-        say("voo: pousando");
+        if (lifted) {
+          say("voo: pousando");
+        } else {
+          /* Ainda no chão: não há o que descer, só reduzir os motores. */
+          begin_spindown(now);
+        }
       }
       break;
     case REQ_CANCEL:
@@ -634,7 +649,8 @@ static void supervise(uint8_t flags, const lqg_real_t y[LQG_NY], uint32_t now) {
 
 /** @brief Avança a referência em rampa até o alvo. */
 static void update_reference(uint32_t now) {
-  if (state == FLIGHT_STATE_TAKEOFF && now - armed_ms < SPINUP_MS) return;
+  /* A referência só sobe depois da marcha lenta e da rampa de partida. */
+  if (state == FLIGHT_STATE_TAKEOFF && now - armed_ms < SPINUP_MS + FLIGHT_TAKEOFF_RAMP_MS) return;
   if (!goal.active && state != FLIGHT_STATE_HOLD) return;
 
   /* Horizontal: em linha reta, na velocidade do trecho. */
@@ -681,12 +697,6 @@ static void check_goal(const float x[LQG_NX], uint32_t now) {
   }
 }
 
-/** @brief Começa a descida suave da aceleração (o desarme vem ao fim da rampa). */
-static void begin_spindown(uint32_t now) {
-  if (land_spindown_ms != 0U) return;
-  land_spindown_ms = now != 0U ? now : 1U;
-  say("pouso: reduzindo motores");
-}
 
 /** @brief Termina o pouso ao encostar no chão (ou pelo tempo, sem telêmetro). */
 static void check_land(uint8_t flags, const lqg_real_t y[LQG_NY], uint32_t now) {
@@ -759,41 +769,53 @@ static void update_trim(bool enabled) {
 static void compute_output(const lqg_real_t du[LQG_NU], float throttle[LQG_NU],
                            lqg_real_t du_applied[LQG_NU], uint8_t *flags) {
   const uint32_t now = HAL_GetTick();
-  const bool spinning_up = state == FLIGHT_STATE_TAKEOFF && now - armed_ms < SPINUP_MS;
-  const bool active = is_airborne_state(state) && !spinning_up;
-  const float span = prm.mot_w_at_100 - prm.mot_w_at_0;
+  const uint32_t since_arm = now - armed_ms;
+  const bool taking_off = state == FLIGHT_STATE_TAKEOFF;
+  const bool spinning_up = taking_off && since_arm < SPINUP_MS;
+  const bool ramping_up = taking_off && !spinning_up && since_arm < SPINUP_MS + FLIGHT_TAKEOFF_RAMP_MS;
   const bool spinning_down = state == FLIGHT_STATE_LAND && land_spindown_ms != 0U;
-  const float taper = spinning_down ? spindown_factor(now - land_spindown_ms, FLIGHT_LAND_SPINDOWN_MS)
-                                    : 1.0F;
+  const bool active = is_airborne_state(state) && !spinning_up;
+  for (unsigned i = 0U; i < LQG_NU; ++i) du_applied[i] = 0.0;
+  if (!active) {
+    for (unsigned i = 0U; i < LQG_NU; ++i) {
+      throttle[i] = is_armed_state(state) ? prm.mot_idle : 0.0F;
+    }
+    update_trim(false);
+    return;
+  }
+
+  const float span = prm.mot_w_at_100 - prm.mot_w_at_0;
   float trim_w[LQG_NU] = {0.0F, 0.0F, 0.0F, 0.0F};
   if (prm.trim >= 0.5F) trim_values(&trim, trim_w);
   for (unsigned i = 0U; i < LQG_NU; ++i) {
-    du_applied[i] = 0.0;
-    if (!active) {
-      throttle[i] = is_armed_state(state) ? prm.mot_idle : 0.0F;
-      continue;
-    }
     const float w = prm.w0 + (float)du[i] + trim_w[i];
-    float thr = span > 0.0F ? (w - prm.mot_w_at_0) / span : 0.0F;
-    if (!(thr >= prm.mot_min)) {  /* também pega NaN */
-      thr = prm.mot_min;
-      *flags |= FLIGHT_FLAG_SATURATED;
-    } else if (thr > prm.mot_max) {
-      thr = prm.mot_max;
-      *flags |= FLIGHT_FLAG_SATURATED;
+    throttle[i] = span > 0.0F ? (w - prm.mot_w_at_0) / span : 0.0F;
+  }
+  /* Um motor no teto desloca os quatro: a diferença que segura o nível fica. */
+  bool modified = throttle_desaturate(throttle, LQG_NU, prm.mot_min, prm.mot_max);
+  if (modified) *flags |= FLIGHT_FLAG_SATURATED;
+  if (ramping_up || spinning_down) {
+    const float factor = ramping_up
+        ? throttle_ramp_up(since_arm - SPINUP_MS, FLIGHT_TAKEOFF_RAMP_MS)
+        : throttle_ramp_down(now - land_spindown_ms, FLIGHT_LAND_SPINDOWN_MS);
+    for (unsigned i = 0U; i < LQG_NU; ++i) {
+      throttle[i] = throttle_blend(throttle[i], prm.mot_idle, factor);
     }
-    if (spinning_down) thr = spindown_throttle(thr, prm.mot_idle, taper);
-    throttle[i] = thr;
-    if (!dry_run) {
+    modified = true;
+  }
+  if (!dry_run) {
+    for (unsigned i = 0U; i < LQG_NU; ++i) {
       /* A predição do Kalman recebe só o du: o trim é o novo ponto de hover
-         (compensa um peso que o filtro não conhece), não uma entrada. */
-      du_applied[i] = (lqg_real_t)(prm.mot_w_at_0 + thr * span - prm.w0 - trim_w[i]);
-      /* Sem saturar, é exatamente o du do LQG (sem o arredondamento acima). */
-      if (!spinning_down && thr > prm.mot_min && thr < prm.mot_max) du_applied[i] = du[i];
+         (compensa um peso que o filtro não conhece), não uma entrada. Sem
+         saturação nem rampa, é exatamente o du do LQG. */
+      du_applied[i] = modified
+          ? (lqg_real_t)(prm.mot_w_at_0 + throttle[i] * span - prm.w0 - trim_w[i])
+          : du[i];
     }
   }
-  if (active) *flags |= FLIGHT_FLAG_CONTROL_ACTIVE;
-  update_trim(active && !dry_run && !spinning_down && (*flags & FLIGHT_FLAG_SATURATED) == 0U);
+  *flags |= FLIGHT_FLAG_CONTROL_ACTIVE;
+  update_trim(!dry_run && !ramping_up && !spinning_down &&
+              (*flags & FLIGHT_FLAG_SATURATED) == 0U);
 }
 
 /** @brief Publica a fotografia do passo e, na taxa pedida, a linha EST. */
@@ -875,6 +897,10 @@ static void step(uint32_t step_count) {
     ref[LQG_R_PSI] = (float)lqg.x_filt[LQG_X_PSI];
   }
 
+  if (is_airborne_state(state) && isfinite(z_ground) &&
+      z_ground - (float)lqg.x_filt[LQG_X_Z] >= FLIGHT_LIFTED_HEIGHT_M) {
+    lifted = true;
+  }
   supervise(meas_flags, y, now);
   update_reference(now);
 

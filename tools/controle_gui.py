@@ -56,6 +56,9 @@ WATCHDOG_MS = 1000
 INTERVALO_PING_S = 0.25
 #: Taxa da linha EST pedida ao firmware, em Hz.
 TAXA_EST_HZ = 20
+#: Depois de LIGAR, o botão ignora cliques por este tempo (evita um clique
+#: duplo virar DESLIGAR logo após armar), em s.
+TRAVA_BOTAO_S = 1.5
 #: Pasta dos CSVs de cada ensaio.
 PASTA_LOGS = Path(__file__).resolve().parent / "logs"
 
@@ -245,14 +248,15 @@ def executar_tela(porta_inicial: str) -> None:
     chao_m = [None]            # altura medida no chão (referência da "subida")
     arquivo = [None]           # CSV do ensaio
     ultimo_envio = [0.0]
+    botao_travado_ate = [0.0]
 
     porta_var = tk.StringVar(value=porta_inicial)
     situacao_var = tk.StringVar(value="Desconectado")
     seco_var = tk.BooleanVar(value=True)
     trim_var = tk.BooleanVar(value=True)
     gravar_var = tk.BooleanVar(value=True)
-    w0_var = tk.IntVar(value=850)
-    maxmot_var = tk.IntVar(value=60)
+    w0_var = tk.IntVar(value=768)
+    maxmot_var = tk.IntVar(value=80)
     rampa_var = tk.IntVar(value=5)
     valores: dict[str, tk.StringVar] = {k: tk.StringVar(value="--") for k in (
         "estado", "sensores", "modo", "roll", "pitch", "yaw", "altura", "ref", "subida")}
@@ -308,7 +312,8 @@ def executar_tela(porta_inicial: str) -> None:
     def abrir_csv() -> None:
         PASTA_LOGS.mkdir(parents=True, exist_ok=True)
         caminho = PASTA_LOGS / time.strftime("controle_%Y%m%d_%H%M%S.log")
-        arquivo[0] = open(caminho, "w", encoding="ascii")
+        # Linha a linha: se o painel for fechado à força, o log do ensaio fica.
+        arquivo[0] = open(caminho, "w", encoding="utf-8", buffering=1)
         escrever_log(f"gravando {caminho}")
 
     def emergencia(_evento=None) -> None:
@@ -317,7 +322,7 @@ def executar_tela(porta_inicial: str) -> None:
         escrever_log("EMERGÊNCIA: motores cortados")
 
     def ligar_ou_desligar() -> None:
-        if enlace is None:
+        if enlace is None or time.monotonic() < botao_travado_ate[0]:
             return
         if est.estado in (ESTADO_ARMADO, ESTADO_DECOLANDO, ESTADO_HOLD):
             mandar("land")
@@ -340,6 +345,7 @@ def executar_tela(porta_inicial: str) -> None:
             return
         for cmd in comando_ligar(seco_var.get(), trim_var.get()):
             mandar(cmd)
+        botao_travado_ate[0] = time.monotonic() + TRAVA_BOTAO_S
         escrever_log("LIGAR: " + ("ensaio a seco" if seco_var.get() else "MOTORES REAIS") + f", subindo {ALTURA_M * 100:.0f} cm")
 
     def ajustar(nome: str, valor: str) -> None:
@@ -364,6 +370,8 @@ def executar_tela(porta_inicial: str) -> None:
                 mot = dado
             elif tipo == "texto":
                 escrever_log(dado)
+                if arquivo[0] is not None:
+                    arquivo[0].write(f"{time.time():.3f};TXT;{dado}\n")
             elif tipo == "bruta" and arquivo[0] is not None:
                 arquivo[0].write(f"{time.time():.3f};{dado}\n")
             elif tipo == "fechada":
