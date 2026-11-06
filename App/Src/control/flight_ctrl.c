@@ -200,8 +200,10 @@ static ctrl_params_t prm;
 static float ref[LQG_NR];
 /** Alvo em andamento. */
 static goal_t goal;
-/** Altura (z NED) do chão onde armou, em m. */
+/** Altura (z NED) do chão onde armou, em m: média do segundo em marcha lenta. */
 static float z_ground;
+/** Leituras do MTF que entraram na média de ::z_ground (0 = ainda não armou). */
+static uint32_t ground_samples;
 /** Quem armou; lido também pelo DroneLink (flight_ctrl_origin). */
 static volatile flight_origin_t origin;
 /** Tick em que armou. */
@@ -601,6 +603,7 @@ static void handle_request(const request_t *req, uint32_t now) {
       bno_bad_steps = 0U;
       mtf_lost_since_ms = 0U;
       z_ground = NAN;  /* definido com a primeira medida deste passo */
+      ground_samples = 0U;
       state = FLIGHT_STATE_ARMED;
       say("voo: ARMADO%s (%s)", dry_run ? " a seco" : "",
           origin == FLIGHT_ORIGIN_PI ? "Pi" : "USB");
@@ -1234,6 +1237,17 @@ static void step(uint32_t step_count) {
     /* Primeira medida depois de armar: o chão e a referência ficam aqui. */
     z_ground = (float)y[LQG_Y_Z];
     ref[LQG_R_Z] = z_ground;
+    ground_samples = 1U;
+  } else if (is_armed_state(state) && ground_samples > 0U && now - armed_ms < SPINUP_MS &&
+             (meas_flags & MEAS_RANGE) != 0U) {
+    /* Parado, o MTF varia ~2 cm entre leituras: o chão é a média do segundo
+       em marcha lenta, com o drone ainda apoiado. A referência e o alvo da
+       decolagem andam junto, então a altura pedida continua a mesma. */
+    ++ground_samples;
+    const float shift = ((float)y[LQG_Y_Z] - z_ground) / (float)ground_samples;
+    z_ground += shift;
+    ref[LQG_R_Z] += shift;
+    if (goal.active) goal.target[LQG_R_Z] += shift;
   }
   if (!is_armed_state(state)) {
     /* Desarmado, a referência acompanha a estimativa: du mostra o que o
