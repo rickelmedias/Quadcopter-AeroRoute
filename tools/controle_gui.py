@@ -456,9 +456,6 @@ def executar_tela(porta_inicial: str) -> None:
         if est.estado not in (ESTADO_STANDBY, ESTADO_FAILSAFE):
             escrever_log(f"não dá para ligar no estado {est.nome_estado}")
             return
-        if xy_var.get() and not est.meas & MEAS_FLUXO:
-            escrever_log("Segurar posição exige o fluxo do MTF OK (chão com textura, luz)")
-            return
         if not (est.meas & MEAS_ATITUDE and est.meas & MEAS_ALTURA):
             escrever_log("sensores sem dado (BNO e MTF precisam estar OK)")
             return
@@ -710,7 +707,9 @@ def executar_tela(porta_inicial: str) -> None:
     ttk.Checkbutton(acoes, text="Ensaio a seco (motores parados)", variable=seco_var).pack(side="left", padx=12)
     opcoes = ttk.Frame(acoes)
     opcoes.pack(side="left", padx=4)
-    ttk.Checkbutton(opcoes, text="Segurar posição (XY, fluxo do MTF)", variable=xy_var).pack(anchor="w")
+    # O XY entra quando o drone sai do chão (o fluxo do MTF não vale com o sensor
+    # a menos de ~10 cm do piso); a posição é zerada ali.
+    ttk.Checkbutton(opcoes, text="Segurar posição (XY, liga ao sair do chão)", variable=xy_var).pack(anchor="w")
     ttk.Checkbutton(opcoes, text="Detector de subida presa (cordinhas)", variable=preso_var).pack(anchor="w")
     modos = ttk.LabelFrame(acoes, text="Modo de controle", padding=4)
     modos.pack(side="left", padx=12)

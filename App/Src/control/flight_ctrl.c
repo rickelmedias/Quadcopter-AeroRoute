@@ -57,6 +57,8 @@
 #define DEFAULT_POS_TOL_M 0.05F
 /** Tolerância padrão de guinada, em rad. */
 #define DEFAULT_YAW_TOL_RAD 0.05F
+/** Intervalo mínimo entre avisos de fluxo do MTF ausente com o XY ligado, em ms. */
+#define FLOW_LOST_REPORT_MS 2000U
 /** Erro de altura que ainda conta como "alvo acima" para a rampa do estimador no chão, em m. */
 #define DIST_GROUND_ERROR_M 0.02F
 /** Intervalo do relato do trim no log, em ms. */
@@ -164,8 +166,10 @@ static bool dist_active;
 static lqg_dist_t dist;
 /** O drone já se soltou do chão neste voo: o estimador pode aprender. */
 static bool dist_released;
-/** Já avisou que o fluxo do MTF sumiu com o XY ligado (reavisa quando ele voltar e sumir de novo). */
-static bool flow_lost_reported;
+/** O XY já entrou neste voo (drone fora do chão); a posição foi zerada ali. */
+static bool xy_engaged;
+/** Tick do último aviso de fluxo ausente com o XY ligado. */
+static uint32_t flow_lost_said_ms;
 /** Medidas diretas deste passo que alimentam os integradores do LQI. */
 static float lqi_meas_z, lqi_meas_phi, lqi_meas_theta;
 /** A altura medida deste passo é válida. */
@@ -279,9 +283,11 @@ flight_request_result_t flight_ctrl_arm(flight_origin_t from) {
   flight_ctrl_get_telemetry(&t);
   ctrl_params_t p;
   ctrl_params_snapshot(&p);
-  /* Sem CTL_XY o fluxo óptico não entra na malha, então não é exigido. */
-  uint8_t needed = MEAS_ATTITUDE | MEAS_GYRO | MEAS_RANGE;
-  if (p.use_xy >= 0.5F) needed |= MEAS_FLOW;
+  /* O fluxo óptico não é exigido nem com CTL_XY: no chão o MTF fica perto
+     demais (8–10 cm) e o fluxo só vale em 13–30% das leituras (06/11); a
+     partir de ~2 cm de altura, em 97–100%. O XY só entra depois que o drone
+     sai do chão (ver step()). */
+  const uint8_t needed = MEAS_ATTITUDE | MEAS_GYRO | MEAS_RANGE;
   if ((t.meas_flags & needed) != needed) {
     return result(FLIGHT_REQUEST_DENIED, FLIGHT_REASON_SENSOR_UNHEALTHY);
   }
@@ -575,6 +581,7 @@ static void handle_request(const request_t *req, uint32_t now) {
       lqi_reset(&lqi);
       lqg_dist_reset(&dist);
       dist_released = false;
+      xy_engaged = false;
       trim_reset(&trim);
       if (trim_learned_valid) {
         trim.theta = trim_learned.theta;
@@ -1188,7 +1195,28 @@ static void step(uint32_t step_count) {
   lqi_meas_phi = (float)y[LQG_Y_PHI];
   lqi_meas_theta = (float)y[LQG_Y_THETA];
   lqi_meas_range_ok = (meas_flags & MEAS_RANGE) != 0U;
-  if (!use_xy) {
+  /* O XY (x, y, vx, vy na malha) só entra depois que o drone sai do chão: lá
+     o fluxo do MTF não vale (sensor a 8–10 cm do piso) e, sem ele, o Kalman
+     integraria a inclinação da mesa como velocidade durante a rampa de
+     partida. Ao entrar, a posição é zerada: o ponto de decolagem é o (0, 0). */
+  if (use_xy && is_airborne_state(state) && lifted && !xy_engaged) {
+    static const unsigned horizontal[] = {LQG_X_X, LQG_X_Y, LQG_X_VX, LQG_X_VY};
+    for (unsigned k = 0U; k < sizeof(horizontal) / sizeof(horizontal[0]); ++k) {
+      lqg.x_filt[horizontal[k]] = 0.0;
+      lqg.x_pred[horizontal[k]] = 0.0;
+    }
+    ref[LQG_R_X] = ref[LQG_R_Y] = 0.0F;
+    goal.target[LQG_R_X] = goal.target[LQG_R_Y] = 0.0F;
+    xy_engaged = true;
+    say("XY: ligado, ponto (0,0) na decolagem");
+  }
+  if (!use_xy || !xy_engaged) {
+    /* Só atitude e altura. Os estados horizontais ficam em zero: nada os
+       mede, e a predição sozinha derivaria sem sentido (e apareceria no log). */
+    static const unsigned horizontal[] = {LQG_X_X, LQG_X_Y, LQG_X_VX, LQG_X_VY};
+    for (unsigned k = 0U; k < sizeof(horizontal) / sizeof(horizontal[0]); ++k) {
+      lqg.x_pred[horizontal[k]] = 0.0;
+    }
     attitude_mode_mask_gains(&gains_effective);
     attitude_mode_repeat_prediction(&lqg, y);
   } else if ((meas_flags & MEAS_FLOW) == 0U) {
@@ -1196,12 +1224,10 @@ static void step(uint32_t step_count) {
        o controle seguiria empurrando com uma velocidade velha. A predição do
        Kalman entra no lugar (a posição só deriva com o modelo até o fluxo voltar). */
     attitude_mode_repeat_prediction(&lqg, y);
-    if (!flow_lost_reported && is_airborne_state(state)) {
-      flow_lost_reported = true;
+    if (now - flow_lost_said_ms >= FLOW_LOST_REPORT_MS) {
+      flow_lost_said_ms = now;
       say("XY: fluxo do MTF sem dado, vx/vy pela predicao");
     }
-  } else {
-    flow_lost_reported = false;
   }
 
   if (state == FLIGHT_STATE_ARMED && isnan(z_ground)) {
