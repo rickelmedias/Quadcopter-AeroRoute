@@ -1,13 +1,21 @@
 /**
  * @file dshot.h
- * @brief Saída DShot600 para os quatro ESCs no TIM4 (PB6..PB9) com DMA burst.
+ * @brief Saída DShot300 para os quatro ESCs no TIM4 (PB6..PB9) com DMA burst.
  *
- * O TIM4 conta a 96 MHz com período de 160 contagens, ou seja 600 kHz: um bit
- * DShot600 por período (1,67 us). Cada bit vira um pulso de 37,5% (bit 0) ou
+ * O TIM4 conta a 96 MHz com período de 320 contagens, ou seja 300 kHz: um bit
+ * DShot300 por período (3,33 us). Cada bit vira um pulso de 37,5% (bit 0) ou
  * 75% (bit 1). A cada evento de atualização o DMA1 Stream6 grava os quatro
  * CCR de uma vez (DMA burst pelo registrador DMAR), então os quatro motores
  * recebem o quadro ao mesmo tempo. Um quadro tem 16 bits + 2 períodos em zero
- * e leva ~30 us; a CPU só prepara o buffer.
+ * e leva ~60 us; a CPU só prepara o buffer.
+ *
+ * Até 06/11 era DShot600 (período de 160) com os pinos em velocidade alta. O
+ * ESC do M4 dava "tecos" parado, só com o sinal ativo (em DFU, sem sinal, não),
+ * e o sintoma mudava ao trocar a posição dos fios vizinhos: ruído no sinal.
+ * DShot300 (pulsos com o dobro da largura) e pinos em velocidade baixa (bordas
+ * mais lentas, menos oscilação e menos vazamento entre fios) toleram melhor.
+ * O ESC detecta a velocidade sozinho; para voltar ao DShot600, período 159 no
+ * TIM4 (o código daqui se ajusta pelo período).
  *
  * Valores de 11 bits: 0 = motor parado (também usado para armar o ESC),
  * 1..47 = comandos especiais (beep, sentido etc.), 48..2047 = aceleração.
