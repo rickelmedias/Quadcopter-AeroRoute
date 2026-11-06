@@ -58,11 +58,15 @@ def test_comando_ligar():
     cmds = g.comando_ligar(True, ff_th=-90)
     assert cmds[-1] == "hover 0.25"
     assert params(cmds) == {"FLT_DRY_RUN": "1", "CTL_LQI": "0", "CTL_TRIM": "0",
-                            "CTL_LQG_AJ": "1", "CTL_DIST": "1", "CTL_FF_TH": "-90"}
+                            "CTL_LQG_AJ": "1", "CTL_DIST": "1", "CTL_FF_TH": "-90",
+                            "CTL_XY": "0", "FLT_PRESO": "0"}
     # Original: o LQG do TCC puro, sem desequilíbrio fixo mesmo que o painel tenha um.
     assert params(g.comando_ligar(False, "original", ff_th=-90)) == {
         "FLT_DRY_RUN": "0", "CTL_LQI": "0", "CTL_TRIM": "0", "CTL_LQG_AJ": "0", "CTL_DIST": "0",
-        "CTL_FF_TH": "0"}
+        "CTL_FF_TH": "0", "CTL_XY": "0", "FLT_PRESO": "0"}
+    # Segurar posição e detector de subida presa saem das caixas do painel.
+    com_xy = params(g.comando_ligar(False, "melhorado", ff_th=-90, xy=True, preso=True))
+    assert com_xy["CTL_XY"] == "1" and com_xy["FLT_PRESO"] == "1"
     assert params(g.comando_ligar(False, "ajustado", ff_th=-80))["CTL_DIST"] == "0"
     assert params(g.comando_ligar(False, "ajustado", ff_th=-80))["CTL_FF_TH"] == "-80"
     assert params(g.comando_ligar(False, "lqi", ff_th=-90))["CTL_LQI"] == "1"
@@ -70,7 +74,8 @@ def test_comando_ligar():
 
 def test_modos_do_painel_existem_no_firmware():
     params = (RAIZ / "App/Src/control/ctrl_params.c").read_text()
-    for nome in ("CTL_LQI", "CTL_TRIM", "CTL_LQG_AJ", "CTL_DIST", "CTL_FF_TH"):
+    for nome in ("CTL_LQI", "CTL_TRIM", "CTL_LQG_AJ", "CTL_DIST", "CTL_FF_TH", "CTL_XY",
+                 "FLT_PRESO"):
         assert f'"{nome}"' in params, nome
     assert set(g.MODOS) == {"original", "ajustado", "melhorado", "lqi"}
     assert g.MODO_PADRAO in g.MODOS

@@ -164,6 +164,8 @@ static bool dist_active;
 static lqg_dist_t dist;
 /** O drone já se soltou do chão neste voo: o estimador pode aprender. */
 static bool dist_released;
+/** Já avisou que o fluxo do MTF sumiu com o XY ligado (reavisa quando ele voltar e sumir de novo). */
+static bool flow_lost_reported;
 /** Medidas diretas deste passo que alimentam os integradores do LQI. */
 static float lqi_meas_z, lqi_meas_phi, lqi_meas_theta;
 /** A altura medida deste passo é válida. */
@@ -823,7 +825,8 @@ static void track_height(uint8_t flags, const lqg_real_t y[LQG_NY]) {
 static void check_stuck(uint32_t now) {
   const bool chasing = state == FLIGHT_STATE_TAKEOFF || state == FLIGHT_STATE_EXECUTING_LEG;
   const float z = meas_z_smooth;
-  const bool behind = chasing && !dry_run && meas_z_tracking && isfinite(z_ground) &&
+  const bool behind = chasing && prm.stuck_detect >= 0.5F && !dry_run && meas_z_tracking &&
+                      isfinite(z_ground) &&
                       z_ground - z >= FLIGHT_STUCK_MIN_HEIGHT_M &&
                       z - ref[LQG_R_Z] > FLIGHT_STUCK_ERROR_M;
   if (!behind) {
@@ -1188,6 +1191,17 @@ static void step(uint32_t step_count) {
   if (!use_xy) {
     attitude_mode_mask_gains(&gains_effective);
     attitude_mode_repeat_prediction(&lqg, y);
+  } else if ((meas_flags & MEAS_FLOW) == 0U) {
+    /* Sem fluxo válido neste passo, meas_update repetiria o último vx, vy:
+       o controle seguiria empurrando com uma velocidade velha. A predição do
+       Kalman entra no lugar (a posição só deriva com o modelo até o fluxo voltar). */
+    attitude_mode_repeat_prediction(&lqg, y);
+    if (!flow_lost_reported && is_airborne_state(state)) {
+      flow_lost_reported = true;
+      say("XY: fluxo do MTF sem dado, vx/vy pela predicao");
+    }
+  } else {
+    flow_lost_reported = false;
   }
 
   if (state == FLIGHT_STATE_ARMED && isnan(z_ground)) {

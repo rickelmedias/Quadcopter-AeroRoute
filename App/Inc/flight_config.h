@@ -163,6 +163,13 @@
  * o filtro estimava subida de 4–5 cm/s com a altura parada.
  */
 #define FLIGHT_STUCK_ERROR_M   0.04F
+/**
+ * 1 = detector de subida presa ligado (FLT_PRESO). Padrão desligado: ele serve
+ * na bancada com cordinhas; sem elas, na qualificação de 05/11, disparou em 7
+ * de 9 voos aos 7–10 s e trocou o alvo de 20 cm por "HOLD em 2 cm", porque fora
+ * do efeito solo o drone sobe devagar enquanto o estimador acha o empuxo.
+ */
+#define DEFAULT_FLT_PRESO      0.0F
 /** Subida que conta como progresso e recomeça a contagem, em m (ver ::FLIGHT_STUCK_ERROR_M). */
 #define FLIGHT_STUCK_RISE_M    0.02F
 /** Tempo travado até segurar na altura medida, em ms (ver ::FLIGHT_STUCK_ERROR_M). */

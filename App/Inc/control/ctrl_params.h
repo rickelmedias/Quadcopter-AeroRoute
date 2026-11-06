@@ -116,6 +116,8 @@ typedef struct {
   float lqg_adjusted;
   /** CTL_DIST: 1 = estimador de perturbação ("LQG melhorado", control/lqg_dist.h). */
   float use_dist;
+  /** FLT_PRESO: 1 = liga o detector de subida presa (bancada com cordinhas). */
+  float stuck_detect;
 } ctrl_params_t;
 
 /** @brief Regras de um parâmetro. */

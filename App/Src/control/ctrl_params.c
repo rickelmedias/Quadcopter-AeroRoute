@@ -95,6 +95,8 @@ static const ctrl_param_desc_t TABLE[] = {
           CTRL_PARAM_BOOL | CTRL_PARAM_DISARMED_ONLY, "1 = LQG ajustado (pesos Q novos)"),
     PARAM("CTL_DIST", use_dist, 0.0F, 1.0F, DEFAULT_CTL_DIST,
           CTRL_PARAM_BOOL | CTRL_PARAM_DISARMED_ONLY, "1 = estimador de perturbacao"),
+    PARAM("FLT_PRESO", stuck_detect, 0.0F, 1.0F, DEFAULT_FLT_PRESO, CTRL_PARAM_BOOL,
+          "1 = detector de subida presa (cordinhas)"),
 };
 
 /** Quantidade de entradas da tabela. */

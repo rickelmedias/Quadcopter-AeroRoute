@@ -202,12 +202,15 @@ MODO_PADRAO = "melhorado"
 
 
 def comando_ligar(seco: bool, modo: str = MODO_PADRAO, altura_m: float = ALTURA_M,
-                  ff_th: int = 0) -> list[str]:
+                  ff_th: int = 0, xy: bool = False, preso: bool = False) -> list[str]:
     """Comandos que armam e sobem ``altura_m`` (ensaio a seco ou real).
 
     ``modo`` é uma chave de ``MODOS``. ``ff_th`` é o desequilíbrio fixo
     frente/trás (CTL_FF_TH), mandado só nos modos que o usam; o LQG original
     vai sem ele, como no TCC. O ajuste lento (CTL_TRIM) fica desligado.
+    ``xy`` liga o LQG completo do TCC (CTL_XY: x, y, vx, vy com o fluxo do
+    MTF; o LQI ignora). ``preso`` liga o detector de subida presa (FLT_PRESO),
+    útil só com cordinhas.
     """
     m = MODOS[modo]
     return [f"param set FLT_DRY_RUN {1 if seco else 0}",
@@ -216,6 +219,8 @@ def comando_ligar(seco: bool, modo: str = MODO_PADRAO, altura_m: float = ALTURA_
             f"param set CTL_LQG_AJ {m.ajustado}",
             f"param set CTL_DIST {m.dist}",
             f"param set CTL_FF_TH {ff_th if m.ff else 0}",
+            f"param set CTL_XY {1 if xy else 0}",
+            f"param set FLT_PRESO {1 if preso else 0}",
             f"hover {min(max(altura_m, ALTURA_MIN_M), ALTURA_M):.2f}"]
 
 
@@ -360,6 +365,8 @@ def executar_tela(porta_inicial: str) -> None:
     porta_var = tk.StringVar(value=porta_inicial)
     situacao_var = tk.StringVar(value="Desconectado")
     seco_var = tk.BooleanVar(value=True)
+    xy_var = tk.BooleanVar(value=False)
+    preso_var = tk.BooleanVar(value=False)
     modo_var = tk.StringVar(value=MODO_PADRAO)
     gravar_var = tk.BooleanVar(value=True)
     w0_var = tk.IntVar(value=W0_PADRAO)
@@ -370,7 +377,8 @@ def executar_tela(porta_inicial: str) -> None:
     maxmot_var = tk.IntVar(value=80)
     rampa_var = tk.IntVar(value=5)
     valores: dict[str, tk.StringVar] = {k: tk.StringVar(value="--") for k in (
-        "estado", "sensores", "modo", "roll", "pitch", "yaw", "altura", "ref", "subida", "trim")}
+        "estado", "sensores", "modo", "roll", "pitch", "yaw", "altura", "ref", "subida", "trim",
+        "xy", "vxy")}
     pesos_vars = {chave: tk.StringVar(value=texto)
                   for chave, texto in textos_pesos(lqi_projeto.Pesos()).items()}
     resumo_lqi_var = tk.StringVar(value="ganhos padrão: " + lqi_projeto.projetar(lqi_projeto.Pesos()).resumo())
@@ -448,6 +456,9 @@ def executar_tela(porta_inicial: str) -> None:
         if est.estado not in (ESTADO_STANDBY, ESTADO_FAILSAFE):
             escrever_log(f"não dá para ligar no estado {est.nome_estado}")
             return
+        if xy_var.get() and not est.meas & MEAS_FLUXO:
+            escrever_log("Segurar posição exige o fluxo do MTF OK (chão com textura, luz)")
+            return
         if not (est.meas & MEAS_ATITUDE and est.meas & MEAS_ALTURA):
             escrever_log("sensores sem dado (BNO e MTF precisam estar OK)")
             return
@@ -459,7 +470,7 @@ def executar_tela(porta_inicial: str) -> None:
         ):
             return
         for cmd in comando_ligar(seco_var.get(), modo_var.get(), altura_var.get() / 100,
-                                 ff_th_var.get()):
+                                 ff_th_var.get(), xy_var.get(), preso_var.get()):
             mandar(cmd)
         botao_travado_ate[0] = time.monotonic() + TRAVA_BOTAO_S
         escrever_log("LIGAR: " + ("ensaio a seco" if seco_var.get() else "MOTORES REAIS") + f", subindo {altura_var.get()} cm")
@@ -570,7 +581,9 @@ def executar_tela(porta_inicial: str) -> None:
         rotulo_estado.configure(foreground=cor)
         ok_bno = bool(est.meas & MEAS_ATITUDE and est.meas & MEAS_GIRO)
         ok_mtf = bool(est.meas & MEAS_ALTURA)
-        valores["sensores"].set(f"BNO {'OK' if ok_bno else 'SEM DADO'} · MTF {'OK' if ok_mtf else 'SEM DADO'}")
+        ok_fluxo = bool(est.meas & MEAS_FLUXO)
+        valores["sensores"].set(f"BNO {'OK' if ok_bno else 'SEM DADO'} · MTF {'OK' if ok_mtf else 'SEM DADO'}"
+                                f" · fluxo {'OK' if ok_fluxo else 'sem dado'}")
         valores["modo"].set("motores parados (a seco)" if est.flags & FLAG_SECO
                             else "MOTORES SEGUINDO O CONTROLE")
         valores["roll"].set(f"{est.y[1] * RAD_GRAUS:+6.2f}°")      # φ
@@ -580,6 +593,9 @@ def executar_tela(porta_inicial: str) -> None:
         valores["ref"].set(f"{-est.ref[2] * 1000:6.0f} mm")
         subida = 0.0 if chao_m[0] is None else est.altura_m - chao_m[0]
         valores["subida"].set(f"{subida * 100:+5.1f} cm de {altura_var.get()}")
+        # x para a frente, y para a direita, desde onde armou (estimado pelo Kalman).
+        valores["xy"].set(f"x {est.x[0] * 100:+6.1f}  y {est.x[1] * 100:+6.1f} cm")
+        valores["vxy"].set(f"vx {est.y[4] * 100:+5.1f}  vy {est.y[5] * 100:+5.1f} cm/s")
         du = du_por_motor(est.du)
         for n in (1, 2, 3, 4):
             c = barras_du[n]
@@ -657,6 +673,8 @@ def executar_tela(porta_inicial: str) -> None:
         ("Altura de referência (rampa)", "ref"),
         ("Subida", "subida"),
         ("Compensação (rad/s): hover, frente/trás, lados", "trim"),
+        ("Posição desde o ponto de partida (Kalman; só vale com Segurar posição)", "xy"),
+        ("Velocidade medida pelo fluxo do MTF", "vxy"),
     ]
     for i, (texto, chave) in enumerate(linhas):
         ttk.Label(medidas, text=texto).grid(row=i, column=0, sticky="w", padx=4, pady=1)
@@ -690,6 +708,10 @@ def executar_tela(porta_inicial: str) -> None:
               bg="#dc2626", fg="white", activebackground="#7f1d1d", command=emergencia
               ).pack(side="left", padx=16)
     ttk.Checkbutton(acoes, text="Ensaio a seco (motores parados)", variable=seco_var).pack(side="left", padx=12)
+    opcoes = ttk.Frame(acoes)
+    opcoes.pack(side="left", padx=4)
+    ttk.Checkbutton(opcoes, text="Segurar posição (XY, fluxo do MTF)", variable=xy_var).pack(anchor="w")
+    ttk.Checkbutton(opcoes, text="Detector de subida presa (cordinhas)", variable=preso_var).pack(anchor="w")
     modos = ttk.LabelFrame(acoes, text="Modo de controle", padding=4)
     modos.pack(side="left", padx=12)
     for chave, modo in MODOS.items():
