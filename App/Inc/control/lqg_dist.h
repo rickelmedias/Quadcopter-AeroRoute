@@ -8,7 +8,7 @@
  * hover errado deixam 14–20 cm de erro de altura mesmo com ganhos maiores).
  *
  * O "LQG melhorado" continua sendo LQG (estimador + LQR), com o estimador
- * também estimando essa perturbação. Para cada canal (altura, φ, θ), um Kalman
+ * também estimando essa perturbação. Para cada canal (altura, φ, θ, ψ), um Kalman
  * de regime com posição, velocidade e uma perturbação constante d nos motores,
  * no padrão daquele canal (os quatro iguais; frente contra trás; esquerda
  * contra direita):
@@ -24,7 +24,7 @@
  * são gerados por tools/lqg_ajustado.py (App/Src/control/lqg_ajustado_gains.c),
  * junto com os do "LQG ajustado": o mesmo dlqr do TCC com outros pesos Q.
  *
- * Como os integradores do LQI e o ajuste lento, a correção d̂ fica fora da
+ * Como o ajuste lento, a correção d̂ fica fora da
  * predição do Kalman do TCC (é uma força que o modelo não tem).
  *
  * Código puro (sem HAL), testado em tests/test_lqg_dist.c.
@@ -38,13 +38,14 @@
 #include <stdint.h>
 
 /** Canais do estimador. */
-#define LQG_DIST_NC 3U
+#define LQG_DIST_NC 4U
 
 /** @brief Índice de cada canal. */
 typedef enum {
   LQG_DIST_Z = 0,   /**< Altura: hover errado (os quatro motores iguais). */
   LQG_DIST_PHI,     /**< Rolagem: esquerda (u1, u4) contra direita (u2, u3). */
-  LQG_DIST_THETA    /**< Arfagem: frente (u1, u2) contra trás (u3, u4). */
+  LQG_DIST_THETA,   /**< Arfagem: frente (u1, u2) contra trás (u3, u4). */
+  LQG_DIST_PSI      /**< Guinada: u2, u4 contra u1, u3 (torque das hélices). */
 } lqg_dist_index_t;
 
 /** @brief Modelo e ganho de regime de um canal. */
@@ -65,6 +66,21 @@ extern const lqg_dist_channel_t LQG_DIST_CHANNELS[LQG_DIST_NC];
 extern const lqg_real_t LQG_AJ_KD[LQG_NU][LQG_NX];
 /** Kfd do LQG ajustado (gerado). */
 extern const lqg_real_t LQG_AJ_KFD[LQG_NU][LQG_NR];
+/** M do Kalman do LQG ajustado: o do TCC com o ruído de vy igual ao de vx (gerado). */
+extern const lqg_real_t LQG_AJ_M[LQG_NX][LQG_NY];
+/** L do Kalman do LQG ajustado (gerado). */
+extern const lqg_real_t LQG_AJ_L[LQG_NX][LQG_NY];
+/**
+ * Autoridade real de guinada dividida pela do B do TCC (gerado, ~3e-4). O B do
+ * TCC põe ~2000 vezes mais aceleração de guinada por rad/s do que o drone tem;
+ * o LQR e o estimador do ajustado usam a real (tools/lqg_ajustado.py).
+ */
+extern const float LQG_AJ_YAW_SCALE;
+/**
+ * Resposta vertical real dividida pela do B do TCC (gerado, ~0,7): o B do TCC
+ * usa ω0 = 702 rad/s e o hover real com o chumbo está em ~1000.
+ */
+extern const float LQG_AJ_Z_SCALE;
 
 /** @brief Estado do estimador: [posição, velocidade, d] de cada canal. */
 typedef struct {
@@ -75,6 +91,29 @@ typedef struct {
 
 /** @brief Troca Kd e Kfd pelos do LQG ajustado numa cópia dos ganhos (L e M não mudam). */
 void lqg_dist_apply_gains(lqg_gains_t *gains);
+
+/**
+ * @brief Troca L e M pelos do Kalman do LQG ajustado numa cópia dos ganhos.
+ *
+ * Só as linhas de y e vy diferem das do Simulink: o TCC supunha o fluxo em vy
+ * bem menos ruidoso que em vx, e no drone os dois têm o mesmo ruído.
+ */
+void lqg_dist_apply_kalman(lqg_gains_t *gains);
+
+/**
+ * @brief Entrada da predição do Kalman com a guinada e a altura na escala real.
+ *
+ * A predição do Kalman usa o B do TCC. Com os ganhos de guinada do ajustado
+ * (bem maiores, para a autoridade real), o B do TCC preveria ψ e r disparando
+ * a cada passo; na altura, preveria o drone subindo mais do que sobe. As
+ * componentes de @p du no padrão de guinada e no coletivo são multiplicadas por
+ * ::LQG_AJ_YAW_SCALE e ::LQG_AJ_Z_SCALE; os quatro padrões (coletivo, φ, θ, ψ)
+ * são ortogonais, então φ e θ não mudam.
+ *
+ * @param[in]  du   Entrada aplicada (u1..u4), em rad/s.
+ * @param[out] out  Entrada para lqg_ert_update().
+ */
+void lqg_dist_kalman_input(const lqg_real_t du[LQG_NU], lqg_real_t out[LQG_NU]);
 
 /** @brief Zera o estimador (a primeira medida de cada canal vira a posição). */
 void lqg_dist_reset(lqg_dist_t *e);

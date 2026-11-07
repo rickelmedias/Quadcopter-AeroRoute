@@ -40,4 +40,24 @@ void attitude_mode_mask_gains(lqg_gains_t *gains);
  */
 void attitude_mode_repeat_prediction(const lqg_ert_t *s, lqg_real_t y[LQG_NY]);
 
+/**
+ * @brief Gira o par (@p a, @p b) de @p angle rad no plano horizontal.
+ *
+ * Com ψ do modelo (horário visto de cima, NED), girar de +ψ leva da proa
+ * (frente, direita) ao local (norte, leste); de −ψ, do local à proa.
+ */
+void attitude_mode_rotate_pair(lqg_real_t *a, lqg_real_t *b, float angle);
+
+/**
+ * @brief Gira x, y, vx, vy de um vetor de estado de @p angle rad.
+ *
+ * O LQG do TCC foi linearizado com ψ = 0: nele, θ empurra só x e φ só y. Com
+ * o drone virado, o mesmo θ empurra em outra direção do local, e o controle
+ * de posição corrige para o lado errado (com ψ = 90° a correção sai girada de
+ * 90°; acima disso ela realimenta o erro). Com o XY na malha, o voo põe os
+ * estados horizontais, as medidas vx, vy e a referência x, y no referencial
+ * da proa (−ψ) antes do LQG e devolve a estimativa ao local (+ψ) depois.
+ */
+void attitude_mode_rotate_horizontal(lqg_real_t x[LQG_NX], float angle);
+
 #endif

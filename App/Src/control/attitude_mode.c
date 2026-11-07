@@ -6,6 +6,8 @@
 
 #include "control/lqg_ert_model.h"
 
+#include <math.h>
+
 /** Estados horizontais que saem da lei de controle. */
 static const unsigned HORIZONTAL_STATES[] = {LQG_X_X, LQG_X_Y, LQG_X_VX, LQG_X_VY};
 /** Referências horizontais que saem do pré-compensador. */
@@ -34,4 +36,16 @@ void attitude_mode_repeat_prediction(const lqg_ert_t *s, lqg_real_t y[LQG_NY]) {
     }
     y[row] = predicted;
   }
+}
+
+void attitude_mode_rotate_pair(lqg_real_t *a, lqg_real_t *b, float angle) {
+  const lqg_real_t c = (lqg_real_t)cosf(angle), sn = (lqg_real_t)sinf(angle);
+  const lqg_real_t na = *a * c - *b * sn;
+  *b = *a * sn + *b * c;
+  *a = na;
+}
+
+void attitude_mode_rotate_horizontal(lqg_real_t x[LQG_NX], float angle) {
+  attitude_mode_rotate_pair(&x[LQG_X_X], &x[LQG_X_Y], angle);
+  attitude_mode_rotate_pair(&x[LQG_X_VX], &x[LQG_X_VY], angle);
 }

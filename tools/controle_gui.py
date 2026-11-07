@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Painel do teste de controle: sobe até 25 cm em rampa, segura e pousa em rampa.
+"""Painel do teste de controle: sobe até 50 cm em rampa, segura e pousa em rampa.
 
 Fala com o console USB do firmware (``App/Inc/usb_console.h``) pela porta serial
 do STM32 (CDC, normalmente ``/dev/ttyACM0``) e mostra a telemetria do LQG:
@@ -11,16 +11,23 @@ Depende de ``pyserial`` e de ``tkinter``.
 O que o painel faz:
 
 * **LIGAR** arma e sobe em rampa até a altura escolhida (o firmware limita
-  qualquer pedido a 25 cm e usa a altura lida pelo MTF-01); **DESLIGAR** pousa em rampa e desarma.
+  qualquer pedido a 50 cm e usa a altura lida pelo MTF-01); **DESLIGAR** pousa em rampa e desarma.
 * **EMERGÊNCIA** (ou barra de espaço / Esc) corta os motores na hora.
 * **Ensaio a seco** (marcado por padrão): o controle roda e a tela mostra o que
   cada motor receberia, mas os motores não giram. Use com o drone na mão para
   conferir os sinais antes de soltar os motores.
 
-O controle é só de atitude e altura (``CTL_XY = 0``): rolagem e arfagem ficam
-em zero, a guinada fica no zero da energização e a altura segue a rampa. A
-posição horizontal **não** é controlada: um pequeno erro de nível faz o drone
-deslizar. Prenda-o.
+Sem "Segurar posição" (``CTL_XY = 0``) o controle é só de atitude e altura: a
+posição horizontal **não** é controlada e um pequeno erro de nível faz o drone
+deslizar. Com ela, o LQG completo do TCC segura o (0, 0) do ponto de decolagem.
+
+Setpoint: o quadro "Setpoint" tem X, Y (cm, em relação ao ponto de decolagem),
+Z (altura acima do chão, cm) e guinada (graus, em relação à direção em que o
+STM32 foi energizado). Abre em 0, 0, 20 cm e 0°. Z vale já no LIGAR; a
+decolagem mantém a proa de quando armou e, ao chegar em HOLD (ou, se a
+decolagem não termina, assim que o drone sobe 4 cm), o painel envia o
+setpoint inteiro (o drone gira para a guinada pedida já no ar). O botão
+"Aplicar" muda o setpoint em voo (comando ``sp`` do console, em rampa).
 
 Modo de controle (escolha no painel, ver docs/controle_lqg.md):
 
@@ -30,22 +37,23 @@ Modo de controle (escolha no painel, ver docs/controle_lqg.md):
 * **LQG melhorado** (padrão): o ajustado com o Kalman estimando também a
   perturbação constante (hover errado, peso fora do centro) e o controle
   cancelando-a (``control/lqg_dist.h``). Relata ``dist z=.. th=.. phi=..``.
-* **LQI**: o LQR com integradores (``control/lqi.h``), só para comparação.
 
 Pouso: ao encostar no chão a aceleração desce em rampa até a marcha lenta
 (1,5 s) e só então desarma, em vez de cortar de uma vez.
 
-Altura: escolha no painel (3 a 25 cm) uma altura que as cordinhas da bancada
+Altura: escolha no painel (3 a 50 cm) uma altura que as cordinhas da bancada
 deixem alcançar. Se o drone fica preso abaixo do alvo, a compensação de hover
 continua somando empuxo contra as cordinhas, que puxam torto.
 
 CTL_W0: com a compensação ligada, ajuste só antes de LIGAR. Ao pousar, o painel
 sugere o próximo valor (``CTL_W0 + z`` aprendido).
 
-Ganhos do LQI: o quadro "Pesos do LQI" recalcula Kx, Kfd e Ki com outros pesos
-Q/R pelo mesmo dlqr do projeto (``tools/lqi_projeto.py``, sem numpy) e envia
-ao STM32 com CRC (``control/lqi_tuning.h``). Só desarmado. Valem até reiniciar
-a placa ou clicar em "Padrão".
+Ganhos do LQG: o quadro "Pesos Q" tem o Q dos 12 estados e o R. "Enviar ao
+drone" refaz o dlqr do TCC com eles (``tools/lqg_ajustado.py``, sem numpy) e
+manda Kd e Kfd ao STM32 com CRC (``control/lqg_tuning.h``). Valem para os modos
+"ajustado" e "melhorado", só desarmado, até reiniciar a placa ou clicar em
+"Padrão". Se os pesos digitados ainda não estão no drone, o LIGAR os envia sozinho e só arma
+quando o firmware confirma o CRC.
 
 Segurança no firmware: inclinação acima de 20 graus corta os motores; altura
 acima de 45 cm pousa; se o PC calar por 1 s (watchdog), o drone pousa em rampa.
@@ -62,24 +70,37 @@ from pathlib import Path
 import serial
 from serial.tools import list_ports
 
-import lqi_projeto
+import lqg_ajustado
 
 #: Porta padrão do STM32 (CDC).
 PORTA_PADRAO = "/dev/ttyACM0"
 #: Maior altura da subida, em m (o firmware também limita a este valor).
-ALTURA_M = 0.25
+ALTURA_M = 0.50
 #: Menor altura escolhível no painel, em m.
 ALTURA_MIN_M = 0.03
-#: Altura com que o painel abre, em m. Na bancada de 04/11 as cordinhas deixam o
-#: drone subir só ~6 cm; acima disso a compensação de hover empurra contra elas.
-ALTURA_PADRAO_M = 0.04
-#: CTL_W0 com que o painel abre, em rad/s. Nos hovers de 05/11 os motores
-#: ficaram em 45–48% em média (790–840 rad/s, perto do chão); o LQI corrige
-#: o resto. Mais alto não ajuda a subir: preso nas cordinhas, só empurra contra elas.
-W0_PADRAO = 820
+#: Altura com que o painel abre, em m (setpoint Z).
+ALTURA_PADRAO_M = 0.20
+#: Subida (medida pelo MTF) a partir da qual o painel tenta o setpoint durante
+#: a decolagem, em m (o firmware aceita depois de 3 cm fora do chão).
+SUBIDA_SETPOINT_M = 0.04
+#: Intervalo entre tentativas automáticas do setpoint na decolagem, em s.
+INTERVALO_SETPOINT_S = 1.0
+#: Distância máxima do ponto de decolagem aceita no setpoint, em m (igual a
+#: SETPOINT_XY_MAX_M em App/Src/control/flight_ctrl.c).
+SETPOINT_XY_MAX_M = 3.0
+#: CTL_W0 com que o painel abre, em rad/s: o hover real com o chumbo (550 g),
+#: o mesmo ω0 do modelo do LQG ajustado (HOVER_OMEGA0 em tools/lqg_ajustado.py).
+#: Os voos de 06/11 pediram ~1000–1100. O estimador de perturbação corrige o
+#: resto; ao pousar, o painel sugere o próximo valor (CTL_W0 + dist z).
+W0_PADRAO = 1000
 #: CTL_FF_TH com que o painel abre, em rad/s: desequilíbrio frente/trás fixo
 #: (o mesmo padrão do firmware, ver DEFAULT_CTL_FF_TH em flight_config.h).
-FF_TH_PADRAO = -90
+#: Em 06/11, com o chumbo, o estimador parou sempre perto de θ = −22; com a
+#: traseira pesada era −90.
+FF_TH_PADRAO = -20
+#: CTL_FF_PHI com que o painel abre, em rad/s (esquerda/direita; o estimador
+#: parou em −40 nos voos de 06/11).
+FF_PHI_PADRAO = -40
 #: Prazo do watchdog do firmware, em ms.
 WATCHDOG_MS = 1000
 #: Intervalo entre mensagens de "estou vivo", em s.
@@ -97,6 +118,8 @@ ESTADOS = ["BOOT", "SELF_TEST", "STANDBY", "PREARM", "ARMADO", "DECOLANDO", "SEG
            "TRECHO", "POUSANDO", "FAILSAFE", "TERMINADO"]
 ESTADO_STANDBY, ESTADO_ARMADO, ESTADO_DECOLANDO, ESTADO_HOLD, ESTADO_POUSANDO = 2, 4, 5, 6, 8
 ESTADO_FAILSAFE = 9
+#: Estado do firmware com um trecho (ou setpoint) em andamento.
+ESTADO_TRECHO = 7
 #: Bits de meas (MEAS_*) e de flags (FLIGHT_FLAG_*).
 MEAS_ATITUDE, MEAS_GIRO, MEAS_ALTURA, MEAS_FLUXO = 1, 2, 4, 8
 FLAG_SECO, FLAG_ATIVO, FLAG_GANHOS_PI, FLAG_SATURADO = 1, 2, 4, 8
@@ -183,77 +206,98 @@ class Modo:
     """Um modo de controle do painel e os parâmetros que ele liga no firmware."""
 
     rotulo: str
-    lqi: int        # CTL_LQI: integradores no projeto do LQR
     ajustado: int   # CTL_LQG_AJ: Kd/Kfd com os pesos Q ajustados
     dist: int       # CTL_DIST: estimador de perturbação
     ff: bool        # usa o desequilíbrio fixo CTL_FF_TH (senão manda 0)
     integra: bool   # tem integrador/estimador: CTL_W0 não muda em voo
 
 
-#: Modos de controle, do LQG do TCC ao LQI (ver docs/controle_lqg.md).
+#: Modos de controle, do LQG do TCC ao melhorado (ver docs/controle_lqg.md).
 MODOS = {
-    "original": Modo("LQG original (TCC, Simulink)", 0, 0, 0, False, False),
-    "ajustado": Modo("LQG original ajustado (Q novo + desequilíbrio fixo)", 0, 1, 0, True, False),
-    "melhorado": Modo("LQG melhorado (+ estimador de perturbação)", 0, 1, 1, True, True),
-    "lqi": Modo("LQI (só comparação)", 1, 0, 0, True, True),
+    "original": Modo("LQG original (TCC, Simulink)", 0, 0, False, False),
+    "ajustado": Modo("LQG original ajustado (Q novo + desequilíbrio fixo)", 1, 0, True, False),
+    "melhorado": Modo("LQG melhorado (+ estimador de perturbação)", 1, 1, True, True),
 }
 #: Modo com que o painel abre.
 MODO_PADRAO = "melhorado"
 
 
 def comando_ligar(seco: bool, modo: str = MODO_PADRAO, altura_m: float = ALTURA_M,
-                  ff_th: int = 0, xy: bool = False, preso: bool = False) -> list[str]:
+                  ff_th: int = 0, xy: bool = False, preso: bool = False,
+                  ff_phi: int = 0) -> list[str]:
     """Comandos que armam e sobem ``altura_m`` (ensaio a seco ou real).
 
     ``modo`` é uma chave de ``MODOS``. ``ff_th`` é o desequilíbrio fixo
     frente/trás (CTL_FF_TH), mandado só nos modos que o usam; o LQG original
     vai sem ele, como no TCC. O ajuste lento (CTL_TRIM) fica desligado.
+    ``ff_phi`` é o equivalente esquerda/direita (CTL_FF_PHI), com a mesma regra.
     ``xy`` liga o LQG completo do TCC (CTL_XY: x, y, vx, vy com o fluxo do
-    MTF; o LQI ignora). ``preso`` liga o detector de subida presa (FLT_PRESO),
+    MTF). ``preso`` liga o detector de subida presa (FLT_PRESO),
     útil só com cordinhas.
     """
     m = MODOS[modo]
     return [f"param set FLT_DRY_RUN {1 if seco else 0}",
-            f"param set CTL_LQI {m.lqi}",
             "param set CTL_TRIM 0",
             f"param set CTL_LQG_AJ {m.ajustado}",
             f"param set CTL_DIST {m.dist}",
             f"param set CTL_FF_TH {ff_th if m.ff else 0}",
+            f"param set CTL_FF_PHI {ff_phi if m.ff else 0}",
             f"param set CTL_XY {1 if xy else 0}",
             f"param set FLT_PRESO {1 if preso else 0}",
             f"hover {min(max(altura_m, ALTURA_MIN_M), ALTURA_M):.2f}"]
 
 
-#: Campos do quadro de pesos do LQI: (rótulo, chave). As chaves de Q são os
-#: nomes dos estados em ``lqi_projeto.Pesos.q``.
-CAMPOS_PESOS = [("z", "z"), ("φ", "phi"), ("θ", "theta"), ("ψ", "psi"), ("vz", "vz"),
-                ("p", "p"), ("q", "q"), ("r", "r"), ("R", "R"), ("∫z", "int_z"),
-                ("∫φ", "int_phi"), ("∫θ", "int_theta")]
+#: Campos do quadro de pesos Q: (rótulo, chave). As chaves são os nomes dos
+#: estados em ``lqg_ajustado.lp.ESTADOS``; "R" é o peso do esforço.
+CAMPOS_PESOS = [(n, n) for n in lqg_ajustado.lp.ESTADOS] + [("R", "R")]
 #: Pausa entre as linhas do envio de ganhos, em s: o console do STM32 recebe
-#: num buffer de 256 bytes e as 78 linhas juntas passariam disso.
+#: num buffer de 256 bytes e as 66 linhas juntas passariam disso.
 PAUSA_ENVIO_S = 0.005
 
 
-def textos_pesos(pesos: lqi_projeto.Pesos) -> dict[str, str]:
-    """Valor de cada campo do quadro de pesos."""
-    out = {k: f"{v:g}" for k, v in pesos.q.items()}
-    out.update(R=f"{pesos.r:g}", int_z=f"{pesos.q_int_z:g}", int_phi=f"{pesos.q_int_phi:g}",
-               int_theta=f"{pesos.q_int_theta:g}")
+def textos_pesos(q: list[float] | None = None, r: float = lqg_ajustado.R_TCC) -> dict[str, str]:
+    """Valor de cada campo do quadro de pesos (padrão: o Q do LQG ajustado)."""
+    q = lqg_ajustado.Q_AJUSTADO if q is None else q
+    out = {n: f"{v:g}" for n, v in zip(lqg_ajustado.lp.ESTADOS, q)}
+    out["R"] = f"{r:g}"
     return out
 
 
-def pesos_de_textos(textos: dict[str, str]) -> lqi_projeto.Pesos:
-    """Pesos a partir dos campos do quadro (vírgula decimal aceita).
+def pesos_de_textos(textos: dict[str, str]) -> tuple[list[float], float]:
+    """(Q dos 12 estados, R) a partir dos campos do quadro (vírgula decimal aceita).
 
     Raises:
-        ValueError: campo vazio ou não numérico.
+        ValueError: campo vazio, não numérico, ou peso que não seja positivo
+            (R) / não negativo (Q).
     """
     def num(chave: str) -> float:
         return float(textos[chave].strip().replace(",", "."))
 
-    padrao = lqi_projeto.Pesos()
-    return lqi_projeto.Pesos(q={k: num(k) for k in padrao.q}, r=num("R"), q_int_z=num("int_z"),
-                             q_int_phi=num("int_phi"), q_int_theta=num("int_theta"))
+    q = [num(n) for n in lqg_ajustado.lp.ESTADOS]
+    r = num("R")
+    if r <= 0.0 or any(v < 0.0 for v in q):
+        raise ValueError("Q não pode ser negativo e R precisa ser positivo")
+    return q, r
+
+
+def resumo_ganhos(kd: list[list[float]]) -> str:
+    """Os ganhos que mais importam (módulo, motor u1), como no log do ensaio."""
+    k = kd[0]
+    return (f"z {abs(k[2]):.1f} · φ/θ {abs(k[3]):.1f}/{abs(k[4]):.1f} · vz {abs(k[8]):.1f} · "
+            f"p/q {abs(k[9]):.1f}/{abs(k[10]):.1f} · x/vx {abs(k[0]):.2f}/{abs(k[6]):.2f}")
+
+
+def comando_setpoint(x_cm: float, y_cm: float, z_cm: float, yaw_graus: float) -> str:
+    """Linha ``sp`` do console: X, Y (cm, do ponto de decolagem), altura (cm) e guinada.
+
+    X e Y são limitados a ±``SETPOINT_XY_MAX_M``, a altura à faixa do painel e a
+    guinada a ±360° (zero = direção da energização do STM32).
+    """
+    x = min(max(x_cm / 100.0, -SETPOINT_XY_MAX_M), SETPOINT_XY_MAX_M)
+    y = min(max(y_cm / 100.0, -SETPOINT_XY_MAX_M), SETPOINT_XY_MAX_M)
+    z = min(max(z_cm / 100.0, ALTURA_MIN_M), ALTURA_M)
+    yaw = min(max(yaw_graus, -360.0), 360.0)
+    return f"sp {x:.3f} {y:.3f} {z:.3f} {yaw:.1f}"
 
 
 def sugestao_w0(w0_atual: float, texto_trim: str) -> int | None:
@@ -352,7 +396,8 @@ def executar_tela(porta_inicial: str) -> None:
 
     raiz = tk.Tk()
     raiz.title("Teste de controle · LQG atitude + altura")
-    raiz.geometry("1040x920")
+    raiz.geometry("1100x860")
+    raiz.minsize(760, 480)
 
     enlace: Enlace | None = None
     est = Estimativa()
@@ -371,7 +416,7 @@ def executar_tela(porta_inicial: str) -> None:
     gravar_var = tk.BooleanVar(value=True)
     w0_var = tk.IntVar(value=W0_PADRAO)
     ff_th_var = tk.IntVar(value=FF_TH_PADRAO)
-    altura_var = tk.IntVar(value=int(round(ALTURA_PADRAO_M * 100)))  # cm
+    ff_phi_var = tk.IntVar(value=FF_PHI_PADRAO)
     ultimo_trim = [""]
     armado_antes = [False]
     maxmot_var = tk.IntVar(value=80)
@@ -379,9 +424,18 @@ def executar_tela(porta_inicial: str) -> None:
     valores: dict[str, tk.StringVar] = {k: tk.StringVar(value="--") for k in (
         "estado", "sensores", "modo", "roll", "pitch", "yaw", "altura", "ref", "subida", "trim",
         "xy", "vxy")}
-    pesos_vars = {chave: tk.StringVar(value=texto)
-                  for chave, texto in textos_pesos(lqi_projeto.Pesos()).items()}
-    resumo_lqi_var = tk.StringVar(value="ganhos padrão: " + lqi_projeto.projetar(lqi_projeto.Pesos()).resumo())
+    pesos_vars = {chave: tk.StringVar(value=texto) for chave, texto in textos_pesos().items()}
+    resumo_q_var = tk.StringVar(
+        value="ganhos padrão: " + resumo_ganhos(lqg_ajustado.ganhos_lqg(lqg_ajustado.Q_AJUSTADO)[0]))
+    # Pesos que o drone tem agora (None = os gerados, Q_AJUSTADO); o LIGAR confere.
+    pesos_no_drone: list[tuple[list[float], float] | None] = [None]
+    # Setpoint (cm, cm, cm, graus); o X, Y e a guinada de fora do zero seguem ao chegar em HOLD.
+    setpoint_vars = {"x": tk.StringVar(value="0"), "y": tk.StringVar(value="0"),
+                     "z": tk.StringVar(value=str(int(round(ALTURA_PADRAO_M * 100)))),
+                     "yaw": tk.StringVar(value="0")}
+    setpoint_pendente = [False]
+    setpoint_tentado = [0.0]   # última tentativa automática (time.monotonic)
+    ultimo_lq = [""]           # última resposta "lq ..." do firmware (confirma o commit)
     barras_du: dict[int, tk.Canvas] = {}
     textos_motor: dict[int, tk.StringVar] = {n: tk.StringVar(value="--") for n in (1, 2, 3, 4)}
 
@@ -394,6 +448,57 @@ def executar_tela(porta_inicial: str) -> None:
     def mandar(comando: str) -> None:
         if enlace is not None and enlace.enviar(comando):
             ultimo_envio[0] = time.monotonic()
+
+    def setpoint_atual() -> tuple[float, float, float, float] | None:
+        """(X cm, Y cm, Z cm, guinada °) dos campos, ou None se algum for inválido."""
+        try:
+            x, y, z, yaw = (float(setpoint_vars[k].get().strip().replace(",", "."))
+                            for k in ("x", "y", "z", "yaw"))
+        except ValueError:
+            escrever_log("setpoint inválido: use números (cm e graus)")
+            return None
+        return x, y, min(max(z, ALTURA_MIN_M * 100), ALTURA_M * 100), yaw
+
+    def altura_cm() -> float:
+        """Altura da subida (Z do setpoint), em cm."""
+        sp = setpoint_atual()
+        return ALTURA_PADRAO_M * 100 if sp is None else sp[2]
+
+    def aplicar_setpoint() -> None:
+        """Manda o setpoint ao drone (vale em HOLD, ou com um trecho em andamento)."""
+        sp = setpoint_atual()
+        if enlace is None or sp is None:
+            return
+        if est.estado not in (ESTADO_DECOLANDO, ESTADO_HOLD, ESTADO_TRECHO):
+            escrever_log(f"setpoint só vale no ar (estado: {est.nome_estado})")
+            return
+        if (sp[0] or sp[1]) and not xy_var.get():
+            registrar("aviso: X/Y só são seguidos com 'Segurar posição' marcado antes do LIGAR")
+        mandar(comando_setpoint(*sp))
+        registrar(f"setpoint X={sp[0]:g} Y={sp[1]:g} cm · Z={sp[2]:g} cm · guinada={sp[3]:g}°")
+
+    def voltar_a_partida() -> None:
+        """Manda o drone de volta ao (0, 0), com a altura e a guinada do quadro.
+
+        Não apaga a posição acumulada. O (0, 0) é o ponto em que o drone saiu do
+        chão, ou o último "Zerar X Y aqui".
+        """
+        setpoint_vars["x"].set("0")
+        setpoint_vars["y"].set("0")
+        if not xy_var.get():
+            escrever_log("voltar à partida só funciona com 'Segurar posição' marcado antes do LIGAR")
+            return
+        aplicar_setpoint()
+
+    def zerar_xy() -> None:
+        """O ponto atual vira o (0, 0): zera a posição acumulada e o X, Y do setpoint."""
+        if enlace is None:
+            escrever_log("conecte antes de zerar o XY")
+            return
+        mandar("xyzero")
+        setpoint_vars["x"].set("0")
+        setpoint_vars["y"].set("0")
+        registrar(f"XY zerado no ponto atual (estava em x={est.x[0] * 100:+.1f} y={est.x[1] * 100:+.1f} cm)")
 
     # ---- ações -----------------------------------------------------------
 
@@ -410,9 +515,10 @@ def executar_tela(porta_inicial: str) -> None:
             return
         botao_conectar.configure(text="Desconectar")
         situacao_var.set(f"Conectado em {porta_var.get()}")
-        for cmd in ("stop", "log on", f"wd {WATCHDOG_MS}", f"param set LOG_EST_HZ {TAXA_EST_HZ}",
+        pesos_no_drone[0] = None  # a placa pode ter ficado com ganhos do painel
+        for cmd in ("stop", "lq default", "log on", f"wd {WATCHDOG_MS}", f"param set LOG_EST_HZ {TAXA_EST_HZ}",
                     "param set FLT_DRY_RUN 1", f"param set FLT_HOVER_H {ALTURA_M:.2f}",
-                    f"param set CTL_W0 {w0_var.get()}", f"param set CTL_FF_TH {ff_th_var.get()}",
+                    f"param set CTL_W0 {w0_var.get()}", f"param set CTL_FF_TH {ff_th_var.get()}", f"param set CTL_FF_PHI {ff_phi_var.get()}",
                     f"param set MOT_MAX {maxmot_var.get() / 100:.2f}",
                     f"param set FLT_Z_RATE {rampa_var.get() / 100:.2f}"):
             mandar(cmd)
@@ -447,7 +553,7 @@ def executar_tela(porta_inicial: str) -> None:
     def ligar_ou_desligar() -> None:
         if enlace is None or time.monotonic() < botao_travado_ate[0]:
             return
-        if est.estado in (ESTADO_ARMADO, ESTADO_DECOLANDO, ESTADO_HOLD):
+        if est.estado in (ESTADO_ARMADO, ESTADO_DECOLANDO, ESTADO_HOLD, ESTADO_TRECHO):
             mandar("land")
             escrever_log("DESLIGAR: pousando em rampa")
             return
@@ -461,19 +567,30 @@ def executar_tela(porta_inicial: str) -> None:
             return
         if not seco_var.get() and not messagebox.askokcancel(
             "Soltar os motores?",
-            f"Ensaio a seco DESLIGADO: os motores vão girar e o drone vai subir {altura_var.get()} cm.\n\n"
+            f"Ensaio a seco DESLIGADO: os motores vão girar e o drone vai subir {altura_cm():g} cm.\n\n"
             "• Drone PRESO (barbante) e em área livre?\n• Hélices conferidas?\n"
             "• Mão no botão de EMERGÊNCIA (barra de espaço)?",
         ):
             return
-        for cmd in comando_ligar(seco_var.get(), modo_var.get(), altura_var.get() / 100,
-                                 ff_th_var.get(), xy_var.get(), preso_var.get()):
-            mandar(cmd)
         botao_travado_ate[0] = time.monotonic() + TRAVA_BOTAO_S
-        escrever_log("LIGAR: " + ("ensaio a seco" if seco_var.get() else "MOTORES REAIS") + f", subindo {altura_var.get()} cm")
+        if MODOS[modo_var.get()].ajustado and not pesos_conferem():
+            # Os pesos digitados ainda não estão no drone: envia, espera o firmware
+            # confirmar o CRC e só então arma (o voo copia os ganhos desarmado).
+            registrar("pesos Q novos: enviando antes de ligar")
+            if not enviar_q(depois=disparar_ligar):
+                botao_travado_ate[0] = 0.0
+            return
+        disparar_ligar()
+
+    def disparar_ligar() -> None:
+        setpoint_pendente[0] = True
+        for cmd in comando_ligar(seco_var.get(), modo_var.get(), altura_cm() / 100,
+                                 ff_th_var.get(), xy_var.get(), preso_var.get(), ff_phi_var.get()):
+            mandar(cmd)
+        escrever_log("LIGAR: " + ("ensaio a seco" if seco_var.get() else "MOTORES REAIS") + f", subindo {altura_cm():g} cm")
 
     def ajustar(nome: str, valor: str) -> None:
-        armado = est.estado in (ESTADO_ARMADO, ESTADO_DECOLANDO, ESTADO_HOLD, ESTADO_POUSANDO)
+        armado = est.estado in (ESTADO_ARMADO, ESTADO_DECOLANDO, ESTADO_HOLD, ESTADO_TRECHO, ESTADO_POUSANDO)
         if nome == "CTL_W0" and armado and MODOS[modo_var.get()].integra:
             # Com a compensação ligada, mudar o hover em voo soma um degrau nos
             # quatro motores por cima do que ela já achou (ensaio de 04/11).
@@ -487,47 +604,85 @@ def executar_tela(porta_inicial: str) -> None:
         if arquivo[0] is not None:
             arquivo[0].write(f"{time.time():.3f};TXT;painel: {texto}\n")
 
-    def calcular_lqi() -> lqi_projeto.Ganhos | None:
+    def pesos_digitados() -> tuple[list[float], float] | None:
         try:
-            pesos = pesos_de_textos({k: v.get() for k, v in pesos_vars.items()})
-            ganhos = lqi_projeto.projetar(pesos)
-        except (ValueError, ArithmeticError) as erro:
-            escrever_log(f"pesos do LQI inválidos: {erro}")
+            return pesos_de_textos({k: v.get() for k, v in pesos_vars.items()})
+        except ValueError as erro:
+            escrever_log(f"pesos Q inválidos: {erro}")
             return None
-        resumo_lqi_var.set("calculado: " + ganhos.resumo())
-        return ganhos
 
-    def enviar_lqi() -> None:
+    def pesos_conferem() -> bool:
+        """Os pesos digitados são os que o drone tem (os gerados, se nada foi enviado)?"""
+        digitados = pesos_digitados()
+        if digitados is None:
+            return False
+        no_drone = pesos_no_drone[0] or (list(lqg_ajustado.Q_AJUSTADO), lqg_ajustado.R_TCC)
+        return digitados == no_drone
+
+    def calcular_q() -> tuple[list[list[float]], list[list[float]]] | None:
+        digitados = pesos_digitados()
+        if digitados is None:
+            return None
+        try:
+            kd, kfd = lqg_ajustado.ganhos_lqg(*digitados)
+        except (ArithmeticError, ValueError, ZeroDivisionError) as erro:
+            escrever_log(f"sem solução do dlqr com esses pesos: {erro}")
+            return None
+        resumo_q_var.set("calculado: " + resumo_ganhos(kd))
+        return kd, kfd
+
+    def enviar_q(depois=None) -> bool:
+        """Envia Kd/Kfd; com ``depois``, chama-o (na tela) quando o firmware confirmar o CRC."""
         if enlace is None:
             escrever_log("conecte antes de enviar ganhos")
-            return
+            return False
         if est.estado not in (ESTADO_STANDBY, ESTADO_FAILSAFE):
-            escrever_log("ganhos do LQI só mudam com o drone desarmado")
-            return
-        ganhos = calcular_lqi()
-        if ganhos is None:
-            return
-        pesos = pesos_de_textos({k: v.get() for k, v in pesos_vars.items()})
-        linhas = lqi_projeto.comandos(ganhos)
+            escrever_log("ganhos do LQG só mudam com o drone desarmado")
+            return False
+        ganhos = calcular_q()
+        digitados = pesos_digitados()
+        if ganhos is None or digitados is None:
+            return False
+        linhas = lqg_ajustado.comandos(*ganhos)
+        crc = linhas[-1].split()[-1]
         alvo = enlace
+        ultimo_lq[0] = ""
+
+        def concluir(ok: bool) -> None:
+            if ok:
+                pesos_no_drone[0] = digitados
+                registrar(f"drone confirmou Kd/Kfd (crc {crc})")
+                if depois is not None:
+                    depois()
+            else:
+                registrar(f"o drone NÃO confirmou os ganhos ({ultimo_lq[0] or 'sem resposta'}); "
+                          "nada foi armado")
+                botao_travado_ate[0] = 0.0
 
         def enviar() -> None:
             for linha in linhas:
                 if not alvo.enviar(linha):
+                    raiz.after(0, concluir, False)
                     return
                 time.sleep(PAUSA_ENVIO_S)
+            time.sleep(0.4)  # resposta do commit
+            raiz.after(0, concluir, crc in ultimo_lq[0].upper() and "painel" in ultimo_lq[0])
 
         threading.Thread(target=enviar, daemon=True).start()
-        registrar(f"enviando ganhos do LQI ({linhas[-1].split()[-1]}): {pesos.resumo()}")
-        registrar("ganhos: " + ganhos.resumo())
+        q, r = digitados
+        registrar(f"enviando Kd/Kfd ({crc}): "
+                  + " ".join(f"{n}={v:g}" for n, v in zip(lqg_ajustado.lp.ESTADOS, q)) + f" R={r:g}")
+        registrar("ganhos: " + resumo_ganhos(ganhos[0]))
+        return True
 
-    def padrao_lqi() -> None:
-        for chave, texto in textos_pesos(lqi_projeto.Pesos()).items():
+    def padrao_q() -> None:
+        for chave, texto in textos_pesos().items():
             pesos_vars[chave].set(texto)
-        resumo_lqi_var.set("ganhos padrão: " + lqi_projeto.projetar(lqi_projeto.Pesos()).resumo())
+        resumo_q_var.set("ganhos padrão: " + resumo_ganhos(lqg_ajustado.ganhos_lqg(lqg_ajustado.Q_AJUSTADO)[0]))
+        pesos_no_drone[0] = None
         if enlace is not None:
-            mandar("lqi default")
-            registrar("ganhos do LQI: padrão")
+            mandar("lq default")
+            registrar("ganhos do LQG: padrão")
 
     # ---- laço periódico --------------------------------------------------
 
@@ -541,13 +696,26 @@ def executar_tela(porta_inicial: str) -> None:
             except queue.Empty:
                 break
             if tipo == "est":
-                armado = dado.estado in (ESTADO_ARMADO, ESTADO_DECOLANDO, ESTADO_HOLD, ESTADO_POUSANDO)
+                armado = dado.estado in (ESTADO_ARMADO, ESTADO_DECOLANDO, ESTADO_HOLD, ESTADO_TRECHO, ESTADO_POUSANDO)
                 if armado_antes[0] and not armado and ultimo_trim[0]:
                     sugestao = sugestao_w0(w0_var.get(), ultimo_trim[0])
                     if sugestao is not None:
                         escrever_log(f"sugestão para o próximo voo: CTL_W0 = {sugestao} "
                                      f"(hover aprendido: {ultimo_trim[0]})")
                 armado_antes[0] = armado
+                subiu = chao_m[0] is not None and dado.altura_m - chao_m[0] >= SUBIDA_SETPOINT_M
+                agora = time.monotonic()
+                if (setpoint_pendente[0] and agora - setpoint_tentado[0] >= INTERVALO_SETPOINT_S
+                        and (dado.estado == ESTADO_HOLD or (dado.estado == ESTADO_DECOLANDO and subiu))):
+                    # A decolagem mantém a proa de quando armou; o setpoint (com a
+                    # guinada do quadro, 0 = zero da energização) vai sempre: em HOLD
+                    # ou, se a decolagem não termina, assim que o drone sai do chão.
+                    # O firmware confirma com "setpoint: em andamento".
+                    setpoint_tentado[0] = agora
+                    est = dado
+                    aplicar_setpoint()
+                elif dado.estado in (ESTADO_STANDBY, ESTADO_FAILSAFE, ESTADO_POUSANDO):
+                    setpoint_pendente[0] = False
                 est = dado
                 if est.estado == ESTADO_STANDBY or chao_m[0] is None:
                     chao_m[0] = est.altura_m
@@ -555,7 +723,11 @@ def executar_tela(porta_inicial: str) -> None:
                 mot = dado
             elif tipo == "texto":
                 escrever_log(dado)
-                for prefixo in ("trim ", "lqi ", "dist "):
+                if dado.startswith("lq "):
+                    ultimo_lq[0] = dado
+                if dado.startswith("setpoint: em andamento"):
+                    setpoint_pendente[0] = False
+                for prefixo in ("trim ", "dist "):
                     if dado.startswith(prefixo) and "z=" in dado:
                         valores["trim"].set(dado)
                         ultimo_trim[0] = dado[len(prefixo):]
@@ -589,7 +761,7 @@ def executar_tela(porta_inicial: str) -> None:
         valores["altura"].set(f"{est.altura_m * 1000:6.0f} mm")
         valores["ref"].set(f"{-est.ref[2] * 1000:6.0f} mm")
         subida = 0.0 if chao_m[0] is None else est.altura_m - chao_m[0]
-        valores["subida"].set(f"{subida * 100:+5.1f} cm de {altura_var.get()}")
+        valores["subida"].set(f"{subida * 100:+5.1f} cm de {altura_cm():g}")
         # x para a frente, y para a direita, desde onde armou (estimado pelo Kalman).
         valores["xy"].set(f"x {est.x[0] * 100:+6.1f}  y {est.x[1] * 100:+6.1f} cm")
         valores["vxy"].set(f"vx {est.y[4] * 100:+5.1f}  vy {est.y[5] * 100:+5.1f} cm/s")
@@ -614,11 +786,11 @@ def executar_tela(porta_inicial: str) -> None:
     def texto_ligar() -> str:
         if enlace is None:
             return "LIGAR"
-        if est.estado in (ESTADO_ARMADO, ESTADO_DECOLANDO, ESTADO_HOLD):
+        if est.estado in (ESTADO_ARMADO, ESTADO_DECOLANDO, ESTADO_HOLD, ESTADO_TRECHO):
             return "DESLIGAR (pousar em rampa)"
         if est.estado == ESTADO_POUSANDO:
             return "Pousando..."
-        return f"LIGAR (subir {altura_var.get()} cm)"
+        return f"LIGAR (subir {altura_cm():g} cm)"
 
     def tique() -> None:
         consumir_eventos()
@@ -636,7 +808,31 @@ def executar_tela(porta_inicial: str) -> None:
 
     # ---- montagem da tela -----------------------------------------------
 
-    topo = ttk.Frame(raiz, padding=8)
+    # Em cima, sempre à vista: conexão e os botões LIGAR / EMERGÊNCIA. Embaixo, o
+    # log. No meio, o resto numa área com rolagem (roda do mouse), para nada
+    # sair da tela em monitores pequenos.
+    fixo = ttk.Frame(raiz)
+    fixo.pack(side="top", fill="x")
+    caixa = tk.Text(raiz, height=7, state="disabled", bg="#111827", fg="#d1d5db")
+    caixa.pack(side="bottom", fill="x", padx=8, pady=(4, 8))
+    rolagem = tk.Canvas(raiz, highlightthickness=0)
+    barra = ttk.Scrollbar(raiz, orient="vertical", command=rolagem.yview)
+    rolagem.configure(yscrollcommand=barra.set)
+    barra.pack(side="right", fill="y")
+    rolagem.pack(side="left", fill="both", expand=True)
+    corpo = ttk.Frame(rolagem)
+    janela_corpo = rolagem.create_window((0, 0), window=corpo, anchor="nw")
+    corpo.bind("<Configure>", lambda _e: rolagem.configure(scrollregion=rolagem.bbox("all")))
+    rolagem.bind("<Configure>", lambda e: rolagem.itemconfigure(janela_corpo, width=e.width))
+
+    def roda(evento) -> None:
+        passo = -1 if (evento.num == 4 or evento.delta > 0) else 1
+        rolagem.yview_scroll(passo, "units")
+
+    for ev in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
+        raiz.bind_all(ev, roda)
+
+    topo = ttk.Frame(fixo, padding=8)
     topo.pack(fill="x")
     ttk.Label(topo, text="Porta:").pack(side="left")
     ttk.Combobox(topo, textvariable=porta_var, width=18,
@@ -646,13 +842,13 @@ def executar_tela(porta_inicial: str) -> None:
     ttk.Label(topo, textvariable=situacao_var).pack(side="left", padx=12)
     ttk.Checkbutton(topo, text="Gravar log do ensaio", variable=gravar_var).pack(side="right")
 
-    tk.Label(raiz, bg="#fde68a", fg="#7c2d12", font=("TkDefaultFont", 11, "bold"), pady=4,
+    tk.Label(corpo, bg="#fde68a", fg="#7c2d12", font=("TkDefaultFont", 11, "bold"), pady=4,
              text="PRENDA O DRONE · sem controle horizontal ele desliza · EMERGÊNCIA = barra de espaço ou Esc"
              ).pack(fill="x")
-    faixa_modo = tk.Label(raiz, font=("TkDefaultFont", 11, "bold"), pady=3)
+    faixa_modo = tk.Label(corpo, font=("TkDefaultFont", 11, "bold"), pady=3)
     faixa_modo.pack(fill="x")
 
-    estado_quadro = ttk.Frame(raiz, padding=8)
+    estado_quadro = ttk.Frame(corpo, padding=8)
     estado_quadro.pack(fill="x")
     rotulo_estado = ttk.Label(estado_quadro, textvariable=valores["estado"],
                               font=("TkDefaultFont", 22, "bold"))
@@ -660,7 +856,7 @@ def executar_tela(porta_inicial: str) -> None:
     ttk.Label(estado_quadro, textvariable=valores["sensores"], font=("TkDefaultFont", 11)).pack(side="left")
     ttk.Label(estado_quadro, textvariable=valores["modo"], font=("TkDefaultFont", 11, "bold")).pack(side="right")
 
-    medidas = ttk.LabelFrame(raiz, text="Medidas (relativas ao zero configurado)", padding=8)
+    medidas = ttk.LabelFrame(corpo, text="Medidas (relativas ao zero configurado)", padding=8)
     medidas.pack(fill="x", padx=8, pady=4)
     linhas = [
         ("Arfagem θ (frente/trás, nariz p/ cima +) · roll do BNO", "pitch"),
@@ -680,7 +876,7 @@ def executar_tela(porta_inicial: str) -> None:
     medidas.columnconfigure(0, weight=1)
 
     motores_quadro = ttk.LabelFrame(
-        raiz, text="O que cada motor recebe (barra = du do controle: azul aumenta, vermelho diminui)",
+        corpo, text="O que cada motor recebe (barra = du do controle: azul aumenta, vermelho diminui)",
         padding=8)
     motores_quadro.pack(fill="x", padx=8, pady=4)
     nomes = {1: "M1 trás/dir. (amarela)", 2: "M2 frente/dir. (preta)", 3: "M3 trás/esq. (preta)",
@@ -696,7 +892,7 @@ def executar_tela(porta_inicial: str) -> None:
         ttk.Label(quadro, textvariable=textos_motor[n]).pack(anchor="w")
         motores_quadro.columnconfigure(col, weight=1)
 
-    acoes = ttk.Frame(raiz, padding=8)
+    acoes = ttk.Frame(fixo, padding=8)
     acoes.pack(fill="x")
     botao_ligar = tk.Button(acoes, text="LIGAR", font=("TkDefaultFont", 14, "bold"), bg="#16a34a",
                             fg="white", activebackground="#166534", width=26, command=ligar_ou_desligar)
@@ -716,7 +912,7 @@ def executar_tela(porta_inicial: str) -> None:
     for chave, modo in MODOS.items():
         ttk.Radiobutton(modos, text=modo.rotulo, value=chave, variable=modo_var).pack(anchor="w")
 
-    ajustes = ttk.LabelFrame(raiz, text="Ajustes ao vivo", padding=6)
+    ajustes = ttk.LabelFrame(corpo, text="Ajustes ao vivo", padding=6)
     ajustes.pack(fill="x", padx=8, pady=4)
     ttk.Label(ajustes, text="Rotação de hover CTL_W0 (rad/s):").grid(row=0, column=0, sticky="w")
     tk.Scale(ajustes, from_=400, to=1200, orient="horizontal", length=260, variable=w0_var,
@@ -724,11 +920,6 @@ def executar_tela(porta_inicial: str) -> None:
     ttk.Label(ajustes, text="Limite de aceleração MOT_MAX (%):").grid(row=0, column=2, sticky="w", padx=(16, 0))
     tk.Scale(ajustes, from_=20, to=100, orient="horizontal", length=200, variable=maxmot_var,
              command=lambda v: ajustar("MOT_MAX", f"{float(v) / 100:.2f}")).grid(row=0, column=3)
-    ttk.Label(ajustes, text="Altura da subida (cm):").grid(row=2, column=0, sticky="w")
-    tk.Scale(ajustes, from_=int(ALTURA_MIN_M * 100), to=int(round(ALTURA_M * 100)), orient="horizontal",
-             length=260, variable=altura_var).grid(row=2, column=1)
-    ttk.Label(ajustes, text="Fique abaixo do que as cordinhas deixam subir.").grid(
-        row=2, column=2, columnspan=2, sticky="w", padx=(16, 0))
     ttk.Label(ajustes, text="Rampa FLT_Z_RATE (cm/s):").grid(row=1, column=0, sticky="w")
     tk.Scale(ajustes, from_=2, to=20, orient="horizontal", length=260, variable=rampa_var,
              command=lambda v: ajustar("FLT_Z_RATE", f"{float(v) / 100:.2f}")).grid(row=1, column=1)
@@ -738,28 +929,45 @@ def executar_tela(porta_inicial: str) -> None:
         row=3, column=0, sticky="w")
     tk.Scale(ajustes, from_=-200, to=200, orient="horizontal", length=260, variable=ff_th_var,
              command=lambda v: ajustar("CTL_FF_TH", str(int(float(v))))).grid(row=3, column=1)
-    ttk.Label(ajustes, text="Só desarmado. Ajuste até o 'lqi th=' do log ficar perto de 0 no hover.").grid(
+    ttk.Label(ajustes, text="Só desarmado. Ajuste até o 'dist th=' do log ficar perto de 0 no hover.").grid(
         row=3, column=2, columnspan=2, sticky="w", padx=(16, 0))
+    ttk.Label(ajustes, text="Esquerda/direita fixo CTL_FF_PHI (rad/s):").grid(row=4, column=0, sticky="w")
+    tk.Scale(ajustes, from_=-200, to=200, orient="horizontal", length=260, variable=ff_phi_var,
+             command=lambda v: ajustar("CTL_FF_PHI", str(int(float(v))))).grid(row=4, column=1)
+    ttk.Label(ajustes, text="Se o drone sai para um lado ao subir, o 'dist phi=' do log é o valor certo.").grid(
+        row=4, column=2, columnspan=2, sticky="w", padx=(16, 0))
 
-    quadro_lqi = ttk.LabelFrame(
-        raiz, text="Pesos do LQI (Q e R do dlqr; padrão = TCC + integradores) · só desarmado",
+    quadro_sp = ttk.LabelFrame(
+        corpo, text="Setpoint · X, Y do ponto de decolagem (0, 0) · guinada do zero da energização",
         padding=6)
-    quadro_lqi.pack(fill="x", padx=8, pady=4)
-    for i, (rotulo, chave) in enumerate(CAMPOS_PESOS):
-        linha, coluna = divmod(i, 6)
-        ttk.Label(quadro_lqi, text=rotulo).grid(row=linha, column=2 * coluna, sticky="e", padx=(8, 2))
-        ttk.Entry(quadro_lqi, textvariable=pesos_vars[chave], width=8).grid(
-            row=linha, column=2 * coluna + 1, sticky="w")
-    botoes_lqi = ttk.Frame(quadro_lqi)
-    botoes_lqi.grid(row=0, column=12, rowspan=2, padx=(16, 0))
-    ttk.Button(botoes_lqi, text="Calcular", command=calcular_lqi).pack(fill="x")
-    ttk.Button(botoes_lqi, text="Enviar ao drone", command=enviar_lqi).pack(fill="x", pady=2)
-    ttk.Button(botoes_lqi, text="Padrão", command=padrao_lqi).pack(fill="x")
-    ttk.Label(quadro_lqi, textvariable=resumo_lqi_var, font=("TkFixedFont", 10)).grid(
-        row=2, column=0, columnspan=13, sticky="w", pady=(4, 0))
+    quadro_sp.pack(fill="x", padx=8, pady=4)
+    for i, (rotulo, chave) in enumerate((("X (cm, + frente)", "x"), ("Y (cm, + direita)", "y"),
+                                         ("Z (altura, cm)", "z"), ("Guinada (°)", "yaw"))):
+        ttk.Label(quadro_sp, text=rotulo).grid(row=0, column=2 * i, sticky="e", padx=(8, 2))
+        ttk.Entry(quadro_sp, textvariable=setpoint_vars[chave], width=7).grid(row=0, column=2 * i + 1)
+    ttk.Button(quadro_sp, text="Aplicar em voo", command=aplicar_setpoint).grid(row=0, column=8, padx=12)
+    ttk.Button(quadro_sp, text="Voltar à partida", command=voltar_a_partida).grid(row=0, column=9, padx=4)
+    ttk.Button(quadro_sp, text="Zerar X Y aqui", command=zerar_xy).grid(row=0, column=10, padx=4)
+    ttk.Label(quadro_sp, text="Z vale no LIGAR; o setpoint inteiro vai em HOLD ou ao subir 4 cm "
+                              "(X, Y só com 'Segurar posição').").grid(
+        row=1, column=0, columnspan=11, sticky="w", pady=(4, 0))
 
-    caixa = tk.Text(raiz, height=8, state="disabled", bg="#111827", fg="#d1d5db")
-    caixa.pack(fill="both", expand=True, padx=8, pady=(4, 8))
+    quadro_q = ttk.LabelFrame(
+        corpo, text="Pesos Q do LQG nos 12 estados (dlqr do TCC; modos ajustado e melhorado) · só desarmado",
+        padding=6)
+    quadro_q.pack(fill="x", padx=8, pady=4)
+    for i, (rotulo, chave) in enumerate(CAMPOS_PESOS):
+        linha, coluna = divmod(i, 7)
+        ttk.Label(quadro_q, text=rotulo).grid(row=linha, column=2 * coluna, sticky="e", padx=(8, 2))
+        ttk.Entry(quadro_q, textvariable=pesos_vars[chave], width=8).grid(
+            row=linha, column=2 * coluna + 1, sticky="w")
+    botoes_q = ttk.Frame(quadro_q)
+    botoes_q.grid(row=0, column=14, rowspan=2, padx=(16, 0))
+    ttk.Button(botoes_q, text="Calcular", command=calcular_q).pack(fill="x")
+    ttk.Button(botoes_q, text="Enviar ao drone", command=enviar_q).pack(fill="x", pady=2)
+    ttk.Button(botoes_q, text="Padrão", command=padrao_q).pack(fill="x")
+    ttk.Label(quadro_q, textvariable=resumo_q_var, font=("TkFixedFont", 10)).grid(
+        row=2, column=0, columnspan=15, sticky="w", pady=(4, 0))
 
     raiz.bind("<space>", emergencia)
     raiz.bind("<Escape>", emergencia)

@@ -394,3 +394,106 @@ Corte por inclinação acima de 20°, subida presa (segura onde está se não so
 2 cm em 3 s), pouso que desconta o hover estimado se o drone não desce, e o
 watchdog do PC. A perturbação estimada só muda no ar, com motores reais, sem
 rampa e sem saturação, e fica limitada a `CTL_LQI_MAX` (250 rad/s por motor).
+
+## 13. Pesos Q no painel e setpoint (06/11)
+
+**Chumbo de verdade.** Com o lastro definitivo o frame ficou equilibrado, então
+`CTL_FF_TH` e o `FF_TH_PADRAO` do painel passaram de −90 para 0 (o estimador de
+perturbação acha o que sobrar). `CTL_W0` continua 820 no painel: com o peso
+novo, confira o `dist z=` do log e ajuste se precisar.
+
+**Pesos Q dos 12 estados.** O quadro "Pesos Q" do painel (`tools/controle_gui.py`)
+substitui o antigo "Pesos do LQI". Ele refaz o `dlqr` do TCC
+(`lqg_ajustado.ganhos_lqg(q, r)`, mesmo A, B e `Kfd = inv(Cr (I−A+BKd)⁻¹B)`) e
+manda Kd (48) e Kfd (16) ao STM32:
+
+    lq begin | lq set kd|kfd L C V (64 vezes) | lq commit <crc hex> | lq default
+
+O commit só vale com os 64 valores, todos finitos e o CRC-32 certo
+(`control/lqg_tuning.h`); o console recusa armado e o voo só copia os ganhos
+desarmado. Valem para os modos "ajustado" e "melhorado" (o estimador de
+perturbação não depende de Q). Se os pesos digitados ainda não estão no drone, o LIGAR
+os envia sozinho e só arma quando o firmware confirma o CRC. Reiniciar a placa ou "Padrão" volta ao `Q_AJUSTADO`.
+
+**Setpoint.** `sp <x m> <y m> <altura m> <guinada °>` (e o quadro "Setpoint" do
+painel, que abre em 0, 0, 20 cm, 0°): X, Y em relação ao ponto de decolagem,
+altura acima do chão onde armou, guinada em relação à direção em que o STM32
+foi energizado (a guinada do BNO é zerada ali). Vale em HOLD ou com um trecho
+em andamento (troca o alvo), com rampa de `FLT_XY_RATE`, `FLT_Z_RATE` e
+`FLT_YAW_RATE`; X, Y limitados a ±3 m. X e Y só são seguidos com `CTL_XY`
+ligado. No painel, Z vale já no LIGAR; X, Y e guinada diferentes de zero são
+enviados ao chegar em HOLD.
+
+**XY com o drone virado (06/11, noite).** Nos voos com `CTL_XY`, o drone
+armava com ψ entre −50° e −130° e não voltava ao (0, 0). Três causas:
+
+1. O fluxo era girado para o local pela guinada do *sensor* (anti-horário),
+   e não por ψ do modelo (horário): longe de ψ = 0 o y saía espelhado.
+   `meas.c` agora gira por `SNS_SGN_YAW × guinada` e aplica `SNS_SGN_VX/VY`
+   antes da rotação (`test_meas` confere: nariz a oeste, andar para a frente
+   é y negativo).
+2. O LQG do TCC é linearizado em ψ = 0 (θ empurra x, φ empurra y). Com o
+   drone virado, a correção de posição saía girada de ψ; em simulação, com
+   ψ = −96° (o do voo) ou 149°, o XY diverge. Com o XY na malha, o voo põe
+   x, y, vx, vy, as medidas de velocidade e a referência no referencial da
+   proa antes do LQG e devolve a estimativa ao local depois
+   (`attitude_mode_rotate_horizontal`); `test_lqg_dist` segura o ponto em
+   qualquer ψ.
+3. Ganho de posição fraco: com Q x, y = 5 e vx, vy = 5, Kd de x era 3,15
+   rad/s por metro (0,5° de erro no nível = ~40 cm fora do ponto). O padrão
+   passou a x, y = 50, vx, vy = 20 (Kd ~10) e ψ = 200. Pesos maiores
+   (100/50 ou 200/100) endurecem também φ e θ e, com o motor atrasando
+   120 ms, a atitude deixa de ser estável em simulação.
+
+Além disso, a decolagem mantém a proa de quando armou (antes a referência de
+ψ ia a 0 no armar e a decolagem nunca terminava com o drone virado); o painel
+manda o setpoint inteiro ao chegar em HOLD, e o drone gira para a guinada
+pedida já no ar.
+
+**Setpoint na decolagem e MTF fora do centro (06/11).**
+
+- A decolagem não tem prazo: se o drone não alcança a altura (W0 baixo, cabo
+  segurando), ela não termina, e o setpoint só entrava em HOLD. Agora ele
+  também entra na decolagem, depois da rampa de partida e com o drone 3 cm
+  fora do chão (`setpoint_allowed`); a decolagem é encerrada e o setpoint
+  segue dali. Sem `CTL_XY`, o setpoint não espera por x e y. O painel tenta
+  o setpoint a cada 1 s assim que o MTF mostra 4 cm de subida (ou em HOLD),
+  até o console responder `setpoint: em andamento`.
+- O MTF-01 fica na traseira: girando em guinada, ele mede r × distância de
+  velocidade que o centro não tem. `FLOW_YAW_X/Y` (m) tiram isso no corpo,
+  antes da rotação para o local. Padrão medido nos voos de 06/11 (sensor a
+  mais de 13 cm, |r| > 0,4 rad/s): y = 0,09 (0,093 ± 0,024); x = 0 (0,05 ±
+  0,03, dentro do ruído).
+
+**LQI removido e estimador de guinada (06/11).**
+
+- O LQI saiu do firmware, do painel e das ferramentas. O limite do estimador de
+  perturbação, que era o `CTL_LQI_MAX` (250), virou `CTL_DIST_MAX` (padrão
+  400): com o chumbo, o hover passava do `CTL_W0` do painel por mais de 250 e o
+  drone não saía do efeito solo. O modelo e o `dlqr` em Python foram para
+  `tools/lqg_modelo.py`.
+- **A guinada do modelo do TCC é ~2000 vezes forte demais.** O B dá 61,9 rad/s²
+  por rad/s de diferença média entre os pares de motores; a física do drone
+  (550 g, 1,35 N por motor, torque/empuxo ~1,5 cm, Izz ~0,005 kg·m²) dá ~0,03, e
+  a regressão nos voos (malha de guinada fraca) ~0,013. Com o B do TCC, o LQR
+  pedia quase nada de guinada (Kψ ~4–8) e o drone girava 60–190° sozinho.
+  `tools/lqg_ajustado.py` agora projeta o ajustado com a guinada em 0,02
+  (`GUINADA_ALPHA`, linhas ψ e r do B): Q ψ = 2000 e r = 50 dão Kψ ~70 e
+  Kr ~85. A guinada é desacoplada no modelo, então as outras colunas não mudam.
+  A predição do Kalman usa a mesma escala (`lqg_dist_kalman_input`), senão
+  preveria ψ e r disparando.
+- **Estimador de perturbação de guinada:** quarto canal do `lqg_dist`, [ψ, r, d]
+  com o padrão de guinada (u2, u4 contra u1, u3) e variância de d 0,1. Em
+  simulação (`test_yaw_disturbance`), um torque constante de 40 rad/s por motor
+  e 30° de erro inicial terminam abaixo de 0,4° com a autoridade real de 0,5× a
+  2× a de projeto e o motor atrasando até 120 ms. O log mostra `dist ... psi=`.
+
+**Altura com o ω0 real (06/11).** No modelo, 1 rad/s a mais em vz acelera
+g / (2 ω0), e o B do TCC foi exportado com ω0 = 702 rad/s. Com o chumbo o
+hover real está em ~1000 (`HOVER_OMEGA0` em `tools/lqg_ajustado.py`): o drone
+responde ~30% menos. No voo de 06/11 (alvo 50 cm) o Kalman estimou vz de +5 a
++29 cm/s com a altura parada, e o termo de vz do LQR tirava empuxo na subida.
+As linhas z e vz do B do ajustado agora usam o ω0 real (`LQG_AJ_Z_SCALE`,
+0,70), também na predição do Kalman (`lqg_dist_kalman_input`, coletivo) e no
+estimador de altura. Em simulação, num empurrão coletivo de 40 rad/s, o erro do
+vz estimado cai de 4,2 para 0,8 cm/s; Kz fica em ~110 e Kvz vai de 89,6 a 106,8.

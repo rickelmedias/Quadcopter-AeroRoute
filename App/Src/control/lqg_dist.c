@@ -14,6 +14,30 @@ void lqg_dist_apply_gains(lqg_gains_t *gains) {
   }
 }
 
+void lqg_dist_apply_kalman(lqg_gains_t *gains) {
+  for (unsigned i = 0U; i < LQG_NX; ++i) {
+    for (unsigned j = 0U; j < LQG_NY; ++j) {
+      gains->M[i][j] = LQG_AJ_M[i][j];
+      gains->L[i][j] = LQG_AJ_L[i][j];
+    }
+  }
+}
+
+void lqg_dist_kalman_input(const lqg_real_t du[LQG_NU], lqg_real_t out[LQG_NU]) {
+  const float *pattern = LQG_DIST_CHANNELS[LQG_DIST_PSI].pattern;
+  lqg_real_t yaw = 0.0;
+  for (unsigned j = 0U; j < LQG_NU; ++j) yaw += (lqg_real_t)pattern[j] * du[j];
+  yaw /= (lqg_real_t)LQG_NU;
+  lqg_real_t collective = 0.0;
+  for (unsigned j = 0U; j < LQG_NU; ++j) collective += du[j];
+  collective /= (lqg_real_t)LQG_NU;
+  const lqg_real_t remove_yaw = yaw * (1.0 - (lqg_real_t)LQG_AJ_YAW_SCALE);
+  const lqg_real_t remove_z = collective * (1.0 - (lqg_real_t)LQG_AJ_Z_SCALE);
+  for (unsigned j = 0U; j < LQG_NU; ++j) {
+    out[j] = du[j] - remove_yaw * (lqg_real_t)pattern[j] - remove_z;
+  }
+}
+
 void lqg_dist_reset(lqg_dist_t *e) { memset(e, 0, sizeof(*e)); }
 
 void lqg_dist_correct(lqg_dist_t *e, const lqg_real_t y[LQG_NY], bool range_ok) {

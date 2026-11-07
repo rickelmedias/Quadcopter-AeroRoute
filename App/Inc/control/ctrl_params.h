@@ -70,6 +70,10 @@ typedef struct {
   float flow_gyro_x;
   /** FLOW_GYRO_Y: idem para Y. */
   float flow_gyro_y;
+  /** FLOW_YAW_X: velocidade falsa em x do corpo por rad/s de guinada (MTF fora do centro), em m. */
+  float flow_yaw_x;
+  /** FLOW_YAW_Y: idem para y do corpo. */
+  float flow_yaw_y;
   /** FLT_HOVER_H: altura padrão do comando hover, em m. */
   float hover_height;
   /** FLT_Z_RATE: velocidade da rampa de referência vertical, em m/s (0 = degrau). */
@@ -104,10 +108,8 @@ typedef struct {
   float trim_max;
   /** CTL_TRIM_ATT: limite de cada termo de equilíbrio (arfagem e rolagem), em rad/s. */
   float trim_att_max;
-  /** CTL_LQI: 1 = LQI (control/lqi.h) no lugar do LQR do Simulink e do ajuste lento. */
-  float use_lqi;
-  /** CTL_LQI_MAX: maior correção de um integrador do LQI em um motor, em rad/s. */
-  float lqi_max;
+  /** CTL_DIST_MAX: maior perturbação estimada de cada canal, em rad/s por motor. */
+  float dist_max;
   /** CTL_FF_TH: desequilíbrio frente/trás fixo, em rad/s (+ na frente, − atrás). */
   float ff_theta;
   /** CTL_FF_PHI: desequilíbrio esquerda/direita fixo, em rad/s (+ na esquerda, − na direita). */

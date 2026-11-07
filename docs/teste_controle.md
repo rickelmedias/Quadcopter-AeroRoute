@@ -1,7 +1,7 @@
 # Teste de controle (branch `controle`)
 
 Testa só o controle do TCC (Kalman + LQR do `main`): estabiliza **rolagem e
-arfagem**, mantém a **guinada no zero da energização** e **sobe até 25 cm** em
+arfagem**, mantém a **guinada no zero da energização** e **sobe até 50 cm** em
 rampa, lendo a altura no MTF-01. Ao desligar, pousa em rampa.
 
 ## O que é diferente do `main`
@@ -206,7 +206,7 @@ porta USB fechada corta; **PC calado por 1 s (watchdog) pousa em rampa**.
 python3 tools/controle_gui.py [/dev/ttyACM0]
 ```
 
-- **LIGAR / DESLIGAR:** LIGAR arma e sobe em rampa até a altura escolhida (3 a 25 cm); DESLIGAR pousa em
+- **LIGAR / DESLIGAR:** LIGAR arma e sobe em rampa até a altura escolhida (3 a 50 cm); DESLIGAR pousa em
   rampa e desarma sozinho.
 - **EMERGÊNCIA** (ou barra de espaço / Esc): corta os motores na hora.
 - **Ensaio a seco** (marcado): o controle roda e a tela mostra o que cada motor

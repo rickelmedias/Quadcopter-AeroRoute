@@ -110,15 +110,28 @@
 #define DEFAULT_FLOW_GYRO_X  (+1.0F)
 /** Compensação da rotação no fluxo Y (ver DEFAULT_FLOW_GYRO_X). */
 #define DEFAULT_FLOW_GYRO_Y  (-1.0F)
+/**
+ * O MTF-01 fica longe do centro do drone (na traseira): girando em guinada, ele
+ * descreve um arco e mede uma velocidade que o centro não tem, r × distância.
+ * Estes coeficientes, em m (m/s de velocidade falsa no corpo por rad/s de r do
+ * modelo), saem dessa velocidade antes de ela ir para o local. Medidos nos
+ * voos de 06/11 (só com o sensor a mais de 13 cm do chão, 503 amostras com
+ * |r| > 0,4 rad/s, já nos eixos do corpo): y 0,093 ± 0,024; x 0,05 ± 0,03,
+ * que não se separa do ruído e fica em 0. Medidos no mesmo referencial em que
+ * são aplicados, não dependem de adivinhar sinais de eixo.
+ */
+#define DEFAULT_FLOW_YAW_X   0.0F
+/** Ver ::DEFAULT_FLOW_YAW_X. */
+#define DEFAULT_FLOW_YAW_Y   0.09F
 
 /* ---- Voo ---------------------------------------------------------------- */
 
 /**
  * Maior altura que qualquer pedido de decolagem ou trecho aceita, em m. O
- * teste de controle sobe no máximo 25 cm (lidos pelo MTF-01); o painel escolhe
+ * teste de controle sobe no máximo 50 cm (lidos pelo MTF-01; era 25 até 06/11); o painel escolhe
  * a altura de cada voo abaixo disso.
  */
-#define FLIGHT_MAX_HEIGHT_M    0.25F
+#define FLIGHT_MAX_HEIGHT_M    0.50F
 /** Folga numérica ao comparar uma altura pedida com ::FLIGHT_MAX_HEIGHT_M, em m. */
 #define FLIGHT_HEIGHT_TOL_M    0.001F
 /**
@@ -144,7 +157,7 @@
 /**
  * No pouso, com o drone mais de ::FLIGHT_LAND_ABOVE_M acima da referência e
  * descendo a menos de ::FLIGHT_LAND_DESCENT_M_S, a correção de hover dos
- * integradores (LQI ou ajuste lento) cai a esta taxa, em rad/s por s. O
+ * correções lentas (estimador de perturbação ou ajuste lento) cai a esta taxa, em rad/s por s. O
  * integrador de altura sozinho desfaz devagar demais: no ensaio de 05/11 o
  * drone ficou 3–5 s parado no alto com a referência já no chão.
  */
@@ -206,13 +219,8 @@
    distribuído (frente leve, traseira pesada) deixam erro de altura e de
    inclinação. Valores calibrados em simulação com perturbações de até
    120 rad/s no hover e 30 rad/s de desequilíbrio. */
-/* ---- LQI (control/lqi.h) ------------------------------------------------- */
-/**
- * 1 = usa o LQI: o LQR do TCC com integradores de altura, φ e θ, projetado
- * pelo mesmo dlqr (tools/lqi). Ficou para comparação; o padrão é o LQG
- * melhorado (CTL_LQG_AJ = 1 e CTL_DIST = 1).
- */
-#define DEFAULT_CTL_LQI        0.0F
+/* ---- LQG ajustado e estimador de perturbação ---------------------------- */
+/* O LQI (LQR com integradores) que existia para comparação saiu em 06/11. */
 /**
  * 1 = LQG ajustado: Kd e Kfd do mesmo projeto do TCC com Q mais firme em altura
  * e atitude (tools/lqg_ajustado.py); o Kalman continua o do Simulink.
@@ -224,28 +232,28 @@
  * cancela.
  */
 #define DEFAULT_CTL_DIST       1.0F
-/** Maior correção de um integrador do LQI em um motor, em rad/s. */
-#define DEFAULT_LQI_MAX        250.0F
 /**
- * Anti-windup: no ar, o erro de φ e θ que entra nos integradores do LQI fica
- * limitado a ± isto, em rad (~4,6°). Perto do equilíbrio o projeto linear não
- * muda; num empurrão, o integrador não acumula o ângulo inteiro (em simulação o
- * rebote caiu de 24° para 16°).
+ * Maior perturbação estimada de cada canal, em rad/s por motor. Era 250, o
+ * limite que dividia com o LQI; com o chumbo (550 g, 06/11) o hover passou
+ * do CTL_W0 do painel por mais que isso e o drone não saía do efeito solo.
  */
-#define LQI_ATT_ERROR_MAX_RAD  0.08F
+#define DEFAULT_CTL_DIST_MAX   400.0F
 
 /**
  * Desequilíbrio frente/trás fixo somado aos motores desde a decolagem, em
- * rad/s por motor (+ na frente, − atrás). É o ponto de operação do drone com a
- * traseira pesada: nos ensaios de 05/11 o integrador de θ do LQI parava em
- * −82 a −105 rad/s em todo hover (traseira ~10% de aceleração acima da
- * frente). Sem ele, a decolagem saía com os quatro motores iguais e a frente
- * levantava sozinha no fim da rampa (θ de +2° a +18° em 0,2 s, 7 de 13 voos em
- * FAILSAFE). Os integradores corrigem só o que sobrar.
+ * rad/s por motor (+ na frente, − atrás). Até 05/11 a traseira era mais pesada
+ * e o drone precisava de −90. Em 06/11 entrou o chumbo de verdade e o frame
+ * ficou mais equilibrado; nos hovers de 06/11 o estimador de perturbação
+ * parou sempre perto de θ = −22 e φ = −40 rad/s. Começar já neles evita que o
+ * drone saia para o lado enquanto o estimador (lento, de propósito) aprende.
  */
-#define DEFAULT_CTL_FF_TH      (-90.0F)
-/** Desequilíbrio esquerda/direita fixo, em rad/s (+ na esquerda). Nos ensaios, ~0. */
-#define DEFAULT_CTL_FF_PHI     0.0F
+#define DEFAULT_CTL_FF_TH      (-20.0F)
+/**
+ * Desequilíbrio esquerda/direita fixo, em rad/s (+ na esquerda; mesmo padrão do
+ * φ do estimador). Nos hovers de 06/11 o estimador parou em −40 em todos os
+ * voos; sem isso o drone sai para um lado ao subir, até ele aprender.
+ */
+#define DEFAULT_CTL_FF_PHI     (-40.0F)
 
 /** 1 = liga o ajuste lento (CTL_TRIM). Padrão desligado: o painel liga. */
 #define DEFAULT_CTL_TRIM       0.0F

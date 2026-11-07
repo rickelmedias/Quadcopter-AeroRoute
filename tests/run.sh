@@ -22,9 +22,8 @@ cd "$(dirname "$0")/.."
 PURE="App/Src/attitude.c App/Src/mtf_parser.c
       App/Src/control/lqg_ert.c App/Src/control/lqg_ert_model.c
       App/Src/control/ctrl_gains.c App/Src/control/ctrl_params.c App/Src/control/meas.c
-      App/Src/control/mixer.c App/Src/control/attitude_mode.c App/Src/control/trim.c App/Src/control/throttle.c App/Src/control/lqi.c
-      App/Src/control/lqi_tuning.c App/Src/control/lqg_dist.c App/Src/control/lqg_ajustado_gains.c
-      App/Src/control/lqi_gains.c"
+      App/Src/control/mixer.c App/Src/control/attitude_mode.c App/Src/control/trim.c App/Src/control/throttle.c
+      App/Src/control/lqg_tuning.c App/Src/control/lqg_dist.c App/Src/control/lqg_ajustado_gains.c"
 REFERENCE="reference/STM32_ert_rtw/STM32.c reference/STM32_ert_rtw/STM32_data.c"
 
 CFLAGS="-std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined
@@ -44,7 +43,6 @@ run_suite() {
   extra=""
   case "$src" in
     *test_lqg_ert.c) extra="$REFERENCE" ;;
-    *test_lqi.c) extra="-Itools/lqi tools/lqi/lqr_design.c tools/lqi/lqi_design.c" ;;
   esac
   if ! gcc $CFLAGS "$@" "$src" $PURE $extra -lm -o "$OUT/$name" 2>"$OUT/$name.log"; then
     echo "BUILD FAIL  $name"
@@ -67,42 +65,12 @@ done
 run_suite test_lqg_ert_float tests/test_lqg_ert.c -DLQG_ERT_SINGLE_PRECISION
 
 echo
-# A tabela do LQI precisa ser a que tools/lqi/lqi_gen gera com os pesos atuais.
-if gcc -std=c11 -O2 -IApp/Inc -Itools/lqi tools/lqi/lqi_gen.c tools/lqi/lqi_design.c \
-      tools/lqi/lqr_design.c App/Src/control/lqg_ert_model.c -lm -o "$OUT/lqi_gen" \
-      2>"$OUT/lqi_gen.log" && "$OUT/lqi_gen" --check App/Src/control/lqi_gains.c >>"$OUT/lqi_gen.log" 2>&1; then
-  echo "PASS  lqi_gains.c confere com tools/lqi (projeto do LQI)"
-else
-  echo "FAIL  lqi_gains.c desatualizado"
-  cat "$OUT/lqi_gen.log"
-  failures=$((failures + 1))
-fi
-
 # A tabela do LQG ajustado e do estimador precisa ser a que o gerador dá agora.
 if python3 tools/lqg_ajustado.py --check >"$OUT/lqg_ajustado.log" 2>&1; then
   echo "PASS  lqg_ajustado_gains.c confere com tools/lqg_ajustado.py"
 else
   echo "FAIL  lqg_ajustado_gains.c desatualizado"
   cat "$OUT/lqg_ajustado.log"
-  failures=$((failures + 1))
-fi
-
-# O projeto do LQI do painel (Python puro) precisa dar a mesma tabela, e o
-# envio pelo console precisa do mesmo CRC no C e no Python.
-if python3 tools/lqi_projeto.py --check >"$OUT/lqi_projeto.log" 2>&1; then
-  echo "PASS  tools/lqi_projeto.py reproduz lqi_gains.c"
-else
-  echo "FAIL  tools/lqi_projeto.py"
-  cat "$OUT/lqi_projeto.log"
-  failures=$((failures + 1))
-fi
-c_lqi_crc=$(sed -n 's/^lqi_default_crc=//p' "$OUT/test_lqi.out" 2>/dev/null || true)
-py_lqi_crc=$(python3 tools/lqi_projeto.py 2>"$OUT/lqi_crc.log" | sed -n 's/^crc=//p' || true)
-if [ -n "$c_lqi_crc" ] && [ "$c_lqi_crc" = "$py_lqi_crc" ]; then
-  echo "PASS  CRC dos ganhos do LQI igual no C e no Python ($c_lqi_crc)"
-else
-  echo "FAIL  CRC dos ganhos do LQI: C=$c_lqi_crc Python=$py_lqi_crc"
-  cat "$OUT/lqi_crc.log"
   failures=$((failures + 1))
 fi
 

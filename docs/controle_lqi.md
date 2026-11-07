@@ -1,5 +1,10 @@
 # LQI: o LQR do TCC com integradores (branch `controle-lqi`)
 
+> **Removido em 06/11/2026.** O LQI saiu do firmware, do painel e das
+> ferramentas (`CTL_LQI`, `lqi_*.c`, `tools/lqi`, `tools/lqi_projeto.py`). Este
+> texto fica como registro dos ensaios; o código está no histórico do git (tag
+> `lqg-melhorado-aprovado`).
+
 ## Por que
 
 O controle exportado pelo Simulink (`STM32_ert_rtw`) é um LQG: Kalman de regime
@@ -142,7 +147,7 @@ Para ajustar `CTL_FF_TH`: num hover estável, o log mostra `lqi z=.. th=..`. Se
 
 ## Testar outros pesos sem regravar
 
-O painel (`tools/controle_gui.py`) tem o quadro "Pesos do LQI", com os pesos de
+O painel (`tools/controle_gui.py`) tinha o quadro "Pesos do LQI" (hoje o quadro é o de pesos Q do LQG, seção 13 de controle_lqg.md; o envio abaixo segue valendo pelo console), com os pesos de
 Q (z, φ, θ, ψ, vz, p, q, r), R e os três integradores. "Calcular" mostra os
 ganhos que resultam; "Enviar ao drone" manda Kx, Kfd e Ki ao STM32; "Padrão"
 volta à tabela de `lqi_gains.c`.
