@@ -76,14 +76,17 @@ TCC no lugar dos sensores. Detalhes: [`docs/teste_comunicacao.md`](docs/teste_co
 - **Pi (contra um STM32 falso, `tools/pi/tests`):** 26 testes — comandos,
   cálculo de rota, algoritmos, missões 2D e 3D, recusas, resposta antiga de
   outra missão e pouso em erro. Também rodam na própria Pi.
+- **Mesma rota no PC e na Pi** (`tools/pi/ensaios/assinatura_ag.py`): o AG dá a
+  mesma ordem e o mesmo SHA-256 nas duas máquinas para o quadrado do ensaio e
+  para instâncias de 10 e 30 pontos do benchmark; na Pi Zero leva de 10 a 24 s
+  (60 a 70× o PC). O benchmark completo fica no PC, por poder computacional.
+  Registro: [`docs/resultados_rotas/pi/assinatura_ag.md`](docs/resultados_rotas/pi/assinatura_ag.md).
 - `sh tests/run.sh`: todas as suítes do firmware.
 
 ### Pendente
 
-1. **Benchmark na Pi:** em andamento (`~/drone/resultados_rotas/pi`); a
-   assinatura tem de ser a mesma do PC. Na Pi Zero o AG leva ~11,5 s por rota.
-2. Ensaio pela UART com os motores girando e em voo.
-3. Propostas ainda não feitas: vigia do operador na Pi (perdeu o Wi-Fi → HOLD →
+1. Ensaio pela UART com os motores girando e em voo.
+2. Propostas ainda não feitas: vigia do operador na Pi (perdeu o Wi-Fi → HOLD →
    pouso) e watchdog de hardware (IWDG) no STM32.
 
 ## O que existe hoje

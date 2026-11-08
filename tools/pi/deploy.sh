@@ -19,7 +19,7 @@ rsync -aR --delete --exclude '__pycache__' --exclude '.venv' \
   protocol/drone_controller.xml \
   reference/STM32_ert_rtw/STM32_data.c \
   tools/ert_import.py \
-  tools/pi/dronectl tools/pi/missoes tools/pi/tests tools/pi/ensaios/ensaio_dronelink.py \
+  tools/pi/dronectl tools/pi/missoes tools/pi/tests tools/pi/ensaios/ensaio_dronelink.py tools/pi/ensaios/assinatura_ag.py \
   tools/pi/requirements.txt tools/pi/README.md \
   "$HOST:$DEST/"
 
