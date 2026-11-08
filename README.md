@@ -22,6 +22,57 @@ Perfis de bancada em branches separadas, cada um testável sozinho:
 | `motors` | MTF-01 + BNO08x + teste dos motores por comandos USB, sem controle ([guia](docs/guia_teste_motores.md)) |
 | `main` | Tudo integrado com o Kalman + LQR do Simulink |
 
+## Estado da branch `hover-lqg-pi` (08/11/2026)
+
+Une a `comunicacao-pi-stm32` (DroneLink pela UART) e a `controle-lqg-posicao`
+(LQG melhorado com XY): o drone voa **livre, sem o cabo USB e sem o painel**.
+A Pi, a bordo, comanda o hover por SSH, grava cada voo e diz o que mudar no
+próximo. O objetivo é subir a 30 cm e ficar no (0, 0).
+
+### O que mudou
+
+| Onde | O quê |
+|---|---|
+| STM32 | Padrões tirados dos voos de 06/11 ([`flight_config.h`](App/Inc/flight_config.h), com a origem de cada um): `CTL_W0` 1050, `MOT_MAX` 0,95, altura 30 cm, **XY ligado**, `CTL_FF_TH` −50, `CTL_FF_PHI` −40, **`CTL_FF_PSI` +50** (novo: o torque de guinada fixo; os três juntos são o M4 pedindo ~15% menos), rampa no chão 20 rad/s² |
+| STM32 | **`SNS_LVL_PHI/TH`** (novos, ±5°): correção fina do nível somada a φ e θ do modelo. Sem integrador de posição, 0,5° de erro de nível = ~14 cm fora do ponto |
+| STM32 | Ganhos enviados pela Pi (`DRONE_GAIN_*`) valem também no LQG ajustado (antes ele trocava Kd/Kfd/L/M pelos da tabela). Sem envio, continua a tabela |
+| STM32 | Mensagens do voo (`voo: ...`, `dist ...`, `FAILSAFE ...`) também como STATUSTEXT para a Pi, numa fila de 8 |
+| STM32 | Da comunicação: drone simulado (`FLT_SIM`), trecho termina só com o drone estável, altura do `LOCAL_POSITION_NED` a partir do chão |
+| Pi | **`dronectl hover-test`**: perfil + ajustes do ensaio, voo com proteções (altura, cerca de 80 cm, telemetria, Ctrl+C/SSH caindo → pouso; Ctrl+C de novo → corta), gravação a 50 Hz, análise e sugestão; `hover-report` (reanálise, `--plot` no PC) e `hover-profile`. Guia: [`tools/pi/README.md`](tools/pi/README.md#ensaio-de-hover-hover-test) |
+
+### Roteiro dos ensaios
+
+1. **Gravar o firmware** (DFU, seção [Gravar o HEX](#2-gravar-o-hex-em-modo-dfu))
+   e **copiar a ferramenta** para a Pi: `sh tools/pi/deploy.sh`.
+2. **Conferir a cadeia sem motor:** `~/drone/dronectl hover-test --sim`
+   (drone simulado no STM32) e `~/drone/dronectl hover-test` (a seco, sensores
+   reais). Os dois precisam terminar com a análise e sem erro.
+3. **Primeiro voo:** bateria cheia, área livre de ~1,5 m, `~/drone/dronectl
+   hover-test --motors --height 20 --time 10`. Depois 30 cm por 20 s
+   (`hover-test --motors`, os valores do perfil).
+4. **Ajustar um valor por vez**, lendo a análise de cada voo:
+
+   | O que a análise mostra | O que mexer |
+   |---|---|
+   | Demora a sair do chão; d̂ de altura grande | `CTL_W0` (sugerido = atual + d̂z) |
+   | XY parado longe do (0, 0); φ/θ médios ≠ 0 parado | `SNS_LVL_PHI/TH` (sugerido; até 1,5° por voo) |
+   | Sai para um lado ao subir; d̂ θ/φ grandes | `CTL_FF_TH/PHI` (sugerido = atual + d̂) |
+   | Guinada girando; d̂ ψ grande | `CTL_FF_PSI` (sugerido) |
+   | XY volta devagar ou deriva | `--q x=..,y=..,vx=..,vy=..` (fábrica 50/20; acima de 100/50 a atitude fica instável na simulação com 120 ms de atraso) |
+   | Altura oscila ou passa do alvo | `--q z=..,vz=..` (fábrica 5000/50) |
+   | Motor em 95% ou saturado | bateria, `MOT_MAX`, peso |
+
+   `hover-profile --apply-suggestion [NOMES]` passa a sugestão para o perfil; o
+   próximo `hover-test` já parte dela.
+5. **Trazer os dados para o PC:** `sh tools/pi/buscar_ensaios.sh` (gráficos
+   com matplotlib em `tools/pi/logs/hover/`).
+
+### Testes
+
+- `sh tests/run.sh`: firmware (14 suítes, inclusive `test_meas` com a
+  correção de nível) e a ferramenta da Pi contra um STM32 falso, agora com um
+  modelo de voo (`tools/pi/tests/test_hover.py`).
+
 ## Estado da branch `comunicacao-pi-stm32` (07/11/2026)
 
 Teste **isolado** da comunicação Raspberry Pi ↔ STM32 (MAVLink/DroneLink), a

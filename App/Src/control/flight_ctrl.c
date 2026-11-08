@@ -65,6 +65,10 @@
 #define TRIM_REPORT_MS 2000U
 /** Pedidos que cabem na fila. */
 #define REQUEST_QUEUE_DEPTH 4U
+/** Mensagens do voo esperando o DroneLink (as mais antigas saem quando enche). */
+#define TEXT_QUEUE_DEPTH 8U
+/** Tamanho de cada mensagem guardada para a Pi (o STATUSTEXT leva 50). */
+#define TEXT_LEN 51U
 /** Distância máxima do ponto de decolagem aceita em um setpoint, em m. */
 #define SETPOINT_XY_MAX_M 3.0F
 /** Período do passo, em s. */
@@ -128,6 +132,12 @@ static flight_telemetry_t telemetry;
 static flight_leg_event_t leg_event;
 /** Há um evento em ::leg_event esperando o DroneLink. */
 static bool leg_event_pending;
+/** Mensagens do voo para a Pi (fila circular); protegidas por seção crítica. */
+static char texts[TEXT_QUEUE_DEPTH][TEXT_LEN];
+/** Próxima posição a ser escrita em ::texts. */
+static uint8_t text_head;
+/** Mensagens guardadas em ::texts ainda não entregues. */
+static uint8_t text_count;
 
 /* ---- Só a task do voo -------------------------------------------------- */
 
@@ -276,6 +286,14 @@ static void say(const char *fmt, ...) {
   vsnprintf(text, sizeof(text), fmt, ap);
   va_end(ap);
   log_text(text);
+  /* Também para a Pi (STATUSTEXT): sem o cabo USB, é por aqui que ela vê o
+     voo. Fila cheia: a mais antiga dá lugar à nova. */
+  taskENTER_CRITICAL();
+  strncpy(texts[text_head], text, TEXT_LEN - 1U);
+  texts[text_head][TEXT_LEN - 1U] = '\0';
+  text_head = (uint8_t)((text_head + 1U) % TEXT_QUEUE_DEPTH);
+  if (text_count < TEXT_QUEUE_DEPTH) ++text_count;
+  taskEXIT_CRITICAL();
 }
 
 /** @brief Coloca um pedido na fila sem esperar. */
@@ -483,6 +501,22 @@ bool flight_ctrl_take_leg_event(flight_leg_event_t *out) {
   if (pending) {
     *out = leg_event;
     leg_event_pending = false;
+  }
+  taskEXIT_CRITICAL();
+  return pending;
+}
+
+bool flight_ctrl_take_text(char *out, size_t size) {
+  if (out == NULL || size == 0U) return false;
+  bool pending;
+  taskENTER_CRITICAL();
+  pending = text_count > 0U;
+  if (pending) {
+    const uint8_t oldest =
+        (uint8_t)((text_head + TEXT_QUEUE_DEPTH - text_count) % TEXT_QUEUE_DEPTH);
+    strncpy(out, texts[oldest], size - 1U);
+    out[size - 1U] = '\0';
+    --text_count;
   }
   taskEXIT_CRITICAL();
   return pending;
@@ -1168,6 +1202,10 @@ static void compute_output(const lqg_real_t du[LQG_NU], float throttle[LQG_NU],
   float trim_w[LQG_NU];
   const trim_state_t feedforward = {.z = 0.0F, .theta = prm.ff_theta, .phi = prm.ff_phi};
   trim_values(&feedforward, trim_w);
+  /* O torque de guinada fixo usa o padrão do canal ψ do estimador. */
+  for (unsigned i = 0U; i < LQG_NU; ++i) {
+    trim_w[i] += prm.ff_psi * LQG_DIST_CHANNELS[LQG_DIST_PSI].pattern[i];
+  }
   float slow_w[LQG_NU] = {0.0F, 0.0F, 0.0F, 0.0F};
   if (dist_active) {
     lqg_dist_output(&dist, slow_w);

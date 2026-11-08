@@ -11,6 +11,9 @@ Exemplos:
     python -m dronectl design                  # confere o projeto contra o Simulink
     python -m dronectl missao --sim            # shell de missão contra o drone simulado
     python -m dronectl missao --sim rota.txt   # missão de um arquivo
+    python -m dronectl hover-test --motors     # ensaio de hover gravado e analisado
+    python -m dronectl hover-report            # reanalisa o último ensaio
+    python -m dronectl hover-profile           # perfil com que o próximo ensaio começa
 """
 from __future__ import annotations
 
@@ -294,6 +297,126 @@ def cmd_missao(args) -> int:
     return 0 if ok else 1
 
 
+def _hover_profile(args):
+    from .hover_test import PROFILE_PATH, Profile
+
+    return Profile.load(Path(args.profile) if args.profile else PROFILE_PATH)
+
+
+def cmd_hover_test(args) -> int:
+    """Ensaio de hover: perfil + ajustes, voo com proteções, gravação e análise."""
+    from .hover_test import RESULTS_DIR, Options, parse_assignments, run_hover_test
+
+    profile = _hover_profile(args)
+    mode = 'motors' if args.motors else 'sim' if args.sim else 'dry'
+    try:
+        params = parse_assignments(args.set)
+        q = parse_assignments(args.q, upper=False)
+        opts = Options(height_m=(args.height if args.height is not None else profile.height_cm) / 100,
+                       time_s=args.time if args.time is not None else profile.time_s,
+                       mode=mode, params=params, q=q, r=args.r, rate_hz=args.rate,
+                       geofence_m=args.geofence / 100, label=args.label or '',
+                       out_dir=Path(args.out) if args.out else RESULTS_DIR,
+                       countdown_s=args.countdown)
+        opts.check()
+    except ValueError as exc:
+        print(f'erro: {exc}', file=sys.stderr)
+        return 2
+    if args.save:
+        profile.params.update(params)
+        profile.q.update(q)
+        if args.r is not None:
+            profile.r = args.r
+        if args.height is not None:
+            profile.height_cm = args.height
+        if args.time is not None:
+            profile.time_s = args.time
+        profile.save()
+        print('perfil atualizado com os ajustes deste ensaio')
+    print({'motors': 'VOO REAL', 'sim': 'DRONE SIMULADO no STM32 (motores parados)',
+           'dry': 'A SECO: sensores reais, motores parados'}[mode] +
+          f': {opts.height_m * 100:g} cm por {opts.time_s:g} s')
+    with _connect(args) as link:
+        test = run_hover_test(link, opts, profile)
+    return 1 if test.error else 0
+
+
+def _hover_folder(args) -> Path:
+    from .hover_test import RESULTS_DIR
+
+    if args.folder and args.folder != 'latest':
+        return Path(args.folder)
+    base = Path(args.dir) if args.dir else RESULTS_DIR
+    folders = sorted(base.glob('hover_*'))
+    if not folders:
+        raise LinkError(f'nenhum ensaio em {base}')
+    return folders[-1]
+
+
+def cmd_hover_report(args) -> int:
+    """Reanalisa um ensaio gravado (não usa o drone)."""
+    from .hover_report import format_report, report_folder
+
+    folder = _hover_folder(args)
+    report = report_folder(folder)
+    print(folder)
+    if args.timeline:
+        print('\n'.join(report.timeline) + '\n')
+    print(format_report(report))
+    if args.plot:
+        from .hover_plot import plot_folder
+        print(f'gráfico em {plot_folder(folder)}')
+    return 0
+
+
+def cmd_hover_profile(args) -> int:
+    """Mostra ou muda o perfil dos ensaios de hover (não usa o drone)."""
+    from .hover_test import MANAGED, Profile, check_q_names, parse_assignments
+
+    profile = _hover_profile(args)
+    changed = []
+    try:
+        if args.reset:
+            profile = Profile(path=profile.path, history=profile.history,
+                              boot_id=profile.boot_id, boot_values=profile.boot_values)
+            changed.append('perfil zerado (fábrica)')
+        params = parse_assignments(args.set)
+        managed = sorted(set(params) & set(MANAGED))
+        if managed:
+            raise ValueError(f'{", ".join(managed)} é do próprio ensaio')
+        q = parse_assignments(args.q, upper=False)
+        check_q_names(q)
+    except ValueError as exc:
+        print(f'erro: {exc}', file=sys.stderr)
+        return 2
+    if args.apply_suggestion is not None:
+        chosen = profile.apply_suggestion(args.apply_suggestion)
+        changed.append('sugestão aplicada: ' +
+                       (', '.join(f'{k}={v:g}' for k, v in chosen.items()) or 'nada a aplicar'))
+    profile.params.update(params)
+    profile.q.update(q)
+    for name in args.unset or []:
+        if profile.params.pop(name.upper(), None) is not None:
+            changed.append(f'{name.upper()} volta ao de fábrica')
+    for name in args.unset_q or []:
+        profile.q.pop(name, None)
+    if args.clear_q:
+        profile.q, profile.r = {}, None
+    if args.r is not None:
+        profile.r = args.r
+    if args.height is not None:
+        profile.height_cm = args.height
+    if args.time is not None:
+        profile.time_s = args.time
+    if changed or params or q or args.unset or args.unset_q or args.clear_q or \
+            args.r is not None or args.height is not None or args.time is not None:
+        profile.save()
+    for line in changed:
+        print(line)
+    print(profile.text())
+    return 0
+
+
 def cmd_rotas_bench(args) -> int:
     """Benchmark dos algoritmos de rota (não usa o drone)."""
     from .rotas_bench import rodar
@@ -362,6 +485,47 @@ def main(argv=None) -> int:
     p.add_argument('--desligar-sim', action='store_true',
                    help='volta FLT_SIM=0 ao terminar')
     p.set_defaults(func=cmd_missao)
+    p = sub.add_parser('hover-test', help='ensaio de hover: perfil, voo protegido, gravação e '
+                       'análise (sem --motors/--sim: a seco)')
+    mode = p.add_mutually_exclusive_group()
+    mode.add_argument('--motors', action='store_true', help='voo real: os motores giram')
+    mode.add_argument('--sim', action='store_true', help='drone simulado no STM32 (FLT_SIM=1)')
+    p.add_argument('--height', type=float, help='altura, em cm (padrão: a do perfil, 30)')
+    p.add_argument('--time', type=float, help='tempo de hover depois de chegar, em s (perfil: 20)')
+    p.add_argument('--set', action='append', metavar='NOME=VALOR[,...]',
+                   help='parâmetro só deste ensaio (pode repetir)')
+    p.add_argument('--q', action='append', metavar='ESTADO=PESO[,...]',
+                   help='peso Q do LQG ajustado só deste ensaio (x y z phi theta psi vx vy vz p q r)')
+    p.add_argument('--r', type=float, help='peso R do LQG ajustado (padrão 0,1)')
+    p.add_argument('--save', action='store_true', help='grava --set/--q/--r/--height/--time no perfil')
+    p.add_argument('--label', help='anotação do ensaio (vai para o registro)')
+    p.add_argument('--rate', type=float, default=50.0, help='DRONE_CTRL_DEBUG, em Hz')
+    p.add_argument('--geofence', type=float, default=80.0,
+                   help='pousa a esta distância do ponto de decolagem, em cm')
+    p.add_argument('--countdown', type=float, default=3.0, help='contagem antes de armar, em s')
+    p.add_argument('--profile', help='perfil (padrão ~/drone/perfil_hover.json)')
+    p.add_argument('--out', help='pasta dos ensaios (padrão ~/drone/ensaios)')
+    p.set_defaults(func=cmd_hover_test)
+    p = sub.add_parser('hover-report', help='reanalisa um ensaio de hover gravado')
+    p.add_argument('folder', nargs='?', default='latest', help='pasta do ensaio (padrão: o último)')
+    p.add_argument('--dir', help='onde procurar o último (padrão ~/drone/ensaios)')
+    p.add_argument('--timeline', action='store_true', help='mostra a linha do tempo (1 linha/s)')
+    p.add_argument('--plot', action='store_true', help='grava grafico.png na pasta (matplotlib)')
+    p.set_defaults(func=cmd_hover_report)
+    p = sub.add_parser('hover-profile', help='perfil com que o próximo hover-test começa')
+    p.add_argument('--set', action='append', metavar='NOME=VALOR[,...]')
+    p.add_argument('--unset', action='append', metavar='NOME', help='volta ao de fábrica')
+    p.add_argument('--q', action='append', metavar='ESTADO=PESO[,...]')
+    p.add_argument('--unset-q', action='append', metavar='ESTADO')
+    p.add_argument('--clear-q', action='store_true', help='volta ao Q e R do ajustado do firmware')
+    p.add_argument('--r', type=float)
+    p.add_argument('--height', type=float, help='altura padrão, em cm')
+    p.add_argument('--time', type=float, help='tempo de hover padrão, em s')
+    p.add_argument('--apply-suggestion', nargs='*', metavar='NOME',
+                   help='passa a sugestão do último ensaio (toda, ou só estes nomes) para o perfil')
+    p.add_argument('--reset', action='store_true', help='perfil de fábrica (mantém o histórico)')
+    p.add_argument('--profile', help='perfil (padrão ~/drone/perfil_hover.json)')
+    p.set_defaults(func=cmd_hover_profile)
     p = sub.add_parser('rotas-bench', help='benchmark guloso x 2-opt x genético x força bruta x exato (TSP)')
     p.add_argument('--n-min', type=int, default=3)
     p.add_argument('--n-max', type=int, default=30)

@@ -9,16 +9,23 @@
 #
 # Na Pi, depois:
 #     ~/drone/dronectl status
+#     ~/drone/dronectl hover-test --sim
 #     ~/drone/dronectl missao --sim ~/drone/tools/pi/missoes/quadrado_40cm.txt
+#
+# O perfil (~/drone/perfil_hover.json) e os ensaios (~/drone/ensaios/) ficam
+# fora das pastas copiadas: o --delete não os apaga.
 set -e
 cd "$(dirname "$0")/../.."
 HOST=${1:-r1ddax@r1ddax.local}
 DEST=${2:-drone}
 
+# lqg_ajustado.py e lqg_modelo.py projetam os ganhos do LQG ajustado a partir
+# do modelo do firmware (lqg_ert_model.c), para o hover-test com pesos Q.
 rsync -aR --delete --exclude '__pycache__' --exclude '.venv' \
   protocol/drone_controller.xml \
   reference/STM32_ert_rtw/STM32_data.c \
-  tools/ert_import.py \
+  App/Src/control/lqg_ert_model.c App/Src/control/lqg_ajustado_gains.c \
+  tools/ert_import.py tools/lqg_ajustado.py tools/lqg_modelo.py \
   tools/pi/dronectl tools/pi/missoes tools/pi/tests tools/pi/ensaios/ensaio_dronelink.py tools/pi/ensaios/assinatura_ag.py \
   tools/pi/requirements.txt tools/pi/README.md \
   "$HOST:$DEST/"

@@ -41,6 +41,7 @@
 #include "dronelink/flight_command_api.h"
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 /** @brief Quem armou: define as proteções de enlace. */
@@ -194,6 +195,18 @@ bool flight_ctrl_is_armed(void);
 
 /** @brief Quem armou o voo atual (vale enquanto armado). */
 flight_origin_t flight_ctrl_origin(void);
+
+/**
+ * @brief Tira da fila a mensagem do voo mais antiga ainda não entregue à Pi.
+ *
+ * As mesmas linhas de texto do log USB ("voo: ...", "dist z=...",
+ * "FAILSAFE: ..."), guardadas para o DroneLink enviar como STATUSTEXT.
+ *
+ * @param[out] out   Texto (terminado em zero, truncado em @p size - 1).
+ * @param[in]  size  Tamanho de @p out.
+ * @return true se havia mensagem.
+ */
+bool flight_ctrl_take_text(char *out, size_t size);
 
 /** @brief Nome curto de um estado, para o console. */
 const char *flight_ctrl_state_name(uint8_t state);

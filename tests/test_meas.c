@@ -245,6 +245,26 @@ static void test_invalid_readings_hold_last_value(void) {
   assert((meas_update(&s, &in, &p, y) & (MEAS_ATTITUDE | MEAS_RANGE)) == 0U);
 }
 
+/**
+ * @brief SNS_LVL_PHI/TH somam a correção fina do nível a φ e θ, sem mexer na
+ *        altura (o cosseno usa a inclinação do sensor).
+ */
+static void test_level_trim(void) {
+  ctrl_params_t p = defaults();
+  meas_state_t s;
+  meas_reset(&s);
+  lqg_real_t y[LQG_NY];
+  meas_input_t in = level(0.4F);
+  (void)meas_update(&s, &in, &p, y);
+  const double phi0 = y[LQG_Y_PHI], theta0 = y[LQG_Y_THETA], z0 = y[LQG_Y_Z];
+  p.lvl_phi_deg = 0.5F;
+  p.lvl_theta_deg = -1.0F;
+  (void)meas_update(&s, &in, &p, y);
+  assert(NEAR(y[LQG_Y_PHI] - phi0, 0.5 * 0.017453293, 1e-6));
+  assert(NEAR(y[LQG_Y_THETA] - theta0, -1.0 * 0.017453293, 1e-6));
+  assert(NEAR(y[LQG_Y_Z], z0, 1e-9));
+}
+
 int main(void) {
   test_height();
   test_inverted_mount_zero();
@@ -253,6 +273,7 @@ int main(void) {
   test_attitude_signs_and_yaw_unwrap();
   test_flow_velocity();
   test_invalid_readings_hold_last_value();
+  test_level_trim();
   printf("test_meas: ok\n");
   return 0;
 }
