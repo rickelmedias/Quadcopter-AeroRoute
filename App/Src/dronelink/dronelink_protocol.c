@@ -600,6 +600,8 @@ static void publish_status(void) {
 /**
  * @brief Supervisiona o enlace e a autorização enquanto o drone está no ar.
  *
+ * Só age em voo armado pela Pi: um voo armado pelo console USB não tem Pi
+ * nenhuma, e antes era mandado pousar assim que decolava (ensaio de 04/11).
  * Sem HEARTBEAT por 1 s pede HOLD; por 2 s com navegação degradada, ou por
  * 5 s em qualquer caso, pede pouso. Sem autorização pede HOLD, e após 5 s sem
  * ela pede pouso. Cada pedido é feito uma única vez.

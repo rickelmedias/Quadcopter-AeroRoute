@@ -22,7 +22,9 @@ cd "$(dirname "$0")/.."
 PURE="App/Src/attitude.c App/Src/mtf_parser.c
       App/Src/control/lqg_ert.c App/Src/control/lqg_ert_model.c
       App/Src/control/ctrl_gains.c App/Src/control/ctrl_params.c App/Src/control/meas.c
-      App/Src/control/mixer.c App/Src/control/sim_plant.c"
+      App/Src/control/mixer.c App/Src/control/attitude_mode.c App/Src/control/trim.c App/Src/control/throttle.c
+      App/Src/control/lqg_tuning.c App/Src/control/lqg_dist.c App/Src/control/lqg_ajustado_gains.c
+      App/Src/control/sim_plant.c"
 REFERENCE="reference/STM32_ert_rtw/STM32.c reference/STM32_ert_rtw/STM32_data.c"
 
 CFLAGS="-std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined
@@ -64,6 +66,15 @@ done
 run_suite test_lqg_ert_float tests/test_lqg_ert.c -DLQG_ERT_SINGLE_PRECISION
 
 echo
+# A tabela do LQG ajustado e do estimador precisa ser a que o gerador dá agora.
+if python3 tools/lqg_ajustado.py --check >"$OUT/lqg_ajustado.log" 2>&1; then
+  echo "PASS  lqg_ajustado_gains.c confere com tools/lqg_ajustado.py"
+else
+  echo "FAIL  lqg_ajustado_gains.c desatualizado"
+  cat "$OUT/lqg_ajustado.log"
+  failures=$((failures + 1))
+fi
+
 # As tabelas do firmware precisam ser as da exportação do Simulink.
 if python3 tools/ert_import.py --check >"$OUT/ert_import.log" 2>&1; then
   echo "PASS  lqg_ert_model.c confere com reference/STM32_ert_rtw"

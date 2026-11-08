@@ -4,7 +4,7 @@ Firmware de uma controladora de drone baseada na **STM32F411CEU6 Black Pill**.
 Ele roda o controle apresentado no TCC — **Filtro de Kalman + LQR, simulado e
 validado no MATLAB/Simulink** e exportado como `STM32_ert_rtw` — sobre o
 BNO08x (atitude e giroscópio), o MTF-01 (altura e fluxo óptico) e quatro ESCs
-em DShot600. Uma Raspberry Pi comanda o drone por MAVLink (DroneLink) e
+em DShot300. Uma Raspberry Pi comanda o drone por MAVLink (DroneLink) e
 permite ajustar o controle e ver a filtragem dos sensores em tempo real.
 
 O projeto ainda está em desenvolvimento. O controle roda inteiro em ensaio a
@@ -89,6 +89,65 @@ TCC no lugar dos sensores. Detalhes: [`docs/teste_comunicacao.md`](docs/teste_co
 2. Propostas ainda não feitas: vigia do operador na Pi (perdeu o Wi-Fi → HOLD →
    pouso) e watchdog de hardware (IWDG) no STM32.
 
+## Estado da branch `controle-lqg-posicao` (07/11/2026)
+
+Esta branch parte do **LQG melhorado** aprovado em 05/11 (tag
+`lqg-melhorado-aprovado`, ver [`QUALIFY.md`](QUALIFY.md)) e liga o **XY do LQG
+do TCC**: o drone deve segurar o ponto de decolagem (0, 0), subir até a altura
+pedida e aceitar um setpoint X, Y, Z e guinada. Ela fica parada aqui enquanto a
+equipe trabalha em outra branch; esta seção é o ponto de retomada.
+
+### Onde paramos
+
+- **Firmware gravado** na placa em 06–07/11 com tudo abaixo; **ainda não voado
+  livre** com esta versão. Os últimos voos (firmware anterior) ficaram no efeito
+  solo (0–10 cm acima do chão), com o cabo segurando e a bateria no fim.
+- O drone pesa **550 g** com o chumbo. Os motores ficaram equilibrados (±4%,
+  antes ±12%). O hover real nos logs ficou em ~1000–1100 (`CTL_W0`).
+
+### O que mudou no controle (detalhes em [`docs/controle_lqg.md`](docs/controle_lqg.md), seções 12 e 13)
+
+| Mudança | Por quê |
+|---|---|
+| Fluxo do MTF girado por ψ do modelo, e o LQG roda no **referencial da proa** com o XY ligado | O fluxo era girado no sentido errado, e o LQG do TCC só vale com ψ = 0: virado −96°, o XY divergia |
+| Pesos Q padrão x, y = 50, vx, vy = 20 (Kx 3 → 10 rad/s/m) | Com 5/5, 0,5° de erro de nível deixava o drone ~40 cm fora do ponto; acima de 50/20 a atitude fica instável com 120 ms de atraso (simulação) |
+| **Guinada do modelo corrigida** (`GUINADA_ALPHA` = 0,02; o B do TCC é ~2000× forte) e **estimador de perturbação de guinada** (4º canal do `lqg_dist`) | O LQR quase não comandava guinada e o drone girava 60–190° sozinho |
+| **Altura com o ω0 real** (`HOVER_OMEGA0` = 1000; o TCC usa 702) no LQR, no Kalman e no estimador | O Kalman via o drone "subindo" com a altura parada e freava a subida |
+| Kalman do ajustado com o ruído de vy igual ao de vx | O ruído medido do fluxo é igual nos dois eixos; o TCC supunha vy 2,4× menos ruidoso |
+| `FLOW_YAW_X/Y` (0 / 0,09 m) | O MTF fica fora do centro e mede r × distância quando o drone gira |
+| Setpoint `sp x y altura guinada` (também durante a decolagem, fora do chão), `xyzero`, decolagem mantendo a proa | X, Y e guinada nunca entravam se a decolagem não terminava |
+| **LQI removido** (firmware, painel e ferramentas); `CTL_DIST_MAX` = 400 | Decisão da equipe; o limite de 250 do estimador era dividido com o LQI e travava o hover |
+| Pesos Q dos 12 estados enviados pelo painel (`lq`, com CRC) | Ajuste sem regravar |
+| Teto de altura 50 cm; DShot300 e pinos lentos (teco do M4) | Ensaios mais altos; ruído no sinal do M4 |
+
+### Painel (`python3 tools/controle_gui.py`)
+
+- Padrões: `CTL_W0` 1000, `CTL_FF_TH` −20, `CTL_FF_PHI` −40, rampa 5 cm/s,
+  setpoint 0, 0, 20 cm, 0°, modo **LQG melhorado**.
+- Quadro **Setpoint**: X, Y (cm do ponto de decolagem), Z (altura), guinada
+  (graus do zero da energização); botões **Aplicar em voo**, **Voltar à
+  partida** e **Zerar X Y aqui**.
+- Quadro **Pesos Q** (12 estados + R): o LIGAR envia sozinho se os pesos
+  digitados não estão no drone e só arma quando o firmware confirma o CRC.
+- Layout com rolagem: LIGAR e EMERGÊNCIA ficam sempre visíveis.
+
+### Pendente ao retomar
+
+1. **Voo livre** com bateria cheia, `CTL_W0` ~1000, cabo frouxo e alvo de 20 a
+   30 cm acima do chão. Conferir no log: `dist ... psi=` estabiliza, a guinada
+   para de girar, o vz estimado fica perto de zero com a altura parada, e Z
+   chega ao setpoint.
+2. `CTL_FF_PHI`: os voos longos de 06/11 pedem −24 a −33; o padrão −40 está
+   forte. Sugestão: −30.
+3. Medir o atraso real dos motores. Se for bem menor que 120 ms, dá para
+   endurecer o XY (pesos x, vx).
+4. Recalibrar `SNS_ZERO_ROLL/PITCH` com o drone nivelado: 0,5° de erro dá
+   ~14 cm de desvio fixo de posição (o LQG não tem integrador de posição).
+5. Se ainda sobrar desvio: estado de viés de inclinação no Kalman (aprende o
+   zero de nível pelo fluxo).
+6. Medir a tensão da bateria no log (o firmware lê o PA1 se o divisor estiver
+   ligado). A queda de bateria e o peso se confundem nos logs de hoje.
+
 ## O que existe hoje
 
 ```text
@@ -96,7 +155,7 @@ TCC no lugar dos sensores. Detalhes: [`docs/teste_comunicacao.md`](docs/teste_co
                       ├── control/meas ── y ──► Kalman + LQR (Simulink, 100 Hz) ── du
  MTF-01 ─ UART/DMA ───┘                               ▲                            │
                                                       │ r = [x y z ψ]              ▼
- Raspberry Pi ── UART/MAVLink ── DroneLink ──► voo (flight_ctrl) ──► motores ── DShot600 ── ESCs
+ Raspberry Pi ── UART/MAVLink ── DroneLink ──► voo (flight_ctrl) ──► motores ── DShot300 ── ESCs
       ▲  (dronectl: hover, ajuste,                    │
       │   telemetria, parâmetros)                     ▼
       └──────────────────────────────────── telemetria ──► USB CDC ── PC/logs e console
@@ -125,7 +184,7 @@ TCC no lugar dos sensores. Detalhes: [`docs/teste_comunicacao.md`](docs/teste_co
 | MicoAir MTF-01 | Fluxo óptico e telêmetro | USART2, protocolo Micolink |
 | Raspberry Pi Zero W | Comandos, ajuste e telemetria | USART1, MAVLink 2/DroneLink |
 | W25Q64 | Identidade persistente de boot do DroneLink | SPI1 |
-| Skystars KM55A II (AM32) e 4 motores | Atuação | TIM4, DShot600 |
+| Skystars KM55A II (AM32) e 4 motores | Atuação | TIM4, DShot300 |
 | Divisor de tensão da bateria | Tensão da bateria (**ainda não ligado**) | ADC1_IN1 |
 | Saída CURR do ESC | Corrente (**ainda não ligada**) | ADC1_IN8 |
 | Computador de desenvolvimento | Gravação DFU, logs e console | USB da Black Pill |
@@ -197,7 +256,7 @@ DroneController/
 | `control/ctrl_params.h/.c` | Parâmetros ajustáveis em tempo de execução. |
 | `control/ctrl_gains.h/.c` | Ganhos em uso e troca atômica de ganhos enviados pela Pi. |
 | `control/ctrl_port.h` | Seção crítica (FreeRTOS no firmware, nada nos testes). |
-| `motors.h/.c` | DShot600 a 1 kHz e arbitragem bancada/voo. |
+| `motors.h/.c` | DShot300 a 1 kHz e arbitragem bancada/voo. |
 | `usb_console.h/.c` | Console de texto pela USB: bancada, voo e parâmetros. |
 | `flight_config.h` | Chave `LQG_FLIGHT_ENABLED` e valores padrão dos parâmetros. |
 | `sensors.h/.c` | Inicia as tasks do MTF-01 e do BNO08x. |
@@ -205,7 +264,7 @@ DroneController/
 | `bno08x.h/.c`, `bno_i2c_header.h` | Driver do BNO08x, transporte I2C, reset e reconexão. |
 | `mtf01.h/.c`, `mtf_parser.h/.c` | Recepção do MTF-01 por DMA e decodificação do Micolink. |
 | `attitude.h/.c` | Quatérnio, Euler, inclinação e rotação pela guinada. |
-| `dshot.h/.c` | Geração dos quadros DShot600 no TIM4 com DMA burst. |
+| `dshot.h/.c` | Geração dos quadros DShot300 no TIM4 com DMA burst. |
 | `sensor_log.h/.c` | Log de texto pela USB por fila (MTF, BNO, MOT, EST, SYS). |
 | `dma_ring.h` | Regra compartilhada para consumir DMA circular das USARTs. |
 
