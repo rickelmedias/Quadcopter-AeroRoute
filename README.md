@@ -22,6 +22,70 @@ Perfis de bancada em branches separadas, cada um testável sozinho:
 | `motors` | MTF-01 + BNO08x + teste dos motores por comandos USB, sem controle ([guia](docs/guia_teste_motores.md)) |
 | `main` | Tudo integrado com o Kalman + LQR do Simulink |
 
+## Estado da branch `comunicacao-pi-stm32` (07/11/2026)
+
+Teste **isolado** da comunicação Raspberry Pi ↔ STM32 (MAVLink/DroneLink), a
+partir do `main`. Para não depender do voo, o STM32 tem um **drone simulado**
+(`FLT_SIM = 1`): motores parados e o mesmo LQG do TCC controlando o modelo do
+TCC no lugar dos sensores. Detalhes: [`docs/teste_comunicacao.md`](docs/teste_comunicacao.md)
+(protocolo, comandos, diagrama das mensagens) e [`docs/rotas_tsp.md`](docs/rotas_tsp.md)
+(ordem de visita dos pontos, benchmark para o TCC).
+
+### O que foi feito
+
+| Onde | O quê |
+|---|---|
+| STM32 | `FLT_SIM` e `control/sim_plant.c` (drone simulado, `tests/test_sim_plant.c`) |
+| STM32 | Trechos só terminam com o drone **estável** (no alvo e parado por 1 s); só então o próximo comando é aceito |
+| STM32 | Trecho fora dos limites de altura é recusado **na primeira resposta** (antes: "em andamento" e depois "falhou") |
+| STM32 | Correção (vinha do `main`): a supervisão de enlace da Pi agia também em voo armado pelo USB e pousava o **primeiro voo depois do boot** |
+| Pi | `dronectl missao`: shell e arquivo de missão; medidas em **cm** inteiros; pontos **3D** (x, y, z); comandos com a nomenclatura aeronáutica: `takeoff`, `yaw`, `forward/back/right/left/climb/descend`, `goto x y [z]`, `waypoints`, `route` (ordem pelo AG; sem pontos lê `missoes/pontos.txt`), `rtl`, `hold`, `land` |
+| Pi | `dronectl/rotas.py`: aleatório, guloso, guloso+2-opt, 2-opt multipartida, genético, força bruta e exato (Held-Karp), em 3D; `dronectl rotas-bench` e `rotas-limite`; figuras em `tools/pi/rotas_graficos.py` e `rotas_apresentacao.py` |
+| Pi | Correções no enlace: estado de voo também pelo `DRONE_LEG_ACK`; rota calculada só com posição recebida depois do fim do trecho |
+
+### Testes
+
+- **Firmware real no STM32, drone simulado, pelo console USB:** decolar 50 cm
+  estável em 6,3 s; girar 90° em 4,8 s; andar 1 m em 7,6 s (fim a 0,3 cm do
+  ponto); recusas certas (andar antes de decolar = estado errado; comando
+  durante outro = ocupado; fora dos limites = recusado já no pedido); primeiro
+  voo depois do boot fica em HOLD sem Pi; pouso e desarme.
+- **Rotas no STM32 (N = 6, 2D e 3D):** o STM32 executou as rotas do guloso e do
+  exato como planejadas (erro máximo de 3,1 cm em cada ponto); em 3D a rota do
+  exato foi 21 % mais curta (1493 cm × 1898 cm).
+- **Benchmark 3D (PC, 21 min, N = 3 a 30, 10 instâncias, 1680 execuções):** a
+  **força bruta** (N! ordens) entra até **10 pontos** (1,5 s; com 11 já leva
+  17 s e com 20 levaria ~32 mil anos); o
+  TSP exato (Held-Karp) entra até **22 pontos** (~1 min por instância); com 23
+  passa de 2 min e 1,7 GB e sai do comparativo; com 25 não cabe nem na RAM do PC
+  (7,5 GB). Até 22 pontos o genético achou o ótimo global em 150/200 instâncias
+  (0,13–0,45 s por instância em toda a faixa) e o 2-opt multipartida em 189/200. Avaliação:
+  [`docs/rotas_tsp.md`](docs/rotas_tsp.md); figuras para a apresentação (rotas
+  em 3D, tempo e memória do AG × TSP exato):
+  [`docs/apresentacao_rotas/`](docs/apresentacao_rotas/). Assinatura
+  `af4482d38e122be77517d9b9b097ebbdda6414b8f72f5601382e9dcb978532f0`.
+- **Pi ↔ UART ↔ STM32 real (drone simulado), `tools/pi/ensaios/ensaio_dronelink.py`:**
+  60 s de enlace sem perdas nem erros de CRC (552 B/s); latência de ida e volta
+  de 10 ms (mediana); as 10 recusas com o motivo certo; pedido repetido
+  executado uma vez; cancelamento; `takeoff 30` / `route` / `land` com erro
+  máximo de 1,4 cm por ponto; autorização cortada → HOLD em 0,9 s e pouso em
+  6 s; processo da Pi morto → HOLD em 1,3 s e pouso em 5,3 s. Detalhes e as três
+  correções que saíram deste ensaio (sequência MAVLink única, altura a partir
+  do chão, resposta de trecho conferida pela missão) em
+  [`docs/teste_comunicacao.md`](docs/teste_comunicacao.md).
+- **Pi (contra um STM32 falso, `tools/pi/tests`):** 26 testes — comandos,
+  cálculo de rota, algoritmos, missões 2D e 3D, recusas, resposta antiga de
+  outra missão e pouso em erro. Também rodam na própria Pi.
+- `sh tests/run.sh`: todas as suítes do firmware.
+
+### Pendente
+
+1. **Benchmark na Pi:** em andamento (`~/drone/resultados_rotas/pi`); a
+   assinatura tem de ser a mesma do PC. Na Pi Zero o AG leva ~11,5 s por rota.
+2. Ensaio pela UART com os motores girando e em voo.
+3. Propostas ainda não feitas: vigia do operador na Pi (perdeu o Wi-Fi → HOLD →
+   pouso) e watchdog de hardware (IWDG) no STM32.
+
 ## O que existe hoje
 
 ```text

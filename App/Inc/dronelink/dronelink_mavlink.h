@@ -9,6 +9,20 @@
 #ifndef DRONELINK_MAVLINK_H
 #define DRONELINK_MAVLINK_H
 
+/* Estado do canal MAVLink (inclui o número de sequência de envio) único para
+   todo o firmware. Sem isto, mavlink_get_channel_status() guarda o estado numa
+   variável static de função inline, e cada .c teria a sua cópia: telemetria e
+   protocolo sairiam com sequências independentes, e a Pi não conseguiria
+   medir perdas pelos saltos da sequência. O vetor fica em dronelink_protocol.c. */
+#define MAVLINK_EXTERNAL_RX_STATUS
+struct __mavlink_status;
+/**
+ * @brief Estados dos canais MAVLink, compartilhados por todos os módulos.
+ * @return Vetor de MAVLINK_COMM_NUM_BUFFERS estados.
+ */
+struct __mavlink_status *dronelink_mavlink_status(void);
+#define m_mavlink_status (dronelink_mavlink_status())
+
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Waddress-of-packed-member"
 #include "drone_controller/mavlink.h"

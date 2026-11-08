@@ -124,6 +124,21 @@
 #define DEFAULT_LAND_HEIGHT_M  0.08F
 /** Começa em ensaio a seco: os motores só giram depois de FLT_DRY_RUN = 0. */
 #define DEFAULT_DRY_RUN        1.0F
+/**
+ * 1 = drone simulado (control/sim_plant.h): motores parados e as medidas vêm
+ * do modelo do TCC controlado pelo próprio LQG. Para testar a comunicação com
+ * a Pi na bancada.
+ */
+#define DEFAULT_FLT_SIM        0.0F
+/**
+ * Decolagem e trechos só terminam (e o drone só aceita o próximo trecho)
+ * depois de ficar este tempo seguido dentro da tolerância e parado, em ms.
+ */
+#define FLIGHT_SETTLE_MS       1000U
+/** Velocidade (vx, vy, vz) abaixo da qual o drone está parado, em m/s. */
+#define FLIGHT_SETTLE_SPEED_M_S 0.05F
+/** Taxa angular (p, q, r) abaixo da qual o drone está parado, em rad/s. */
+#define FLIGHT_SETTLE_RATE_RAD_S 0.1F
 
 /* ---- Telemetria --------------------------------------------------------- */
 

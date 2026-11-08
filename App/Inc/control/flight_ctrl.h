@@ -89,6 +89,8 @@ typedef struct {
   uint32_t bno_misses;
   /** Passos em que o MTF-01 não tinha dado válido. */
   uint32_t mtf_misses;
+  /** z NED do chão onde armou, em m; NAN até a primeira medida após armar. */
+  float z_ground;
 } flight_telemetry_t;
 
 /** @brief Fim de um trecho (TAKEOFF ou leg), para o DroneLink publicar. */
@@ -165,6 +167,9 @@ bool flight_ctrl_take_leg_event(flight_leg_event_t *out);
 
 /** @brief Verdadeiro em qualquer estado armado (ARMED até LAND). */
 bool flight_ctrl_is_armed(void);
+
+/** @brief O voo armado agora foi armado pela Raspberry Pi (::FLIGHT_ORIGIN_PI). */
+bool flight_ctrl_armed_by_pi(void);
 
 /** @brief Nome curto de um estado, para o console. */
 const char *flight_ctrl_state_name(uint8_t state);

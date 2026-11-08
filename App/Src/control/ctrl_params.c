@@ -63,6 +63,8 @@ static const ctrl_param_desc_t TABLE[] = {
           "altura de fim do pouso (m)"),
     PARAM("FLT_DRY_RUN", dry_run, 0.0F, 1.0F, DEFAULT_DRY_RUN,
           CTRL_PARAM_BOOL | CTRL_PARAM_DISARMED_ONLY, "1 = LQG sem girar motores"),
+    PARAM("FLT_SIM", sim, 0.0F, 1.0F, DEFAULT_FLT_SIM,
+          CTRL_PARAM_BOOL | CTRL_PARAM_DISARMED_ONLY, "1 = drone simulado, motores parados"),
     PARAM("DBG_RATE_HZ", debug_rate_hz, 0.0F, 50.0F, DEFAULT_DEBUG_RATE_HZ, CTRL_PARAM_LIVE,
           "DRONE_CTRL_DEBUG para a Pi (Hz)"),
     PARAM("LOG_EST_HZ", log_est_hz, 0.0F, 50.0F, DEFAULT_LOG_EST_HZ, CTRL_PARAM_LIVE,

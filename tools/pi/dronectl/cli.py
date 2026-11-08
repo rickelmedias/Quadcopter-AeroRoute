@@ -9,6 +9,8 @@ Exemplos:
     python -m dronectl tune                    # shell de ajuste com o drone no chão
     python -m dronectl param set CTL_W0 690
     python -m dronectl design                  # confere o projeto contra o Simulink
+    python -m dronectl missao --sim            # shell de missão contra o drone simulado
+    python -m dronectl missao --sim rota.txt   # missão de um arquivo
 """
 from __future__ import annotations
 
@@ -260,6 +262,59 @@ def cmd_design(args) -> int:
     return 0
 
 
+def cmd_missao(args) -> int:
+    """Shell de missão ou arquivo: cada comando espera o drone ficar estável."""
+    from .missao import Missao
+
+    with _connect(args) as link:
+        if args.sim:
+            if link.param_set('FLT_SIM', 1) < 0.5:
+                print('erro: o STM32 recusou FLT_SIM=1 (desarme antes)')
+                return 1
+            print('DRONE SIMULADO no STM32 (FLT_SIM=1): motores parados')
+        else:
+            sim = link.param_get('FLT_SIM') >= 0.5
+            dry = link.param_get('FLT_DRY_RUN') >= 0.5
+            if sim:
+                print('DRONE SIMULADO no STM32 (FLT_SIM=1): motores parados')
+            elif dry:
+                print('aviso: FLT_DRY_RUN=1 sem FLT_SIM: os motores não giram e a decolagem '
+                      'nunca termina. Use --sim para o teste de comunicação.')
+            else:
+                print('MOTORES VÃO GIRAR (voo real). Ctrl+C pousa.')
+        missao = Missao(link, arquivo_pontos=args.pontos) if args.pontos else Missao(link)
+        if args.arquivo:
+            linhas = Path(args.arquivo).read_text(encoding='utf-8').splitlines()
+            ok = missao.executar_linhas(linhas)
+        else:
+            missao.shell()
+            ok = True
+        if args.sim and args.desligar_sim:
+            link.param_set('FLT_SIM', 0)
+    return 0 if ok else 1
+
+
+def cmd_rotas_bench(args) -> int:
+    """Benchmark dos algoritmos de rota (não usa o drone)."""
+    from .rotas_bench import rodar
+
+    resumo = rodar(args.n_min, args.n_max, args.instancias, args.exato_max_s, args.exato_max_mb,
+                   Path(args.saida), forca_max_s=args.forca_max_s)
+    print(f"\nassinatura {resumo['assinatura_sha256']}")
+    print(f"total {resumo['tempo_total_s']} s; resultados em {args.saida}/")
+    return 0
+
+
+def cmd_rotas_limite(args) -> int:
+    """Até quantos pontos o TSP exato (Held-Karp) roda nesta máquina."""
+    from .rotas_limite import rodar
+
+    r = rodar(args.n_max, args.tempo_max_s, args.mem_max_mb, Path(args.saida))
+    print(f"\nparou em N={r['parou_em']}: {r['motivo']}")
+    print(f"resultados em {args.saida}/limite_exato.md")
+    return 0
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog='dronectl', description='Comando e ajuste do drone')
     parser.add_argument('-p', '--port', default='/dev/serial0',
@@ -298,6 +353,34 @@ def main(argv=None) -> int:
     p.add_argument('action', choices=['query', 'reset', 'upload'])
     p.add_argument('--profile', help='perfil com os pesos (upload)')
     p.set_defaults(func=cmd_gains)
+    p = sub.add_parser('missao', help='comandos passo a passo (takeoff, yaw, goto, route, land...)')
+    p.add_argument('arquivo', nargs='?', help='arquivo de missão (sem ele: shell interativo)')
+    p.add_argument('--sim', action='store_true',
+                   help='liga FLT_SIM=1: drone simulado no STM32, motores parados')
+    p.add_argument('--pontos', help='arquivo de pontos do "route" sem pontos '
+                   '(padrão: tools/pi/missoes/pontos.txt)')
+    p.add_argument('--desligar-sim', action='store_true',
+                   help='volta FLT_SIM=0 ao terminar')
+    p.set_defaults(func=cmd_missao)
+    p = sub.add_parser('rotas-bench', help='benchmark guloso x 2-opt x genético x força bruta x exato (TSP)')
+    p.add_argument('--n-min', type=int, default=3)
+    p.add_argument('--n-max', type=int, default=30)
+    p.add_argument('--instancias', type=int, default=10, help='instâncias (sementes) por N')
+    p.add_argument('--exato-max-s', type=float, default=10.0,
+                   help='não roda o exato se o tempo previsto por instância passar disso')
+    p.add_argument('--exato-max-mb', type=float, default=600.0,
+                   help='nem se a memória do Held-Karp passar disso (Pi Zero: use 150)')
+    p.add_argument('--forca-max-s', type=float, default=10.0,
+                   help='não roda a força bruta se o tempo previsto por instância passar disso')
+    p.add_argument('--saida', default='resultados_rotas', help='pasta dos resultados')
+    p.set_defaults(func=cmd_rotas_bench)
+    p = sub.add_parser('rotas-limite', help='até quantos pontos o TSP exato roda (tempo e RAM)')
+    p.add_argument('--n-max', type=int, default=30)
+    p.add_argument('--tempo-max-s', type=float, default=60.0,
+                   help='tempo por instância a partir do qual o exato é inviável')
+    p.add_argument('--mem-max-mb', type=float, help='padrão: 80 %% da RAM livre')
+    p.add_argument('--saida', default='resultados_rotas', help='pasta dos resultados')
+    p.set_defaults(func=cmd_rotas_limite)
     p = sub.add_parser('design', help='projeto offline e comparação com o Simulink')
     p.add_argument('--profile', help='perfil com os pesos')
     p.set_defaults(func=cmd_design)

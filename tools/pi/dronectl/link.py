@@ -115,6 +115,9 @@ class DroneLink:
         self.last_debug: Optional[DebugSample] = None
         self.attitude = None
         self.position = None
+        #: Quando chegaram (time.monotonic) o último ATTITUDE e LOCAL_POSITION_NED.
+        self.attitude_time = 0.0
+        self.position_time = 0.0
         #: Bateria do SYS_STATUS: tensão (V) e corrente (A), None = sem leitura.
         self.battery_v: Optional[float] = None
         self.battery_a: Optional[float] = None
@@ -124,6 +127,8 @@ class DroneLink:
         self._mission_id = random.randint(1, 0xFFFFFFFF)
         self._last_leg_index = 0
         self._command_id = 0
+        #: Posição na caixa de entrada quando cada trecho foi enviado.
+        self._leg_marks: Dict[int, int] = {}
 
         self._running = True
         self._threads = [threading.Thread(target=self._rx_loop, daemon=True),
@@ -240,16 +245,22 @@ class DroneLink:
             notify = False
         elif kind == 'ATTITUDE':
             self.attitude = msg
+            self.attitude_time = time.monotonic()
             notify = False
         elif kind == 'LOCAL_POSITION_NED':
             self.position = msg
+            self.position_time = time.monotonic()
             notify = False
         elif kind == 'SYS_STATUS':
             # UINT16_MAX e -1 = leitura desligada no STM32 (power.h).
             self.battery_v = None if msg.voltage_battery == 0xFFFF else msg.voltage_battery / 1000.0
             self.battery_a = None if msg.current_battery < 0 else msg.current_battery / 100.0
             notify = False
-        elif kind not in ('DRONE_GAIN_ACK', 'DRONE_LEG_ACK', 'COMMAND_ACK'):
+        elif kind == 'DRONE_LEG_ACK':
+            # O ACK traz o estado de voo: no fim de um trecho ele já é HOLD,
+            # antes do próximo HEARTBEAT (2 Hz).
+            self.flight_state = msg.flight_state
+        elif kind not in ('DRONE_GAIN_ACK', 'COMMAND_ACK'):
             return
         if notify:
             with self._cond:
@@ -416,15 +427,17 @@ class DroneLink:
         frame = self.mod.MAV_FRAME_LOCAL_FRD if frame is None else frame
         self._command_id += 1
         command_id = self._command_id
+        mission_id = self._mission_id
         leg_index = self._last_leg_index + 1
         for _ in range(3):
             since = self._mark()
             self.mav.drone_leg_command_send(
-                self.boot_id, self._mission_id, command_id, timeout_ms, x, y, z, yaw, speed,
+                self.boot_id, mission_id, command_id, timeout_ms, x, y, z, yaw, speed,
                 0.0, position_tolerance, yaw_tolerance, leg_index, 0, action, frame,
                 SYSTEM_ID, FC_COMPONENT_ID)
             ack = self._wait(lambda m: m.get_type() == 'DRONE_LEG_ACK' and
-                             m.command_id == command_id, since, 1.0)
+                             m.mission_id == mission_id and m.command_id == command_id,
+                             since, 1.0)
             if ack is None:
                 continue  # mesmo pedido de novo: o STM32 repete a resposta
             accepted = ack.result in (self.mod.MAV_RESULT_ACCEPTED,
@@ -432,14 +445,22 @@ class DroneLink:
             if not accepted:
                 raise LinkError(f'trecho recusado: {reason_text(ack.reason)}')
             self._last_leg_index = leg_index
+            self._leg_marks[command_id] = since
             return command_id
         raise LinkError('o STM32 não respondeu ao trecho')
 
     def wait_leg(self, command_id: int, timeout: float) -> bool:
-        """Espera o fim de um trecho; True se ele foi concluído."""
+        """Espera o fim de um trecho; True se ele foi concluído.
+
+        Só vale a resposta desta missão e recebida depois do envio do trecho:
+        uma resposta antiga com o mesmo número de comando (de outra missão ou
+        de outro programa no mesmo enlace) não pode encerrar este trecho.
+        """
+        mission_id = self._mission_id
+        since = self._leg_marks.pop(command_id, 0)
         ack = self._wait(lambda m: m.get_type() == 'DRONE_LEG_ACK' and
-                         m.command_id == command_id and
-                         m.result != self.mod.MAV_RESULT_IN_PROGRESS, 0, timeout)
+                         m.mission_id == mission_id and m.command_id == command_id and
+                         m.result != self.mod.MAV_RESULT_IN_PROGRESS, since, timeout)
         if ack is None:
             raise LinkError('o trecho não terminou no tempo esperado')
         if ack.result != self.mod.MAV_RESULT_ACCEPTED:
@@ -466,12 +487,15 @@ class DroneLink:
         return self.send_leg(self.mod.DRONE_ACTION_GOTO_LOCAL, self.mod.MAV_FRAME_LOCAL_FRD,
                              x, y, z, math.radians(yaw_deg), speed)
 
-    def move(self, forward: float, right: float, down: float = 0.0, speed: float = 0.0) -> int:
+    def move(self, forward: float, right: float, down: float = 0.0, speed: float = 0.0,
+             timeout_s: float = 30.0) -> int:
         """Translada no referencial do corpo (m)."""
         return self.send_leg(self.mod.DRONE_ACTION_TRANSLATE_RELATIVE,
-                             self.mod.MAV_FRAME_BODY_FRD, forward, right, down, 0.0, speed)
+                             self.mod.MAV_FRAME_BODY_FRD, forward, right, down, 0.0, speed,
+                             timeout_ms=int(timeout_s * 1000))
 
-    def rotate(self, yaw_deg: float) -> int:
+    def rotate(self, yaw_deg: float, timeout_s: float = 30.0) -> int:
         """Gira em relação à guinada atual (graus, positivo = horário visto de cima)."""
         return self.send_leg(self.mod.DRONE_ACTION_ROTATE_RELATIVE,
-                             self.mod.MAV_FRAME_BODY_FRD, yaw=math.radians(yaw_deg))
+                             self.mod.MAV_FRAME_BODY_FRD, yaw=math.radians(yaw_deg),
+                             timeout_ms=int(timeout_s * 1000))

@@ -4,6 +4,8 @@
  */
 #include "dronelink/dronelink_telemetry.h"
 
+#include <math.h>
+
 #include "control/ctrl_params.h"
 #include "control/flight_ctrl.h"
 #include "dronelink/dronelink_config.h"
@@ -19,6 +21,25 @@ static uint32_t last_debug_ms;
 /** Passo do último DRONE_CTRL_DEBUG (para não repetir o mesmo passo). */
 static uint32_t last_debug_step;
 
+/**
+ * @brief z do LOCAL_POSITION_NED relativo ao chão (0 no chão, -h a h metros).
+ *
+ * O z do Kalman é a leitura do MTF-01, que no chão já vale a altura do
+ * sensor (cerca de -8 cm). No ar, desconta o chão registrado ao armar; no chão,
+ * desarmado, o chão é a própria medida (altura 0). Assim a Pi recebe a mesma
+ * altura que o operador pede ("takeoff 30" = 30 cm) e que o console mostra.
+ *
+ * @param[in] t  Telemetria do passo.
+ * @return z NED relativo ao chão, em m.
+ */
+static float z_over_ground(const flight_telemetry_t *t) {
+  const float z = t->x_hat[LQG_X_Z];
+  if (t->state == FLIGHT_STATE_STANDBY || t->state == FLIGHT_STATE_BOOT) {
+    return z - t->y[LQG_Y_Z];
+  }
+  return isfinite(t->z_ground) ? z - t->z_ground : z;
+}
+
 /** @brief ATTITUDE e LOCAL_POSITION_NED com a estimativa do Kalman. */
 static void send_state(const flight_telemetry_t *t) {
   mavlink_message_t m;
@@ -28,7 +49,7 @@ static void send_state(const flight_telemetry_t *t) {
   dronelink_send(&m, DRONELINK_TX_NORMAL);
   mavlink_msg_local_position_ned_pack(DRONELINK_SYSTEM_ID, DRONELINK_FC_COMPONENT_ID, &m,
                                       t->time_ms, t->x_hat[LQG_X_X], t->x_hat[LQG_X_Y],
-                                      t->x_hat[LQG_X_Z], t->x_hat[LQG_X_VX],
+                                      z_over_ground(t), t->x_hat[LQG_X_VX],
                                       t->x_hat[LQG_X_VY], t->x_hat[LQG_X_VZ]);
   dronelink_send(&m, DRONELINK_TX_NORMAL);
 }

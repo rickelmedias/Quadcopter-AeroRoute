@@ -31,7 +31,14 @@ Detalhes do controle e do protocolo: [`docs/controle_lqg.md`](../../docs/control
    `/dev/serial0` (= `/dev/ttyAMA0`).
 3. Ligações: TXD (GPIO14, pino 8) → PA10 (USART1_RX); RXD (GPIO15, pino 10)
    → PA9 (USART1_TX); GND comum. Os dois lados são de 3,3 V.
-4. Clone o repositório (a ferramenta lê o dialeto MAVLink e as matrizes do
+4. **Forma usada no projeto (sem git na Pi):** do PC, `sh tools/pi/deploy.sh
+   r1ddax@r1ddax.local` copia só o necessário para `~/drone` (mesma estrutura
+   do repositório) e cria o atalho `~/drone/dronectl`, que roda no venv
+   `~/drone-venv` (pymavlink, pyserial e numpy já instalados). Depois:
+   `~/drone/dronectl status`. Mudanças se fazem no repositório e se repete o
+   deploy.
+
+   Alternativa: clone o repositório (a ferramenta lê o dialeto MAVLink e as matrizes do
    modelo direto dele) e instale as dependências num venv. No Pi Zero W
    (ARMv6) o Raspberry Pi OS baixa o numpy já compilado do piwheels; o
    primeiro `pip install` ainda leva alguns minutos:
@@ -76,6 +83,21 @@ Opções gerais: `-p/--port` (padrão `/dev/serial0`) e `-b/--baud` (115200).
 `hover` arma, decola até `--height`, segura por `--time` segundos e pousa.
 **Ctrl+C pousa.** Se a Pi cair, o STM32 percebe a perda da autorização, segura
 a posição e pousa sozinho depois de 5 s.
+
+## Missão passo a passo (`missao`)
+
+```bash
+.venv/bin/python -m dronectl missao --sim              # shell: takeoff 50, yaw 90, forward 100, goto 0 0, land
+.venv/bin/python -m dronectl missao --sim missao.txt   # um comando por linha
+.venv/bin/python -m dronectl missao --sim missoes/quadrado_40cm.txt   # quadrado de 40 cm
+```
+
+Medidas em centímetros, graus e segundos (inteiros). Cada comando espera o STM32 responder que o drone chegou e ficou estável (1 s
+parado em HOLD) antes do próximo; `goto`/`waypoints`/`route` calculam o giro e a distância
+até o ponto; `route` escolhe a ordem com o algoritmo genético e, sem pontos, lê
+`missoes/pontos.txt`. `--sim` liga o drone simulado no STM32 (`FLT_SIM = 1`, motores
+parados) para testar a comunicação na bancada. Protocolo, comandos e o
+diagrama das mensagens: [`docs/teste_comunicacao.md`](../../docs/teste_comunicacao.md).
 
 ## Shell de ajuste (`hover --debug` e `tune`)
 

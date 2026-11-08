@@ -15,6 +15,7 @@
 #include "control/ctrl_gains.h"
 #include "control/ctrl_params.h"
 #include "control/meas.h"
+#include "control/sim_plant.h"
 #include "attitude.h"
 #include "bno08x.h"
 #include "flight_config.h"
@@ -130,7 +131,7 @@ static float ref[LQG_NR];
 /** Alvo em andamento. */
 static goal_t goal;
 /** Altura (z NED) do chão onde armou, em m. */
-static float z_ground;
+static volatile float z_ground;
 /** Quem armou. */
 static flight_origin_t origin;
 /** Tick em que armou. */
@@ -151,6 +152,12 @@ static float est_accumulator;
 static bno_sample_t bno;
 /** Última amostra do MTF-01. */
 static mtf_sample_t mtf;
+/** Drone simulado (FLT_SIM, control/sim_plant.h). */
+static sim_plant_t sim;
+/** O drone simulado está em uso neste passo. */
+static bool sim_active;
+/** Tick desde quando a decolagem ou o trecho está no alvo e parado (0 = não está). */
+static uint32_t settle_since_ms;
 
 /* ---- Utilidades -------------------------------------------------------- */
 
@@ -201,6 +208,8 @@ static float approach(float cur, float target, float max_step) {
 
 bool flight_ctrl_is_armed(void) { return is_armed_state(state); }
 
+bool flight_ctrl_armed_by_pi(void) { return is_armed_state(state) && origin == FLIGHT_ORIGIN_PI; }
+
 flight_request_result_t flight_ctrl_arm(flight_origin_t from) {
   const uint8_t s = state;
   if (s != FLIGHT_STATE_STANDBY && s != FLIGHT_STATE_FAILSAFE) {
@@ -214,7 +223,8 @@ flight_request_result_t flight_ctrl_arm(flight_origin_t from) {
   }
   ctrl_params_t p;
   ctrl_params_snapshot(&p);
-  const bool dry = p.dry_run >= 0.5F || !LQG_FLIGHT_ENABLED;
+  /* Simulado, os motores nunca giram. */
+  const bool dry = p.dry_run >= 0.5F || !LQG_FLIGHT_ENABLED || p.sim >= 0.5F;
   if (!dry && !motors_arm(MOTORS_OWNER_FLIGHT)) {
     return result(FLIGHT_REQUEST_TEMPORARILY_REJECTED, FLIGHT_REASON_BUSY);
   }
@@ -252,6 +262,26 @@ flight_request_result_t flight_ctrl_takeoff(float height_m) {
   return result(FLIGHT_REQUEST_IN_PROGRESS, FLIGHT_REASON_NONE);
 }
 
+/**
+ * @brief A altura final do trecho fica entre a de pouso e 1,5 m acima do chão?
+ *
+ * Usa a referência da última telemetria e o chão de quando armou (escritos
+ * pela task do voo; floats de 32 bits, leitura atômica no Cortex-M4).
+ */
+static bool leg_height_ok(const flight_leg_t *leg) {
+  if (leg->action == FLIGHT_ACTION_ROTATE_RELATIVE) return true;
+  const float ground = z_ground;
+  if (!isfinite(ground)) return true;  /* a task do voo confere de novo */
+  flight_telemetry_t t;
+  flight_ctrl_get_telemetry(&t);
+  ctrl_params_t p;
+  ctrl_params_snapshot(&p);
+  const bool absolute = leg->action == FLIGHT_ACTION_GOTO_LOCAL &&
+                        leg->frame != FLIGHT_FRAME_BODY_FRD;
+  const float z = absolute ? leg->z : t.ref[LQG_R_Z] + leg->z;
+  return isfinite(z) && z <= ground - p.land_height && z >= ground - 1.5F;
+}
+
 flight_request_result_t flight_ctrl_leg(const flight_leg_t *leg) {
   if (leg->action == FLIGHT_ACTION_TAKEOFF_RELATIVE) {
     /* Em FRD, z positivo é para baixo: subir h metros é z = -h. */
@@ -274,6 +304,11 @@ flight_request_result_t flight_ctrl_leg(const flight_leg_t *leg) {
   }
   if (state != FLIGHT_STATE_HOLD) {
     return result(FLIGHT_REQUEST_DENIED, FLIGHT_REASON_BAD_STATE);
+  }
+  if (!leg_height_ok(leg)) {
+    /* Recusa já na primeira resposta: sem isso a Pi veria "em andamento" e
+       logo depois "falhou" (a task do voo também confere, em goal_from_leg). */
+    return result(FLIGHT_REQUEST_DENIED, FLIGHT_REASON_OUT_OF_BOUNDS);
   }
   request_t req = {.type = REQ_LEG};
   req.leg = *leg;
@@ -451,6 +486,11 @@ static void handle_request(const request_t *req, uint32_t now) {
       meas_rearm(&meas);
       memset(ref, 0, sizeof(ref));
       memset(&goal, 0, sizeof(goal));
+      settle_since_ms = 0U;
+      if (sim_active) {
+        /* O drone simulado volta ao (0, 0), no chão, com a guinada que tinha. */
+        sim_plant_reset(&sim, SIM_PLANT_GROUND_Z, (float)sim.x[LQG_X_PSI]);
+      }
       origin = req->origin;
       dry_run = req->dry;
       armed_ms = now;
@@ -458,7 +498,7 @@ static void handle_request(const request_t *req, uint32_t now) {
       mtf_lost_since_ms = 0U;
       z_ground = NAN;  /* definido com a primeira medida deste passo */
       state = FLIGHT_STATE_ARMED;
-      say("voo: ARMADO%s (%s)", dry_run ? " a seco" : "",
+      say("voo: ARMADO%s (%s)", sim_active ? " SIMULADO" : dry_run ? " a seco" : "",
           origin == FLIGHT_ORIGIN_PI ? "Pi" : "USB");
       break;
     case REQ_DISARM:
@@ -625,11 +665,24 @@ static void check_goal(const float x[LQG_NX], uint32_t now) {
                       fabsf(x[LQG_X_Y] - goal.target[LQG_R_Y]) < goal.pos_tol);
   const bool yaw_ok =
       fabsf(attitude_wrap_pi(x[LQG_X_PSI] - goal.target[LQG_R_PSI])) < goal.yaw_tol;
-  if (ramp_done && z_ok && xy_ok && yaw_ok) {
-    finish_goal(FLIGHT_REQUEST_ACCEPTED, FLIGHT_REASON_NONE);
-    enter_hold();
-    say("voo: HOLD em %d cm", (int)((z_ground - ref[LQG_R_Z]) * 100.0F));
+  /* Estável: no alvo e parado. Só então o trecho termina e a Pi pode mandar
+     o próximo (girar ou andar sem estar parado no ar não faz sentido). */
+  const bool still = fabsf(x[LQG_X_VX]) < FLIGHT_SETTLE_SPEED_M_S &&
+                     fabsf(x[LQG_X_VY]) < FLIGHT_SETTLE_SPEED_M_S &&
+                     fabsf(x[LQG_X_VZ]) < FLIGHT_SETTLE_SPEED_M_S &&
+                     fabsf(x[LQG_X_P]) < FLIGHT_SETTLE_RATE_RAD_S &&
+                     fabsf(x[LQG_X_Q]) < FLIGHT_SETTLE_RATE_RAD_S &&
+                     fabsf(x[LQG_X_R]) < FLIGHT_SETTLE_RATE_RAD_S;
+  if (!(ramp_done && z_ok && xy_ok && yaw_ok && still)) {
+    settle_since_ms = 0U;
+    return;
   }
+  if (settle_since_ms == 0U) settle_since_ms = now != 0U ? now : 1U;
+  if (now - settle_since_ms < FLIGHT_SETTLE_MS) return;
+  settle_since_ms = 0U;
+  finish_goal(FLIGHT_REQUEST_ACCEPTED, FLIGHT_REASON_NONE);
+  enter_hold();
+  say("voo: estavel em HOLD a %d cm", (int)((z_ground - ref[LQG_R_Z]) * 100.0F));
 }
 
 /** @brief Termina o pouso ao encostar no chão (ou pelo tempo, sem telêmetro). */
@@ -688,7 +741,8 @@ static void compute_output(const lqg_real_t du[LQG_NU], float throttle[LQG_NU],
       *flags |= FLIGHT_FLAG_SATURATED;
     }
     throttle[i] = thr;
-    if (!dry_run) {
+    /* Simulado, o drone de mentira recebe o que os motores receberiam. */
+    if (!dry_run || sim_active) {
       du_applied[i] = (lqg_real_t)(prm.mot_w_at_0 + thr * span - prm.w0);
       /* Sem saturar, é exatamente o du do LQG (sem o arredondamento acima). */
       if (thr > prm.mot_min && thr < prm.mot_max) du_applied[i] = du[i];
@@ -715,6 +769,7 @@ static void publish(uint32_t now, uint32_t step_count, uint8_t meas_flags, uint8
   }
   memcpy(t.ref, ref, sizeof(t.ref));
   memcpy(t.q, bno.q, sizeof(t.q));
+  t.z_ground = z_ground;
   if (step_us > t.max_step_us) t.max_step_us = step_us;
   if ((meas_flags & (MEAS_ATTITUDE | MEAS_GYRO)) != (MEAS_ATTITUDE | MEAS_GYRO)) ++t.bno_misses;
   if ((meas_flags & MEAS_RANGE) == 0U) ++t.mtf_misses;
@@ -751,10 +806,18 @@ static void step(uint32_t step_count) {
     handle_request(&req, now);
   }
 
-  meas_input_t in;
-  read_sensors(&in);
   lqg_real_t y[LQG_NY];
-  const uint8_t meas_flags = meas_update(&meas, &in, &prm, y);
+  uint8_t meas_flags;
+  /* O simulado só liga e desliga desarmado (FLT_SIM é DISARMED_ONLY). */
+  if (!is_armed_state(state)) sim_active = prm.sim >= 0.5F;
+  if (sim_active) {
+    sim_plant_measure(&sim, y);
+    meas_flags = MEAS_ATTITUDE | MEAS_GYRO | MEAS_RANGE | MEAS_FLOW;
+  } else {
+    meas_input_t in;
+    read_sensors(&in);
+    meas_flags = meas_update(&meas, &in, &prm, y);
+  }
 
   if (state == FLIGHT_STATE_ARMED && isnan(z_ground)) {
     /* Primeira medida depois de armar: o chão e a referência ficam aqui. */
@@ -791,6 +854,7 @@ static void step(uint32_t step_count) {
   }
 
   lqg_ert_update(&lqg, &gains, du_applied);
+  if (sim_active) sim_plant_step(&sim, du_applied);
 
   float x[LQG_NX];
   for (unsigned i = 0U; i < LQG_NX; ++i) x[i] = (float)lqg.x_filt[i];
@@ -809,6 +873,7 @@ static void flight_task(void *argument) {
   DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
   lqg_ert_init(&lqg);
   meas_reset(&meas);
+  sim_plant_reset(&sim, SIM_PLANT_GROUND_Z, 0.0F);
   ctrl_gains_copy_active(&gains, &gains_generation);
   state = FLIGHT_STATE_STANDBY;
   uint32_t count = 0U;

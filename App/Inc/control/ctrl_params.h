@@ -84,6 +84,8 @@ typedef struct {
   float land_height;
   /** FLT_DRY_RUN: 1 = o LQG roda, mas os motores ficam parados. */
   float dry_run;
+  /** FLT_SIM: 1 = drone simulado no lugar dos sensores, motores parados (control/sim_plant.h). */
+  float sim;
   /** DBG_RATE_HZ: taxa do DRONE_CTRL_DEBUG para a Pi, em Hz (0 desliga). */
   float debug_rate_hz;
   /** LOG_EST_HZ: taxa da linha EST no log USB, em Hz (0 desliga). */

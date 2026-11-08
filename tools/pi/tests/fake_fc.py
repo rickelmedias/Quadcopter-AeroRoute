@@ -2,11 +2,14 @@
 
 Fala o mesmo dialeto por um pseudo-terminal e imita as respostas do firmware
 (App/Src/dronelink): HEARTBEAT, DRONE_PROTOCOL_INFO, parâmetros, envio de
-ganhos com CRC, armar, trechos e o DRONE_CTRL_DEBUG. Não simula o voo; só o
-protocolo.
+ganhos com CRC, armar, trechos e o DRONE_CTRL_DEBUG. Não simula a dinâmica:
+cada trecho leva ``leg_time`` segundos e o drone "chega" no alvo (posição e
+guinada em LOCAL_POSITION_NED e ATTITUDE). Como o firmware, só aceita girar e
+andar em HOLD (ocupado durante a decolagem ou um trecho).
 """
 from __future__ import annotations
 
+import math
 import os
 import struct
 import threading
@@ -33,7 +36,7 @@ class FakeFC:
         self.boot_id = 4242
         self.state = 2  # STANDBY
         self.params = {'CTL_W0': [702.0, 100.0, 3000.0], 'FLT_DRY_RUN': [1.0, 0.0, 1.0],
-                       'DBG_RATE_HZ': [0.0, 0.0, 50.0]}
+                       'DBG_RATE_HZ': [0.0, 0.0, 50.0], 'FLT_SIM': [0.0, 0.0, 1.0]}
         self.active_crc = 0
         self.custom = 0
         self.staged = {}
@@ -41,6 +44,12 @@ class FakeFC:
         self.drop_first_row = drop_first_row
         self.received_rows = 0
         self.lease_seen = False
+        #: Pose do drone simulado: x, y, z (NED, m) e guinada (rad).
+        self.x = self.y = self.z = self.yaw = 0.0
+        #: Duração de cada trecho, em s.
+        self.leg_time = 0.2
+        #: Trechos recebidos: (ação, x, y, z, guinada).
+        self.legs = []
         self._lock = threading.Lock()
         self._running = True
         self._thread = threading.Thread(target=self._loop, daemon=True)
@@ -138,27 +147,54 @@ class FakeFC:
                                         0xFFFFFFFF, float('nan'), msg.leg_index, reason, result,
                                         progress, self.state, 1, 191)
 
-        if msg.action == self.mod.DRONE_ACTION_LAND:
-            self.state = 2
-            ack(self.mod.MAV_RESULT_ACCEPTED, 100)
-        elif msg.action == self.mod.DRONE_ACTION_TAKEOFF_RELATIVE and self.state == 4:
-            self.state = 5
-            ack(self.mod.MAV_RESULT_IN_PROGRESS, 0)
-
+        def later(apply):
             def finish():
-                time.sleep(0.2)
+                time.sleep(self.leg_time)
+                apply()
                 self.state = 6
                 ack(self.mod.MAV_RESULT_ACCEPTED, 100)
             threading.Thread(target=finish, daemon=True).start()
+
+        a = self.mod
+        self.legs.append((msg.action, msg.x, msg.y, msg.z, msg.yaw))
+        if msg.action == a.DRONE_ACTION_LAND:
+            self.state, self.z = 2, 0.0
+            ack(a.MAV_RESULT_ACCEPTED, 100)
+        elif msg.action == a.DRONE_ACTION_HOLD:
+            ack(a.MAV_RESULT_ACCEPTED, 100)
+        elif msg.action == a.DRONE_ACTION_TAKEOFF_RELATIVE and self.state == 4:
+            self.state = 5
+            ack(a.MAV_RESULT_IN_PROGRESS, 0)
+            later(lambda: setattr(self, 'z', msg.z))
+        elif msg.action in (a.DRONE_ACTION_ROTATE_RELATIVE, a.DRONE_ACTION_TRANSLATE_RELATIVE):
+            if self.state in (5, 7):
+                ack(a.MAV_RESULT_TEMPORARILY_REJECTED, 0, 5)  # ocupado
+                return
+            if self.state != 6:
+                ack(a.MAV_RESULT_DENIED, 0, 1)  # estado errado
+                return
+            self.state = 7
+            ack(a.MAV_RESULT_IN_PROGRESS, 0)
+            if msg.action == a.DRONE_ACTION_ROTATE_RELATIVE:
+                def girar():
+                    self.yaw = (self.yaw + msg.yaw + math.pi) % (2 * math.pi) - math.pi
+                later(girar)
+            else:
+                def andar():
+                    c, s = math.cos(self.yaw), math.sin(self.yaw)
+                    self.x += msg.x * c - msg.y * s
+                    self.y += msg.x * s + msg.y * c
+                    self.z += msg.z
+                later(andar)
         else:
-            ack(self.mod.MAV_RESULT_DENIED, 0, 1)
+            ack(a.MAV_RESULT_DENIED, 0, 1)
 
     # ---- laço ----------------------------------------------------------
 
     def _loop(self) -> None:
         import select
 
-        last_hb = last_info = last_dbg = 0.0
+        last_hb = last_info = last_dbg = last_pose = 0.0
         step = 0
         while self._running:
             ready, _, _ = select.select([self.master], [], [], 0.01)
@@ -176,13 +212,18 @@ class FakeFC:
             now = time.monotonic()
             if now - last_hb > 0.5:
                 last_hb = now
-                armed = self.mod.MAV_MODE_FLAG_SAFETY_ARMED if self.state in (4, 5, 6, 8) else 0
+                armed = self.mod.MAV_MODE_FLAG_SAFETY_ARMED if self.state in (4, 5, 6, 7, 8) else 0
                 self.mav.heartbeat_send(self.mod.MAV_TYPE_QUADROTOR,
                                         self.mod.MAV_AUTOPILOT_GENERIC, armed, self.state, 4)
             if now - last_info > 1.0:
                 last_info = now
                 self.mav.drone_protocol_info_send(self.boot_id, 0x7F, 120000, 1, 1, self.state,
                                                   0, 0)
+            if now - last_pose > 0.2:
+                last_pose = now
+                t = int(now * 1000) & 0xFFFFFFFF
+                self.mav.attitude_send(t, 0.0, 0.0, self.yaw, 0.0, 0.0, 0.0)
+                self.mav.local_position_ned_send(t, self.x, self.y, self.z, 0.0, 0.0, 0.0)
             rate = self.params['DBG_RATE_HZ'][0]
             if rate > 0 and now - last_dbg > 1.0 / rate:
                 last_dbg = now
