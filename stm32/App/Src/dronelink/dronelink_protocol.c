@@ -38,11 +38,6 @@ typedef struct {
   uint16_t leg_index;
 } active_leg_t;
 
-/** Estado dos canais MAVLink de todo o firmware (ver dronelink_mavlink.h). */
-static mavlink_status_t channel_status[MAVLINK_COMM_NUM_BUFFERS];
-
-struct __mavlink_status *dronelink_mavlink_status(void) { return channel_status; }
-
 /** Estado do decodificador MAVLink. */
 static mavlink_status_t parser_status;
 /** Mensagem MAVLink em montagem. */

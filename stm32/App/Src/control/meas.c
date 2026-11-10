@@ -47,8 +47,8 @@ uint8_t meas_update(meas_state_t *s, const meas_input_t *in, const ctrl_params_t
     attitude_euler_relative(&zero, &raw, &rel);
     /* O BNO está girado 90 graus em torno da vertical em relação ao drone:
        o roll dele é a arfagem θ do modelo e o pitch dele é a rolagem φ. */
-    s->y[LQG_Y_PHI] = p->sgn_roll * rel.pitch + p->lvl_phi_deg * DEG_TO_RAD;
-    s->y[LQG_Y_THETA] = p->sgn_pitch * rel.roll + p->lvl_theta_deg * DEG_TO_RAD;
+    s->y[LQG_Y_PHI] = p->sgn_roll * rel.pitch;
+    s->y[LQG_Y_THETA] = p->sgn_pitch * rel.roll;
     s->y[LQG_Y_PSI] = p->sgn_yaw * unwrap_yaw(s, in->yaw);
     flags |= MEAS_ATTITUDE;
   }

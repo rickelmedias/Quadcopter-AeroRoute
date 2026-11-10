@@ -88,8 +88,6 @@ typedef struct {
   float land_height;
   /** FLT_DRY_RUN: 1 = o LQG roda, mas os motores ficam parados. */
   float dry_run;
-  /** FLT_SIM: 1 = drone simulado no lugar dos sensores, motores parados (control/sim_plant.h). */
-  float sim;
   /** DBG_RATE_HZ: taxa do DRONE_CTRL_DEBUG para a Pi, em Hz (0 desliga). */
   float debug_rate_hz;
   /** LOG_EST_HZ: taxa da linha EST no log USB, em Hz (0 desliga). */
@@ -116,15 +114,6 @@ typedef struct {
   float ff_theta;
   /** CTL_FF_PHI: desequilíbrio esquerda/direita fixo, em rad/s (+ na esquerda, − na direita). */
   float ff_phi;
-  /**
-   * CTL_FF_PSI: torque de guinada fixo, em rad/s (padrão de guinada do
-   * estimador: + em u2 e u4, − em u1 e u3).
-   */
-  float ff_psi;
-  /** SNS_LVL_PHI: correção fina do nível somada à rolagem φ medida, em graus. */
-  float lvl_phi_deg;
-  /** SNS_LVL_TH: correção fina do nível somada à arfagem θ medida, em graus. */
-  float lvl_theta_deg;
   /** CTL_LQG_AJ: 1 = Kd e Kfd do LQG ajustado (control/lqg_dist.h) no lugar dos do Simulink. */
   float lqg_adjusted;
   /** CTL_DIST: 1 = estimador de perturbação ("LQG melhorado", control/lqg_dist.h). */
