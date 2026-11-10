@@ -1,11 +1,13 @@
 /**
  * @file flight_command_api.h
- * @brief Contrato entre o protocolo DroneLink e o controle de voo.
+ * @brief Contrato entre o protocolo DroneLink e o futuro controle de voo.
  *
  * O protocolo chama estas funções para armar, executar trechos, cancelar,
- * segurar posição e pousar, e para ler o estado do voo. A implementação fica
- * em App/Src/control/flight_command.c e repassa tudo para
- * control/flight_ctrl.h.
+ * segurar posição e pousar, e para ler o estado do voo. Hoje só existem
+ * implementações provisórias (fracas, em flight_command_stub.c) que negam
+ * tudo com ::FLIGHT_REASON_NOT_IMPLEMENTED, exceto desarmar. O controle de
+ * voo real deve fornecer as mesmas funções, que substituem as provisórias na
+ * ligação.
  *
  * Os valores dos enums são os mesmos do dialeto MAVLink
  * (protocol/drone_controller.xml) e vão direto para a Pi.
@@ -16,29 +18,6 @@
 #include "attitude.h"
 #include <stdbool.h>
 #include <stdint.h>
-
-/**
- * @brief Ação de um trecho (DRONE_ACTION).
- */
-typedef enum {
-  /** Girar ψ em relação à referência atual. */
-  FLIGHT_ACTION_ROTATE_RELATIVE = 0,
-  /** Transladar em relação à referência atual. */
-  FLIGHT_ACTION_TRANSLATE_RELATIVE = 1,
-  /** Ir a um ponto do referencial local. */
-  FLIGHT_ACTION_GOTO_LOCAL = 2,
-  /** Decolar (z negativo = subir, em FRD). */
-  FLIGHT_ACTION_TAKEOFF_RELATIVE = 3,
-  /** Parar e manter a posição. */
-  FLIGHT_ACTION_HOLD = 4,
-  /** Pousar. */
-  FLIGHT_ACTION_LAND = 5
-} flight_action_t;
-
-/** Referencial do corpo: x frente, y direita, z baixo (MAV_FRAME_BODY_FRD). */
-#define FLIGHT_FRAME_BODY_FRD 12U
-/** Referencial local fixo no ponto em que armou (MAV_FRAME_LOCAL_FRD). */
-#define FLIGHT_FRAME_LOCAL_FRD 20U
 
 /**
  * @brief Situação de um pedido feito ao controle de voo.
@@ -130,7 +109,7 @@ typedef struct {
   /** Ação de guiagem (DRONE_ACTION: girar, transladar, ir a um ponto local,
       decolar, segurar, pousar). */
   uint8_t action;
-  /** Referencial das coordenadas: ::FLIGHT_FRAME_BODY_FRD ou ::FLIGHT_FRAME_LOCAL_FRD. */
+  /** Referencial das coordenadas: MAV_FRAME_BODY_FRD ou MAV_FRAME_LOCAL_FRD. */
   uint8_t frame;
   /** Objetivo X no referencial escolhido, em m. */
   float x;
@@ -162,12 +141,6 @@ typedef struct {
   bool armed;
   /** Drone no ar. Sem isso, a supervisão de enlace não age. */
   bool airborne;
-  /**
-   * O voo foi armado pela Raspberry Pi. Voo armado pelo console USB tem as
-   * proteções dele (DTR e watchdog do console) e a supervisão de enlace da Pi
-   * não age: sem Pi nenhuma, ela pousaria o drone logo depois de decolar.
-   */
-  bool commanded_by_pi;
   /** Posição confiável. */
   bool position_valid;
   /** Atitude confiável. */
@@ -215,8 +188,8 @@ typedef struct {
  * @brief Pede para armar ou desarmar os motores.
  *
  * O protocolo já recusa armar sem identidade de boot persistente ou sem
- * autorização do operador. Armar exige sensores saudáveis; com FLT_DRY_RUN
- * ligado, o voo arma sem girar os motores (ensaio a seco).
+ * autorização do operador. Implementação provisória: desarmar é aceito,
+ * armar é negado.
  *
  * @param[in] arm  true para armar, false para desarmar.
  * @return Resultado do pedido.
@@ -226,9 +199,9 @@ flight_request_result_t flight_request_arm(bool arm);
 /**
  * @brief Pede a execução de um trecho.
  *
- * Retornar ::FLIGHT_REQUEST_IN_PROGRESS torna o trecho ativo; o fim é
- * informado depois por ::flight_poll_leg_result(), que o protocolo consulta
- * periodicamente.
+ * Retornar ::FLIGHT_REQUEST_IN_PROGRESS torna o trecho ativo; o controle de
+ * voo deve depois informar o fim com dronelink_protocol_publish_leg_result().
+ * Implementação provisória: nega.
  *
  * @param[in] leg  Trecho já validado pelo protocolo.
  * @return Resultado do pedido.
@@ -236,14 +209,14 @@ flight_request_result_t flight_request_arm(bool arm);
 flight_request_result_t flight_request_leg(const flight_leg_t *leg);
 
 /**
- * @brief Pede o cancelamento do trecho ativo; o drone fica em HOLD.
+ * @brief Pede o cancelamento do trecho ativo. Implementação provisória: nega.
  *
  * @return Resultado do pedido.
  */
 flight_request_result_t flight_request_cancel(void);
 
 /**
- * @brief Pede para parar e manter a posição.
+ * @brief Pede para parar e manter a posição. Implementação provisória: nega.
  *
  * @param[in] reason  Por que o HOLD foi pedido (::FLIGHT_REASON_NONE quando
  *                    veio de um comando da Pi).
@@ -252,7 +225,7 @@ flight_request_result_t flight_request_cancel(void);
 flight_request_result_t flight_request_hold(flight_reason_t reason);
 
 /**
- * @brief Pede pouso; ao tocar o chão o drone desarma.
+ * @brief Pede pouso. Implementação provisória: nega.
  *
  * @param[in] reason  Por que o pouso foi pedido (::FLIGHT_REASON_NONE quando
  *                    veio de um comando da Pi).
@@ -263,8 +236,8 @@ flight_request_result_t flight_request_land(flight_reason_t reason);
 /**
  * @brief Lê o estado atual do voo.
  *
- * Posição, velocidade, atitude e velocidades angulares vêm da estimativa
- * x̂ do Kalman, no referencial local (NED a partir de onde armou).
+ * Implementação provisória: tudo zerado, estado STANDBY e quatérnio
+ * identidade (nada é anunciado como válido).
  *
  * @param[out] snapshot  Destino (NULL é ignorado).
  */
@@ -273,17 +246,10 @@ void flight_get_snapshot(flight_snapshot_t *snapshot);
 /**
  * @brief Informa se os motores podem ser acionados.
  *
- * @return true se LQG_FLIGHT_ENABLED = 1 e FLT_DRY_RUN = 0.
+ * Implementação provisória: false.
+ *
+ * @return true quando há acionamento disponível.
  */
 bool flight_actuation_is_available(void);
-
-/**
- * @brief Retira o resultado final do trecho ativo, se ele terminou.
- *
- * @param[out] status  Situação final (aceito = concluído).
- * @param[out] reason  Motivo, quando não concluído.
- * @return true se havia um resultado pendente.
- */
-bool flight_poll_leg_result(flight_request_status_t *status, flight_reason_t *reason);
 
 #endif

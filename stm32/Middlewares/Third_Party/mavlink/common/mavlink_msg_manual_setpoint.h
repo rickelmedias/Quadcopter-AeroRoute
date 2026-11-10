@@ -1,8 +1,6 @@
 #pragma once
 // MESSAGE MANUAL_SETPOINT PACKING
 
-#include <stdint.h>
-
 #define MAVLINK_MSG_ID_MANUAL_SETPOINT 81
 
 

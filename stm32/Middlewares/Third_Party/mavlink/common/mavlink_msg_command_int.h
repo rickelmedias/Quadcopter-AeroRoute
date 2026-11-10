@@ -1,8 +1,6 @@
 #pragma once
 // MESSAGE COMMAND_INT PACKING
 
-#include <stdint.h>
-
 #define MAVLINK_MSG_ID_COMMAND_INT 75
 
 

@@ -1,8 +1,6 @@
 #pragma once
 // MESSAGE VIBRATION PACKING
 
-#include <stdint.h>
-
 #define MAVLINK_MSG_ID_VIBRATION 241
 
 

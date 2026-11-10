@@ -1,8 +1,6 @@
 #pragma once
 // MESSAGE PING PACKING
 
-#include <stdint.h>
-
 #define MAVLINK_MSG_ID_PING 4
 
 

@@ -1,8 +1,6 @@
 #pragma once
 // MESSAGE ISBD_LINK_STATUS PACKING
 
-#include <stdint.h>
-
 #define MAVLINK_MSG_ID_ISBD_LINK_STATUS 335
 
 

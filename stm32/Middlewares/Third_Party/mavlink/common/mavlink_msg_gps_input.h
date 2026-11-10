@@ -1,8 +1,6 @@
 #pragma once
 // MESSAGE GPS_INPUT PACKING
 
-#include <stdint.h>
-
 #define MAVLINK_MSG_ID_GPS_INPUT 232
 
 MAVPACKED(

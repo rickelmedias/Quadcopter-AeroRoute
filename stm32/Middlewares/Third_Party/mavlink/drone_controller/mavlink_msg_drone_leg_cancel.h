@@ -1,8 +1,6 @@
 #pragma once
 // MESSAGE DRONE_LEG_CANCEL PACKING
 
-#include <stdint.h>
-
 #define MAVLINK_MSG_ID_DRONE_LEG_CANCEL 51003
 
 

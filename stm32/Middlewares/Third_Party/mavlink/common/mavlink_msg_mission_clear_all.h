@@ -1,8 +1,6 @@
 #pragma once
 // MESSAGE MISSION_CLEAR_ALL PACKING
 
-#include <stdint.h>
-
 #define MAVLINK_MSG_ID_MISSION_CLEAR_ALL 45
 
 

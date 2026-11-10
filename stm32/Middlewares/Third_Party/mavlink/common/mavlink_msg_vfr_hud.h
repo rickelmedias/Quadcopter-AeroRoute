@@ -1,8 +1,6 @@
 #pragma once
 // MESSAGE VFR_HUD PACKING
 
-#include <stdint.h>
-
 #define MAVLINK_MSG_ID_VFR_HUD 74
 
 

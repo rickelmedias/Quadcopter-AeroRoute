@@ -105,20 +105,6 @@ void attitude_euler_error(const euler_t *reference, const euler_t *measured,
                           euler_t *error);
 
 /**
- * @brief Mede a atitude em relação a uma posição de referência (zero).
- *
- * Roll e pitch saem como medido menos zero, normalizados por
- * ::attitude_wrap_pi, então um zero perto de +-180 graus funciona. A guinada
- * é copiada sem alteração: continua referida ao norte do sensor.
- *
- * @param[in]  zero      Roll e pitch lidos com o veículo nivelado (yaw ignorado).
- * @param[in]  measured  Atitude medida.
- * @param[out] relative  Atitude relativa ao zero; pode ser o próprio @p measured.
- */
-void attitude_euler_relative(const euler_t *zero, const euler_t *measured,
-                             euler_t *relative);
-
-/**
  * @brief Calcula o cosseno da inclinação em relação à vertical.
  *
  * Corresponde ao termo (3,3) da matriz de rotação. Usado para rejeitar fluxo

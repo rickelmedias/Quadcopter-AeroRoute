@@ -1,8 +1,6 @@
 #pragma once
 // MESSAGE WINCH_STATUS PACKING
 
-#include <stdint.h>
-
 #define MAVLINK_MSG_ID_WINCH_STATUS 9005
 
 

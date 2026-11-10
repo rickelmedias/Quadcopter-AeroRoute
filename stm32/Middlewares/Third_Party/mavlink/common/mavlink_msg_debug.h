@@ -1,8 +1,6 @@
 #pragma once
 // MESSAGE DEBUG PACKING
 
-#include <stdint.h>
-
 #define MAVLINK_MSG_ID_DEBUG 254
 
 

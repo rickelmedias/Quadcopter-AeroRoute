@@ -1,8 +1,6 @@
 #pragma once
 // MESSAGE RAW_PRESSURE PACKING
 
-#include <stdint.h>
-
 #define MAVLINK_MSG_ID_RAW_PRESSURE 28
 
 

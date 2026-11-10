@@ -1,8 +1,6 @@
 #pragma once
 // MESSAGE MANUAL_CONTROL PACKING
 
-#include <stdint.h>
-
 #define MAVLINK_MSG_ID_MANUAL_CONTROL 69
 
 MAVPACKED(

@@ -1,8 +1,6 @@
 #pragma once
 // MESSAGE GENERATOR_STATUS PACKING
 
-#include <stdint.h>
-
 #define MAVLINK_MSG_ID_GENERATOR_STATUS 373
 
 

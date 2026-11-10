@@ -1,8 +1,6 @@
 #pragma once
 // MESSAGE MOUNT_ORIENTATION PACKING
 
-#include <stdint.h>
-
 #define MAVLINK_MSG_ID_MOUNT_ORIENTATION 265
 
 

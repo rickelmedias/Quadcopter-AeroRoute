@@ -1,8 +1,6 @@
 #pragma once
 // MESSAGE MISSION_SET_CURRENT PACKING
 
-#include <stdint.h>
-
 #define MAVLINK_MSG_ID_MISSION_SET_CURRENT 41
 
 

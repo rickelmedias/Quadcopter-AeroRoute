@@ -1,8 +1,6 @@
 #pragma once
 // MESSAGE MISSION_REQUEST_PARTIAL_LIST PACKING
 
-#include <stdint.h>
-
 #define MAVLINK_MSG_ID_MISSION_REQUEST_PARTIAL_LIST 37
 
 

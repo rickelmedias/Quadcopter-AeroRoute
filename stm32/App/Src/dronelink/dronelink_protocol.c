@@ -8,23 +8,16 @@
 #include <math.h>
 #include <string.h>
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Waddress-of-packed-member"
+#include "drone_controller/mavlink.h"
+#pragma GCC diagnostic pop
 #include "stm32f4xx_hal.h"
 
 #include "dronelink/dronelink_config.h"
-#include "dronelink/dronelink_mavlink.h"
-#include "dronelink/dronelink_telemetry.h"
 #include "dronelink/dronelink_transaction.h"
 #include "dronelink/dronelink_transport.h"
-#include "dronelink/dronelink_tuning.h"
 #include "dronelink/flight_command_api.h"
-#include "power.h"
-
-/* As ações e os referenciais do contrato de voo têm os valores do dialeto. */
-_Static_assert((int)FLIGHT_ACTION_LAND == (int)DRONE_ACTION_LAND, "DRONE_ACTION mudou");
-_Static_assert((int)FLIGHT_ACTION_TAKEOFF_RELATIVE == (int)DRONE_ACTION_TAKEOFF_RELATIVE,
-               "DRONE_ACTION mudou");
-_Static_assert(FLIGHT_FRAME_BODY_FRD == MAV_FRAME_BODY_FRD, "MAV_FRAME mudou");
-_Static_assert(FLIGHT_FRAME_LOCAL_FRD == MAV_FRAME_LOCAL_FRD, "MAV_FRAME mudou");
 
 /** @brief Trecho em execução (aceito como "em andamento"). */
 typedef struct {
@@ -37,11 +30,6 @@ typedef struct {
   /** Índice do trecho. */
   uint16_t leg_index;
 } active_leg_t;
-
-/** Estado dos canais MAVLink de todo o firmware (ver dronelink_mavlink.h). */
-static mavlink_status_t channel_status[MAVLINK_COMM_NUM_BUFFERS];
-
-struct __mavlink_status *dronelink_mavlink_status(void) { return channel_status; }
 
 /** Estado do decodificador MAVLink. */
 static mavlink_status_t parser_status;
@@ -116,8 +104,14 @@ static bool source_is_pi(const mavlink_message_t *message) {
          message->compid == DRONELINK_PI_COMPONENT_ID;
 }
 
-/** @brief Serializa e enfileira uma mensagem (ver dronelink_mavlink.h). */
-void dronelink_send(const mavlink_message_t *message, dronelink_tx_priority_t priority) {
+/**
+ * @brief Serializa e enfileira uma mensagem. Falhas são contadas pelo
+ *        transporte.
+ * @param[in] message   Mensagem.
+ * @param[in] priority  Fila de destino.
+ */
+static void send_message(const mavlink_message_t *message,
+                         dronelink_tx_priority_t priority) {
   uint8_t buffer[MAVLINK_MAX_PACKET_LEN];
   const uint16_t length = mavlink_msg_to_send_buffer(buffer, message);
   (void)dronelink_transport_send(buffer, length, priority);
@@ -156,7 +150,7 @@ static void send_leg_ack_record(const dronelink_transaction_record_t *record) {
       record->remaining_distance, record->leg_index, record->reason,
       record->result, record->progress, record->flight_state,
       DRONELINK_SYSTEM_ID, DRONELINK_PI_COMPONENT_ID);
-  dronelink_send(&message, DRONELINK_TX_CRITICAL);
+  send_message(&message, DRONELINK_TX_CRITICAL);
 }
 
 /**
@@ -298,7 +292,7 @@ static void handle_timesync(const mavlink_message_t *message) {
   const int64_t now_ns = (int64_t)HAL_GetTick() * 1000000LL;
   mavlink_msg_timesync_pack(DRONELINK_SYSTEM_ID, DRONELINK_FC_COMPONENT_ID,
                             &response, now_ns, request.ts1);
-  dronelink_send(&response, DRONELINK_TX_CRITICAL);
+  send_message(&response, DRONELINK_TX_CRITICAL);
 }
 
 /**
@@ -355,7 +349,7 @@ static void handle_arm_command(const mavlink_message_t *message) {
       DRONELINK_SYSTEM_ID, DRONELINK_FC_COMPONENT_ID, &response,
       MAV_CMD_COMPONENT_ARM_DISARM, mav_result(result.status), 0U,
       (int32_t)result.reason, DRONELINK_SYSTEM_ID, DRONELINK_PI_COMPONENT_ID);
-  dronelink_send(&response, DRONELINK_TX_CRITICAL);
+  send_message(&response, DRONELINK_TX_CRITICAL);
 }
 
 /**
@@ -506,9 +500,6 @@ static void handle_message(const mavlink_message_t *message) {
   if (!source_is_pi(message)) {
     return;
   }
-  if (dronelink_tuning_handle(message)) {
-    return;
-  }
   switch (message->msgid) {
     case MAVLINK_MSG_ID_HEARTBEAT:
       handle_heartbeat();
@@ -545,7 +536,7 @@ static void publish_heartbeat(void) {
   mavlink_msg_heartbeat_pack(DRONELINK_SYSTEM_ID, DRONELINK_FC_COMPONENT_ID,
                              &message, MAV_TYPE_QUADROTOR, MAV_AUTOPILOT_GENERIC,
                              base_mode, snapshot.state, system_status);
-  dronelink_send(&message, DRONELINK_TX_CRITICAL);
+  send_message(&message, DRONELINK_TX_CRITICAL);
 }
 
 /** @brief Envia DRONE_PROTOCOL_INFO com identidade de boot, capacidades e versão. */
@@ -554,8 +545,7 @@ static void publish_protocol_info(void) {
   flight_get_snapshot(&snapshot);
   uint32_t capabilities = DRONE_PROTOCOL_CAPABILITY_MAVLINK2 |
                           DRONE_PROTOCOL_CAPABILITY_TRANSACTIONAL_LEGS |
-                          DRONE_PROTOCOL_CAPABILITY_OPERATOR_LEASE |
-                          DRONE_PROTOCOL_CAPABILITY_TUNING;
+                          DRONE_PROTOCOL_CAPABILITY_OPERATOR_LEASE;
   if (persistent_boot_id) {
     capabilities |= DRONE_PROTOCOL_CAPABILITY_PERSISTENT_BOOT_ID;
   }
@@ -571,37 +561,25 @@ static void publish_protocol_info(void) {
       current_boot_id, capabilities, DRONELINK_MAX_LEG_TIMEOUT_MS,
       DRONELINK_PROTOCOL_MAJOR, DRONELINK_PROTOCOL_MINOR, snapshot.state,
       0U, 0U);
-  dronelink_send(&message, DRONELINK_TX_NORMAL);
+  send_message(&message, DRONELINK_TX_NORMAL);
 }
 
-/**
- * @brief Envia SYS_STATUS com o total de perdas do enlace e, quando a leitura
- *        estiver ligada (power.h), a tensão e a corrente da bateria.
- */
+/** @brief Envia SYS_STATUS com o total de perdas do enlace. */
 static void publish_status(void) {
   mavlink_message_t message;
   const uint32_t errors = dronelink_transport_rx_dropped() +
                           dronelink_transport_tx_dropped();
-  power_sample_t power;
-  power_get(&power);
-  /* Sem leitura: UINT16_MAX e -1 significam "desconhecido" no MAVLink. */
-  const uint16_t millivolts =
-      power.voltage_valid ? (uint16_t)(power.voltage_v * 1000.0F) : UINT16_MAX;
-  const int16_t centiamps =
-      power.current_valid ? (int16_t)(power.current_a * 100.0F) : -1;
   mavlink_msg_sys_status_pack(
       DRONELINK_SYSTEM_ID, DRONELINK_FC_COMPONENT_ID, &message,
-      0U, 0U, 0U, 0U, millivolts, centiamps, -1, 0U,
+      0U, 0U, 0U, 0U, UINT16_MAX, -1, -1, 0U,
       (uint16_t)(errors > UINT16_MAX ? UINT16_MAX : errors),
-      0U, 0U, 0U, 0U, 0U, 0U, 0U);
-  dronelink_send(&message, DRONELINK_TX_NORMAL);
+      0U, 0U, 0U, 0U);
+  send_message(&message, DRONELINK_TX_NORMAL);
 }
 
 /**
  * @brief Supervisiona o enlace e a autorização enquanto o drone está no ar.
  *
- * Só age em voo armado pela Pi: um voo armado pelo console USB não tem Pi
- * nenhuma, e antes era mandado pousar assim que decolava (ensaio de 04/11).
  * Sem HEARTBEAT por 1 s pede HOLD; por 2 s com navegação degradada, ou por
  * 5 s em qualquer caso, pede pouso. Sem autorização pede HOLD, e após 5 s sem
  * ela pede pouso. Cada pedido é feito uma única vez.
@@ -611,7 +589,7 @@ static void publish_status(void) {
 static void supervise_links(uint32_t now_ms) {
   flight_snapshot_t snapshot;
   flight_get_snapshot(&snapshot);
-  if (!snapshot.airborne || !snapshot.commanded_by_pi) {
+  if (!snapshot.airborne) {
     return;
   }
   const uint32_t link_age = now_ms - last_pi_heartbeat_ms;
@@ -648,26 +626,6 @@ static void supervise_links(uint32_t now_ms) {
   }
 }
 
-/**
- * @brief Publica o fim do trecho ativo quando o controle de voo o informa.
- *
- * Concluído vira MAV_RESULT_ACCEPTED com progresso 100; qualquer outro fim
- * vira MAV_RESULT_FAILED com o motivo dado pelo voo.
- */
-static void publish_finished_leg(void) {
-  flight_request_status_t status;
-  flight_reason_t reason;
-  if (!flight_poll_leg_result(&status, &reason) || !active_leg.active) {
-    return;
-  }
-  const bool done = status == FLIGHT_REQUEST_ACCEPTED;
-  dronelink_protocol_publish_leg_result(active_leg.mission_id, active_leg.command_id,
-                                        active_leg.leg_index,
-                                        done ? MAV_RESULT_ACCEPTED : mav_result(status),
-                                        (uint16_t)reason, done ? 100U : 0U, done ? 0.0F : NAN,
-                                        done ? 0U : UINT32_MAX);
-}
-
 /** @brief Zera o estado do protocolo (ver dronelink_protocol.h). */
 void dronelink_protocol_init(uint32_t boot_id, bool boot_id_is_persistent) {
   memset(&parser_status, 0, sizeof(parser_status));
@@ -691,8 +649,6 @@ void dronelink_protocol_init(uint32_t boot_id, bool boot_id_is_persistent) {
   last_accepted_leg_index = 0U;
   memset(&active_leg, 0, sizeof(active_leg));
   dronelink_transaction_init();
-  dronelink_tuning_init();
-  dronelink_telemetry_init();
 }
 
 /** @brief Decodifica bytes recebidos e trata as mensagens (ver dronelink_protocol.h). */
@@ -723,9 +679,6 @@ void dronelink_protocol_tick(uint32_t now_ms) {
     last_protocol_info_tx_ms = now_ms;
   }
   supervise_links(now_ms);
-  publish_finished_leg();
-  dronelink_tuning_tick(now_ms);
-  dronelink_telemetry_tick(now_ms);
 }
 
 /** @brief Publica progresso ou resultado de um trecho (ver dronelink_protocol.h). */

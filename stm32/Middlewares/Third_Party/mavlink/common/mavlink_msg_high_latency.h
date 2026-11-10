@@ -1,8 +1,6 @@
 #pragma once
 // MESSAGE HIGH_LATENCY PACKING
 
-#include <stdint.h>
-
 #define MAVLINK_MSG_ID_HIGH_LATENCY 234
 
 

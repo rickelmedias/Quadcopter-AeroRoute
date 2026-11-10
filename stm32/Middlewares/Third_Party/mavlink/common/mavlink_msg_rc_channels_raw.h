@@ -1,8 +1,6 @@
 #pragma once
 // MESSAGE RC_CHANNELS_RAW PACKING
 
-#include <stdint.h>
-
 #define MAVLINK_MSG_ID_RC_CHANNELS_RAW 35
 
 

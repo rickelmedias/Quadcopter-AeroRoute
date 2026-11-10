@@ -15,18 +15,15 @@ __pycache__/
 venv/
 
 # Ensaios locais -------------------------------------------------------------
-# CSVs de telemetria gravados pelo dronectl (tools/pi) na Pi ou no PC.
-tools/pi/logs/
+# Capturas binárias e CSVs são grandes e podem conter dados ainda não
+# revisados. Publique ensaios escolhidos como artefatos de uma Release.
+/captures/*
+!/captures/README.md
 
 # Conversas completas usadas como referência são arquivos locais. Os
 # documentos consolidados e revisados continuam em docs/.
 /docs/references/*
 !/docs/references/README.md
-# Transcrições de sessões salvas na raiz (locais, podem conter dados de acesso).
-/codigo_fonte_testes.txt
-/*-nov4.txt
-# Resultados dos ensaios gravados na Pi (os usados no TCC são copiados para docs/).
-tools/pi/ensaios/resultados/
 
 # Arquivos temporários de revisão e saídas de bancada -----------------------
 /tmp/
@@ -63,6 +60,3 @@ Desktop.ini
 *.gcda
 *.gcno
 *.gcov
-
-# Logs dos ensaios do painel de controle (tools/controle_gui.py).
-# tools/logs/

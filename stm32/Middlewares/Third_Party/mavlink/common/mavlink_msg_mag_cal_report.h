@@ -1,8 +1,6 @@
 #pragma once
 // MESSAGE MAG_CAL_REPORT PACKING
 
-#include <stdint.h>
-
 #define MAVLINK_MSG_ID_MAG_CAL_REPORT 192
 
 MAVPACKED(

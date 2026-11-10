@@ -1,8 +1,6 @@
 #pragma once
 // MESSAGE HIL_CONTROLS PACKING
 
-#include <stdint.h>
-
 #define MAVLINK_MSG_ID_HIL_CONTROLS 91
 
 

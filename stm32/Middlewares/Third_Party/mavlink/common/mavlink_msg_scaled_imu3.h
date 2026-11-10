@@ -1,8 +1,6 @@
 #pragma once
 // MESSAGE SCALED_IMU3 PACKING
 
-#include <stdint.h>
-
 #define MAVLINK_MSG_ID_SCALED_IMU3 129
 
 

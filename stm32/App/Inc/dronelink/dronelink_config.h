@@ -15,7 +15,7 @@
 /** Versão principal do protocolo DroneLink. */
 #define DRONELINK_PROTOCOL_MAJOR            1U
 /** Versão secundária do protocolo DroneLink. */
-#define DRONELINK_PROTOCOL_MINOR            1U
+#define DRONELINK_PROTOCOL_MINOR            0U
 /** Maior timeout aceito num comando de trecho (leg), em ms. */
 #define DRONELINK_MAX_LEG_TIMEOUT_MS         120000UL
 /** Período de envio do HEARTBEAT, em ms. */

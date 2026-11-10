@@ -1,8 +1,6 @@
 #pragma once
 // MESSAGE COMMAND_LONG PACKING
 
-#include <stdint.h>
-
 #define MAVLINK_MSG_ID_COMMAND_LONG 76
 
 

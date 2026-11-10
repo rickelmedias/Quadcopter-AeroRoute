@@ -1,8 +1,6 @@
 #pragma once
 // MESSAGE PARAM_EXT_REQUEST_LIST PACKING
 
-#include <stdint.h>
-
 #define MAVLINK_MSG_ID_PARAM_EXT_REQUEST_LIST 321
 
 

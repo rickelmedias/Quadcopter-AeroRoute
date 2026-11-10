@@ -1,8 +1,6 @@
 #pragma once
 // MESSAGE LOGGING_ACK PACKING
 
-#include <stdint.h>
-
 #define MAVLINK_MSG_ID_LOGGING_ACK 268
 
 

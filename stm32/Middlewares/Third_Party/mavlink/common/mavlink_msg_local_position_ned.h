@@ -1,8 +1,6 @@
 #pragma once
 // MESSAGE LOCAL_POSITION_NED PACKING
 
-#include <stdint.h>
-
 #define MAVLINK_MSG_ID_LOCAL_POSITION_NED 32
 
 

@@ -1,8 +1,6 @@
 #pragma once
 // MESSAGE LOG_ERASE PACKING
 
-#include <stdint.h>
-
 #define MAVLINK_MSG_ID_LOG_ERASE 121
 
 

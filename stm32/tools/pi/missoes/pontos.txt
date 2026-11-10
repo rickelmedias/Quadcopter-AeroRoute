@@ -1,9 +1,0 @@
-# Pontos do "route" quando ele é chamado sem pontos: um x,y[,z] por linha, em cm,
-# relativos ao ponto de decolagem (x = frente inicial, y = direita inicial,
-# z = altura acima do chão; sem z, mantém a altura da decolagem).
-#
-# Quadrado de 40 cm para testes em espaço pequeno: a partida (0,0) é o quarto
-# canto, e o "route" volta a ela no fim.
-40,0
-40,40
-0,40

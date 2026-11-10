@@ -1,8 +1,6 @@
 #pragma once
 // MESSAGE ALTITUDE PACKING
 
-#include <stdint.h>
-
 #define MAVLINK_MSG_ID_ALTITUDE 141
 
 

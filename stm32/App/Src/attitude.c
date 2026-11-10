@@ -8,9 +8,8 @@
 #include "attitude.h"
 #include <math.h>
 
-/** Pi em float, sem depender de M_PI, que não existe em C11 estrito. */
+/** Pi e 2*pi em float, sem depender de M_PI, que não existe em C11 estrito. */
 #define ATT_PI_F     3.14159265358979323846F
-/** 2*pi em float. */
 #define ATT_TWO_PI_F 6.28318530717958647692F
 /** Abaixo deste |cos(pitch)|, a conversão de p,q,r fica numericamente singular. */
 #define EULER_RATE_MIN_COS_PITCH 0.001F
@@ -78,14 +77,6 @@ void attitude_euler_error(const euler_t *reference, const euler_t *measured,
   error->roll = attitude_wrap_pi(reference->roll - measured->roll);
   error->pitch = attitude_wrap_pi(reference->pitch - measured->pitch);
   error->yaw = attitude_wrap_pi(reference->yaw - measured->yaw);
-}
-
-/** @brief Atitude relativa ao zero (ver attitude.h). */
-void attitude_euler_relative(const euler_t *zero, const euler_t *measured,
-                             euler_t *relative) {
-  relative->roll = attitude_wrap_pi(measured->roll - zero->roll);
-  relative->pitch = attitude_wrap_pi(measured->pitch - zero->pitch);
-  relative->yaw = measured->yaw;
 }
 
 /** @brief Cosseno da inclinação (ver attitude.h). */

@@ -1,8 +1,6 @@
 #pragma once
 // MESSAGE CAMERA_THERMAL_RANGE PACKING
 
-#include <stdint.h>
-
 #define MAVLINK_MSG_ID_CAMERA_THERMAL_RANGE 277
 
 

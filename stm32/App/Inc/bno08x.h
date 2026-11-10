@@ -9,6 +9,7 @@
 #ifndef BNO08X_H
 #define BNO08X_H
 #include "attitude.h"
+#include "bno_history.h"
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -41,7 +42,8 @@ typedef enum {
  * @brief Saúde de um tipo de relatório do BNO (rotação, giro ou aceleração).
  */
 typedef struct {
-  /** Relatórios recebidos e aceitos desde o boot. */
+  /** Relatórios recebidos e aceitos desde o boot. Também serve de identificador
+      da amostra (usado pela captura e pelo replay). */
   uint32_t count;
   /** Relatórios que o sensor numerou mas nunca chegaram. É o jeito mais barato
       de flagrar um barramento que perde dados em silêncio. */
@@ -59,7 +61,7 @@ typedef struct {
 /**
  * @brief Última amostra e estado de saúde publicados pelo driver do BNO08x.
  */
-typedef struct bno_sample_s {
+typedef struct {
   /** Vetor de rotação w,x,y,z, normalizado. */
   float q[4];
   /** Velocidade angular calibrada p,q,r, em rad/s, eixos do corpo. Estes são
@@ -76,7 +78,7 @@ typedef struct bno_sample_s {
   /** Aceleração linear, em m/s^2, eixos do sensor, com a gravidade já removida
       pela fusão do próprio sensor (SH2_LINEAR_ACCELERATION). Pegar assim, em
       vez de subtrair a gravidade aqui, evita adivinhar as convenções de sinal
-      do sensor. Vai para o log; o modelo do TCC não a usa. */
+      do sensor. É com ela que o filtro do fluxo faz a predição. */
   float lin_accel[3];
   /** Saúde do relatório de rotação. */
   bno_report_stats_t rotation;
@@ -114,7 +116,7 @@ typedef struct bno_sample_s {
  * @brief Cria a task do BNO08x.
  *
  * A task faz o reset físico, sonda os endereços, configura os relatórios a
- * 400 Hz e tenta reconectar a cada 2 s após qualquer falha.
+ * 100 Hz e tenta reconectar a cada 2 s após qualquer falha.
  *
  * @return true se a task foi criada.
  */
@@ -131,9 +133,7 @@ bool bno_start(void);
  */
 void bno_get_sample(bno_sample_t *out);
 
-/**
- * @brief Registra uma task (TaskHandle_t) para ser notificada a cada novo
- *        relatório de rotação (400 Hz), ou NULL para nenhuma.
- */
-void bno_set_listener(void *task);
+/** Alinha atitude, giro e aceleração ao intervalo do frame MTF. */
+bool bno_get_aligned(uint32_t end_us, uint32_t interval_us,
+                     bno_aligned_sample_t *out);
 #endif

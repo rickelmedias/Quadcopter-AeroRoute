@@ -1,8 +1,6 @@
 #pragma once
 // MESSAGE ADSB_VEHICLE PACKING
 
-#include <stdint.h>
-
 #define MAVLINK_MSG_ID_ADSB_VEHICLE 246
 
 
@@ -15,7 +13,7 @@ typedef struct __mavlink_adsb_vehicle_t {
  uint16_t hor_velocity; /*< [cm/s] The horizontal velocity*/
  int16_t ver_velocity; /*< [cm/s] The vertical velocity. Positive is up*/
  uint16_t flags; /*<  Bitmap to indicate various statuses including valid data fields*/
- uint16_t squawk; /*<  Squawk code. Note that the code is in decimal: e.g. 7700 (general emergency) is encoded as binary 0b0001_1110_0001_0100, not(!) as 0b0000_111_111_000_000*/
+ uint16_t squawk; /*<  Squawk code*/
  uint8_t altitude_type; /*<  ADSB altitude type.*/
  char callsign[9]; /*<  The callsign, 8+null*/
  uint8_t emitter_type; /*<  ADSB emitter type.*/
@@ -91,7 +89,7 @@ typedef struct __mavlink_adsb_vehicle_t {
  * @param emitter_type  ADSB emitter type.
  * @param tslc [s] Time since last communication in seconds
  * @param flags  Bitmap to indicate various statuses including valid data fields
- * @param squawk  Squawk code. Note that the code is in decimal: e.g. 7700 (general emergency) is encoded as binary 0b0001_1110_0001_0100, not(!) as 0b0000_111_111_000_000
+ * @param squawk  Squawk code
  * @return length of the message in bytes (excluding serial stream start sign)
  */
 static inline uint16_t mavlink_msg_adsb_vehicle_pack(uint8_t system_id, uint8_t component_id, mavlink_message_t* msg,
@@ -127,7 +125,7 @@ static inline uint16_t mavlink_msg_adsb_vehicle_pack(uint8_t system_id, uint8_t 
     packet.altitude_type = altitude_type;
     packet.emitter_type = emitter_type;
     packet.tslc = tslc;
-    mav_array_memcpy(packet.callsign, callsign, sizeof(char)*9);
+    mav_array_assign_char(packet.callsign, callsign, 9);
         memcpy(_MAV_PAYLOAD_NON_CONST(msg), &packet, MAVLINK_MSG_ID_ADSB_VEHICLE_LEN);
 #endif
 
@@ -154,7 +152,7 @@ static inline uint16_t mavlink_msg_adsb_vehicle_pack(uint8_t system_id, uint8_t 
  * @param emitter_type  ADSB emitter type.
  * @param tslc [s] Time since last communication in seconds
  * @param flags  Bitmap to indicate various statuses including valid data fields
- * @param squawk  Squawk code. Note that the code is in decimal: e.g. 7700 (general emergency) is encoded as binary 0b0001_1110_0001_0100, not(!) as 0b0000_111_111_000_000
+ * @param squawk  Squawk code
  * @return length of the message in bytes (excluding serial stream start sign)
  */
 static inline uint16_t mavlink_msg_adsb_vehicle_pack_status(uint8_t system_id, uint8_t component_id, mavlink_status_t *_status, mavlink_message_t* msg,
@@ -220,7 +218,7 @@ static inline uint16_t mavlink_msg_adsb_vehicle_pack_status(uint8_t system_id, u
  * @param emitter_type  ADSB emitter type.
  * @param tslc [s] Time since last communication in seconds
  * @param flags  Bitmap to indicate various statuses including valid data fields
- * @param squawk  Squawk code. Note that the code is in decimal: e.g. 7700 (general emergency) is encoded as binary 0b0001_1110_0001_0100, not(!) as 0b0000_111_111_000_000
+ * @param squawk  Squawk code
  * @return length of the message in bytes (excluding serial stream start sign)
  */
 static inline uint16_t mavlink_msg_adsb_vehicle_pack_chan(uint8_t system_id, uint8_t component_id, uint8_t chan,
@@ -257,7 +255,7 @@ static inline uint16_t mavlink_msg_adsb_vehicle_pack_chan(uint8_t system_id, uin
     packet.altitude_type = altitude_type;
     packet.emitter_type = emitter_type;
     packet.tslc = tslc;
-    mav_array_memcpy(packet.callsign, callsign, sizeof(char)*9);
+    mav_array_assign_char(packet.callsign, callsign, 9);
         memcpy(_MAV_PAYLOAD_NON_CONST(msg), &packet, MAVLINK_MSG_ID_ADSB_VEHICLE_LEN);
 #endif
 
@@ -322,7 +320,7 @@ static inline uint16_t mavlink_msg_adsb_vehicle_encode_status(uint8_t system_id,
  * @param emitter_type  ADSB emitter type.
  * @param tslc [s] Time since last communication in seconds
  * @param flags  Bitmap to indicate various statuses including valid data fields
- * @param squawk  Squawk code. Note that the code is in decimal: e.g. 7700 (general emergency) is encoded as binary 0b0001_1110_0001_0100, not(!) as 0b0000_111_111_000_000
+ * @param squawk  Squawk code
  */
 #ifdef MAVLINK_USE_CONVENIENCE_FUNCTIONS
 
@@ -358,7 +356,7 @@ static inline void mavlink_msg_adsb_vehicle_send(mavlink_channel_t chan, uint32_
     packet.altitude_type = altitude_type;
     packet.emitter_type = emitter_type;
     packet.tslc = tslc;
-    mav_array_memcpy(packet.callsign, callsign, sizeof(char)*9);
+    mav_array_assign_char(packet.callsign, callsign, 9);
     _mav_finalize_message_chan_send(chan, MAVLINK_MSG_ID_ADSB_VEHICLE, (const char *)&packet, MAVLINK_MSG_ID_ADSB_VEHICLE_MIN_LEN, MAVLINK_MSG_ID_ADSB_VEHICLE_LEN, MAVLINK_MSG_ID_ADSB_VEHICLE_CRC);
 #endif
 }
@@ -417,7 +415,7 @@ static inline void mavlink_msg_adsb_vehicle_send_buf(mavlink_message_t *msgbuf, 
     packet->altitude_type = altitude_type;
     packet->emitter_type = emitter_type;
     packet->tslc = tslc;
-    mav_array_memcpy(packet->callsign, callsign, sizeof(char)*9);
+    mav_array_assign_char(packet->callsign, callsign, 9);
     _mav_finalize_message_chan_send(chan, MAVLINK_MSG_ID_ADSB_VEHICLE, (const char *)packet, MAVLINK_MSG_ID_ADSB_VEHICLE_MIN_LEN, MAVLINK_MSG_ID_ADSB_VEHICLE_LEN, MAVLINK_MSG_ID_ADSB_VEHICLE_CRC);
 #endif
 }
@@ -551,7 +549,7 @@ static inline uint16_t mavlink_msg_adsb_vehicle_get_flags(const mavlink_message_
 /**
  * @brief Get field squawk from adsb_vehicle message
  *
- * @return  Squawk code. Note that the code is in decimal: e.g. 7700 (general emergency) is encoded as binary 0b0001_1110_0001_0100, not(!) as 0b0000_111_111_000_000
+ * @return  Squawk code
  */
 static inline uint16_t mavlink_msg_adsb_vehicle_get_squawk(const mavlink_message_t* msg)
 {

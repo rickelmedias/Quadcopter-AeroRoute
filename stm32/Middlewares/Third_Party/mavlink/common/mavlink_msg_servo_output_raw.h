@@ -1,8 +1,6 @@
 #pragma once
 // MESSAGE SERVO_OUTPUT_RAW PACKING
 
-#include <stdint.h>
-
 #define MAVLINK_MSG_ID_SERVO_OUTPUT_RAW 36
 
 MAVPACKED(
