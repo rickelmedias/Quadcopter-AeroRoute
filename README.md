@@ -4,6 +4,11 @@ Experimental quadcopter developed for the UniFacens Computer Engineering thesis 
 
 The STM32F411 runs FreeRTOS, sensor acquisition, LQG control (LQR plus linear Kalman estimation), motor mixing, DShot and failsafes. The Raspberry Pi Zero W runs the Python mission computer and a genetic algorithm that minimizes the **total Euclidean distance of a closed 3D route**. DroneLink is the project application protocol over MAVLink 2 framing and UART. Minimum distance is the objective; minimum travel time, obstacle avoidance and energy optimization are not implemented objectives.
 
+## Getting Started
+
+- [Architecture / Structure](docs/getting-started/architecture-structure.md): system responsibilities, directory guide, branches and experimental milestones.
+- [Getting Started index](docs/getting-started/README.md): documentation entry point.
+
 ## Repository layout
 
 | Directory | Contents |
