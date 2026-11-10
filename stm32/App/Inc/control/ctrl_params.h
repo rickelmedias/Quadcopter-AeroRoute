@@ -70,10 +70,6 @@ typedef struct {
   float flow_gyro_x;
   /** FLOW_GYRO_Y: idem para Y. */
   float flow_gyro_y;
-  /** FLOW_YAW_X: velocidade falsa em x do corpo por rad/s de guinada (MTF fora do centro), em m. */
-  float flow_yaw_x;
-  /** FLOW_YAW_Y: idem para y do corpo. */
-  float flow_yaw_y;
   /** FLT_HOVER_H: altura padrão do comando hover, em m. */
   float hover_height;
   /** FLT_Z_RATE: velocidade da rampa de referência vertical, em m/s (0 = degrau). */
@@ -88,8 +84,6 @@ typedef struct {
   float land_height;
   /** FLT_DRY_RUN: 1 = o LQG roda, mas os motores ficam parados. */
   float dry_run;
-  /** FLT_SIM: 1 = drone simulado no lugar dos sensores, motores parados (control/sim_plant.h). */
-  float sim;
   /** DBG_RATE_HZ: taxa do DRONE_CTRL_DEBUG para a Pi, em Hz (0 desliga). */
   float debug_rate_hz;
   /** LOG_EST_HZ: taxa da linha EST no log USB, em Hz (0 desliga). */
@@ -98,39 +92,6 @@ typedef struct {
   float zero_roll_deg;
   /** SNS_ZERO_PITCH: pitch cru do BNO08x com o drone nivelado, em graus. */
   float zero_pitch_deg;
-  /** CTL_XY: 1 = o LQG segura x e y também; 0 = só atitude e altura. */
-  float use_xy;
-  /** CTL_TRIM: 1 = liga o ajuste lento do hover e do equilíbrio (control/trim.h). */
-  float trim;
-  /** CTL_KI_Z: ganho do hover, em rad/s por (m·s). */
-  float trim_ki_z;
-  /** CTL_KI_ATT: ganho do equilíbrio de arfagem e rolagem, em rad/s por (rad·s). */
-  float trim_ki_att;
-  /** CTL_TRIM_MAX: limite do termo de hover, em rad/s. */
-  float trim_max;
-  /** CTL_TRIM_ATT: limite de cada termo de equilíbrio (arfagem e rolagem), em rad/s. */
-  float trim_att_max;
-  /** CTL_DIST_MAX: maior perturbação estimada de cada canal, em rad/s por motor. */
-  float dist_max;
-  /** CTL_FF_TH: desequilíbrio frente/trás fixo, em rad/s (+ na frente, − atrás). */
-  float ff_theta;
-  /** CTL_FF_PHI: desequilíbrio esquerda/direita fixo, em rad/s (+ na esquerda, − na direita). */
-  float ff_phi;
-  /**
-   * CTL_FF_PSI: torque de guinada fixo, em rad/s (padrão de guinada do
-   * estimador: + em u2 e u4, − em u1 e u3).
-   */
-  float ff_psi;
-  /** SNS_LVL_PHI: correção fina do nível somada à rolagem φ medida, em graus. */
-  float lvl_phi_deg;
-  /** SNS_LVL_TH: correção fina do nível somada à arfagem θ medida, em graus. */
-  float lvl_theta_deg;
-  /** CTL_LQG_AJ: 1 = Kd e Kfd do LQG ajustado (control/lqg_dist.h) no lugar dos do Simulink. */
-  float lqg_adjusted;
-  /** CTL_DIST: 1 = estimador de perturbação ("LQG melhorado", control/lqg_dist.h). */
-  float use_dist;
-  /** FLT_PRESO: 1 = liga o detector de subida presa (bancada com cordinhas). */
-  float stuck_detect;
 } ctrl_params_t;
 
 /** @brief Regras de um parâmetro. */

@@ -1,9 +1,6 @@
 {
-  "kind": "thesis-submission-baseline",
-  "submission_date": "2026-11-11",
-  "capture_date": "2026-11-10",
-  "firmware_ref": "hover-lqg-pi",
-  "firmware_commit": "af6034e16fae0fc868444f57ff526b14ccd971aa",
-  "pi_source": "~/drone",
-  "firmware_binary_verified": false
+  "kind": "historical-firmware-milestone",
+  "original_branch": "motores",
+  "original_commit": "a9ce0b454ba8e51cb8051aa82a7053c862f3bd84",
+  "other_directories": "2026-11-10 submission capture, not contemporaneous historical deployment"
 }

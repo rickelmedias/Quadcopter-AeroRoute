@@ -7,25 +7,33 @@ BNO08x) continuam sendo lidos e registrados, para ver a vibração e a
 interferência com os motores girando. Os comandos de voo do mesmo console
 (`hover`, `dry`, `land`...) estão em [`controle_lqg.md`](controle_lqg.md).
 
-## Configuração final dos ESCs
+## Painel gráfico (branch `motores`)
 
-Definida no teste de bancada da branch `motores` (painel
-`tools/motores_gui.py`, comandos `dir` e `d` do console de lá) e gravada na
-memória dos ESCs:
+A branch `motores` sobe só o teste de motores (sem sensores, voo nem
+DroneLink) e traz um painel em Python que fala com o console USB:
 
-| Motor | Posição | Hélice | Sentido do ESC |
-|---|---|---|---|
-| M1 | trás / direita | amarela (invertida) | invertido |
-| M2 | frente / direita | preta | normal |
-| M3 | trás / esquerda | preta | normal |
-| M4 | frente / esquerda | amarela (invertida) | invertido |
+```text
+python3 tools/motores_gui.py [/dev/ttyACM0]
+```
 
-Efeitos medidos na bancada: M1+M2 acima de M3+M4 faz o pitch do BNO ficar mais
-negativo (e o contrário o deixa mais positivo); M2+M4 acima de M1+M3 faz o
-roll do BNO subir (e o contrário o faz descer). Girar o drone para a esquerda
-aumenta a guinada do BNO. Os `SNS_SGN_*` e o mixer (`control/mixer.h`) seguem
-essas medições. O firmware da `main` não envia comando de sentido; se trocar
-um ESC, refaça pela branch `motores`.
+Precisa de `pyserial` e `tkinter`. O painel mostra os 4 motores na posição
+física (frente para cima; M1 e M4 amarelos), com **ARMAR ESC**, **PARAR TUDO**
+(também barra de espaço e Esc), um controle de DShot (0 ou 48 a 2047) por
+motor, beep, **sentido de giro** (comandos DShot 7/8 mais 12 para gravar no
+ESC), limite de DShot e rampa. Ele liga o watchdog do firmware (`wd 1000`): se
+o PC parar de falar por 1 s, os motores são cortados.
+
+**Configuração final dos ESCs (testada na bancada):** M1 e M4 (hélices
+amarelas, invertidas) com o sentido **invertido**; M2 e M3 (hélices pretas)
+**normal**. Está gravada na memória dos ESCs, então o controle de voo não
+precisa reenviar. O painel já parte desse estado (`SENTIDO_ESC_CONFIGURADO` em
+`tools/motores_gui.py`), mas o ESC não informa o sentido: se trocar um ESC,
+refaça pelo botão e confira olhando o motor.
+
+A animação é proporcional ao DShot **enviado**; o ESC não informa a rotação
+real. O sentido gravado também não é lido de volta: o botão mostra "?" até
+você mexer nele. Se o ESC não aceitar o comando de sentido, inverta dois fios
+do motor ou use o configurador do AM32.
 
 ## 1. Segurança antes de ligar
 

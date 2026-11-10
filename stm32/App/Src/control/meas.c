@@ -47,8 +47,8 @@ uint8_t meas_update(meas_state_t *s, const meas_input_t *in, const ctrl_params_t
     attitude_euler_relative(&zero, &raw, &rel);
     /* O BNO está girado 90 graus em torno da vertical em relação ao drone:
        o roll dele é a arfagem θ do modelo e o pitch dele é a rolagem φ. */
-    s->y[LQG_Y_PHI] = p->sgn_roll * rel.pitch + p->lvl_phi_deg * DEG_TO_RAD;
-    s->y[LQG_Y_THETA] = p->sgn_pitch * rel.roll + p->lvl_theta_deg * DEG_TO_RAD;
+    s->y[LQG_Y_PHI] = p->sgn_roll * rel.pitch;
+    s->y[LQG_Y_THETA] = p->sgn_pitch * rel.roll;
     s->y[LQG_Y_PSI] = p->sgn_yaw * unwrap_yaw(s, in->yaw);
     flags |= MEAS_ATTITUDE;
   }
@@ -81,18 +81,11 @@ uint8_t meas_update(meas_state_t *s, const meas_input_t *in, const ctrl_params_t
       isfinite(in->flow_x) && isfinite(in->flow_y)) {
     const float trans_x = p->flow_scale_x * in->flow_x + p->flow_gyro_x * in->gyro[0];
     const float trans_y = p->flow_scale_y * in->flow_y + p->flow_gyro_y * in->gyro[1];
-    /* Os sinais levam o fluxo aos eixos do corpo do modelo (frente, direita),
-       medidos com a guinada em zero; a rotação para o local usa ψ do modelo
-       (horário visto de cima, = sgn_yaw × guinada do sensor). Girar pela
-       guinada do sensor, como antes de 06/11, espelhava o y longe do zero. */
-    /* Com o MTF fora do centro, a guinada soma r × distância (FLOW_YAW_X/Y). */
-    const float r = p->sgn_r * in->gyro[2];
-    const float body_x = p->sgn_vx * trans_x * in->range_m - p->flow_yaw_x * r;
-    const float body_y = p->sgn_vy * trans_y * in->range_m - p->flow_yaw_y * r;
     float vx, vy;
-    attitude_yaw_rotate(p->sgn_yaw * s->yaw_unwrapped, body_x, body_y, &vx, &vy);
-    s->y[LQG_Y_VX] = vx;
-    s->y[LQG_Y_VY] = vy;
+    attitude_yaw_rotate(s->yaw_unwrapped, trans_x * in->range_m, trans_y * in->range_m,
+                        &vx, &vy);
+    s->y[LQG_Y_VX] = p->sgn_vx * vx;
+    s->y[LQG_Y_VY] = p->sgn_vy * vy;
     flags |= MEAS_FLOW;
   }
 

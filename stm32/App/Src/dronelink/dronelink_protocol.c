@@ -38,11 +38,6 @@ typedef struct {
   uint16_t leg_index;
 } active_leg_t;
 
-/** Estado dos canais MAVLink de todo o firmware (ver dronelink_mavlink.h). */
-static mavlink_status_t channel_status[MAVLINK_COMM_NUM_BUFFERS];
-
-struct __mavlink_status *dronelink_mavlink_status(void) { return channel_status; }
-
 /** Estado do decodificador MAVLink. */
 static mavlink_status_t parser_status;
 /** Mensagem MAVLink em montagem. */
@@ -600,8 +595,6 @@ static void publish_status(void) {
 /**
  * @brief Supervisiona o enlace e a autorização enquanto o drone está no ar.
  *
- * Só age em voo armado pela Pi: um voo armado pelo console USB não tem Pi
- * nenhuma, e antes era mandado pousar assim que decolava (ensaio de 04/11).
  * Sem HEARTBEAT por 1 s pede HOLD; por 2 s com navegação degradada, ou por
  * 5 s em qualquer caso, pede pouso. Sem autorização pede HOLD, e após 5 s sem
  * ela pede pouso. Cada pedido é feito uma única vez.
@@ -611,7 +604,7 @@ static void publish_status(void) {
 static void supervise_links(uint32_t now_ms) {
   flight_snapshot_t snapshot;
   flight_get_snapshot(&snapshot);
-  if (!snapshot.airborne || !snapshot.commanded_by_pi) {
+  if (!snapshot.airborne) {
     return;
   }
   const uint32_t link_age = now_ms - last_pi_heartbeat_ms;
