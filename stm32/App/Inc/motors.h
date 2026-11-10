@@ -1,6 +1,6 @@
 /**
  * @file motors.h
- * @brief Saída dos quatro ESCs (DShot300) e quem pode comandá-los.
+ * @brief Saída dos quatro ESCs (DShot600) e quem pode comandá-los.
  *
  * Uma task de alta prioridade envia um quadro DShot a cada 1 ms. Enquanto
  * ninguém armou, ela manda só zeros, que é o que o ESC precisa para armar.

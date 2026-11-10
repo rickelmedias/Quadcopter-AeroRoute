@@ -1,9 +1,8 @@
 {
-  "kind": "thesis-submission-baseline",
-  "submission_date": "2026-11-11",
-  "capture_date": "2026-11-10",
-  "firmware_ref": "hover-lqg-pi",
-  "firmware_commit": "af6034e16fae0fc868444f57ff526b14ccd971aa",
-  "pi_source": "~/drone",
-  "firmware_binary_verified": false
+  "kind": "historical-firmware-milestone",
+  "original_branch": "controle",
+  "original_commit": "2c638cbb4da9cca3074a4e56d169ef763a6e17f7",
+  "interface": "STM32 USB CDC console and tools/controle_gui.py",
+  "scope": "Isolated attitude and height control; horizontal control disabled",
+  "other_directories": "2026-11-10 submission capture, not contemporaneous historical deployment"
 }

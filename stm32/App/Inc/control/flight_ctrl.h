@@ -41,7 +41,6 @@
 #include "dronelink/flight_command_api.h"
 
 #include <stdbool.h>
-#include <stddef.h>
 #include <stdint.h>
 
 /** @brief Quem armou: define as proteções de enlace. */
@@ -90,8 +89,6 @@ typedef struct {
   uint32_t bno_misses;
   /** Passos em que o MTF-01 não tinha dado válido. */
   uint32_t mtf_misses;
-  /** z NED do chão onde armou, em m; NAN até a primeira medida após armar. */
-  float z_ground;
 } flight_telemetry_t;
 
 /** @brief Fim de um trecho (TAKEOFF ou leg), para o DroneLink publicar. */
@@ -142,30 +139,6 @@ flight_request_result_t flight_ctrl_takeoff(float height_m);
 flight_request_result_t flight_ctrl_leg(const flight_leg_t *leg);
 
 /**
- * @brief Muda o setpoint do voo: posição local, altura e guinada.
- *
- * Vale em HOLD ou com um trecho em andamento (troca o alvo). x e y são em
- * relação ao ponto de decolagem (0, 0) e só são seguidos com CTL_XY ligado;
- * @p height_m é a altura acima do chão onde armou; @p yaw_rad é relativo à
- * guinada de quando o STM32 foi energizado (zero). A referência anda em rampa
- * (FLT_XY_RATE, FLT_Z_RATE, FLT_YAW_RATE).
- *
- * @return ::FLIGHT_REQUEST_IN_PROGRESS se aceito.
- */
-flight_request_result_t flight_ctrl_setpoint(float x_m, float y_m, float height_m, float yaw_rad);
-
-/**
- * @brief Zera a posição horizontal acumulada: o ponto atual vira o (0, 0).
- *
- * A posição x, y vem só da soma do fluxo e deriva com o tempo. Estimativa,
- * referência e alvo horizontais vão a zero juntos (o drone segura onde está);
- * velocidades e o resto do estado não mudam. Vale em qualquer estado.
- *
- * @return ::FLIGHT_REQUEST_ACCEPTED se o pedido entrou na fila.
- */
-flight_request_result_t flight_ctrl_xy_zero(void);
-
-/**
  * @brief Para onde está a referência e mantém (HOLD).
  * @param[in] reason  Motivo (::FLIGHT_REASON_NONE quando pedido pelo operador).
  */
@@ -195,18 +168,6 @@ bool flight_ctrl_is_armed(void);
 
 /** @brief Quem armou o voo atual (vale enquanto armado). */
 flight_origin_t flight_ctrl_origin(void);
-
-/**
- * @brief Tira da fila a mensagem do voo mais antiga ainda não entregue à Pi.
- *
- * As mesmas linhas de texto do log USB ("voo: ...", "dist z=...",
- * "FAILSAFE: ..."), guardadas para o DroneLink enviar como STATUSTEXT.
- *
- * @param[out] out   Texto (terminado em zero, truncado em @p size - 1).
- * @param[in]  size  Tamanho de @p out.
- * @return true se havia mensagem.
- */
-bool flight_ctrl_take_text(char *out, size_t size);
 
 /** @brief Nome curto de um estado, para o console. */
 const char *flight_ctrl_state_name(uint8_t state);
