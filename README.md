@@ -41,10 +41,14 @@ Build the thesis from `latex/` using XeLaTeX, BibTeX, then XeLaTeX twice, with a
 
 New repository documentation is in English. Original historical sources, logs, identifiers and the submitted Portuguese thesis retain their original language for traceability. The deployed program is not fully localized; see the language audit before describing it as an English-only interface.
 
-## Isolated test milestones
+## Test milestones
 
 - `milestone/03-usb-control`: original `controle` firmware and Python GUI over USB CDC, testing attitude/height without horizontal position control.
 - `milestone/03-position-lqg`: later LQG position-control stage.
 - `milestone/04-dronelink`: isolated Pi–STM32 communication/protocol test using the real UART and a simulated plant on STM32; also preserves route reproducibility work.
 
 The position-control and communication branches are combined in the submission baseline. See [version provenance](docs/versions.md) for the distinction and historical source commits.
+
+- `milestone/05-integrated-pi-hover`: integrated position-control and Pi communication baseline, identical to the submission snapshot.
+
+See [import review](docs/import-review.md) for verified preservation and outstanding requirements.

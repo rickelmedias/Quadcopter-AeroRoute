@@ -1,0 +1,29 @@
+{
+  "firmware_tree_matches": {
+    "milestone/01-sensors": true,
+    "milestone/02-motors": true,
+    "milestone/03-usb-control": true,
+    "milestone/03-position-lqg": true,
+    "milestone/04-dronelink": true,
+    "submission/2026-11-11": true
+  },
+  "latex_changed_from_capture": [],
+  "rpi_changed_from_capture": [
+    "README.md",
+    "dronectl",
+    "tools/pi/dronectl/cli.py"
+  ],
+  "pi_documented_adaptations": [
+    "README.md",
+    "dronectl",
+    "tools/pi/dronectl/cli.py"
+  ],
+  "baseline_protocol_match": true,
+  "experimental_protocol_match": true,
+  "remote_refs": [],
+  "thesis_branch_equals_tag": true,
+  "archive_readable": {
+    "experimental-untracked.tar.gz": 13,
+    "raspberry-pi-snapshot.tar.gz": 1069
+  }
+}
