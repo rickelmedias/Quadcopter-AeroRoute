@@ -40,3 +40,11 @@ Run firmware host tests with dependencies available on PATH: `cd stm32 && sh tes
 Build the thesis from `latex/` using XeLaTeX, BibTeX, then XeLaTeX twice, with abnTeX2 and its dependencies installed. The original Arial font requirement and fallback behavior are defined in `main.tex`.
 
 New repository documentation is in English. Original historical sources, logs, identifiers and the submitted Portuguese thesis retain their original language for traceability. The deployed program is not fully localized; see the language audit before describing it as an English-only interface.
+
+## Isolated test milestones
+
+- `milestone/03-usb-control`: original `controle` firmware and Python GUI over USB CDC, testing attitude/height without horizontal position control.
+- `milestone/03-position-lqg`: later LQG position-control stage.
+- `milestone/04-dronelink`: isolated Pi–STM32 communication/protocol test using the real UART and a simulated plant on STM32; also preserves route reproducibility work.
+
+The position-control and communication branches are combined in the submission baseline. See [version provenance](docs/versions.md) for the distinction and historical source commits.
