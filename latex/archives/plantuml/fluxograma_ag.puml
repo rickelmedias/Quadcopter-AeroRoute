@@ -1,0 +1,51 @@
+@startuml fluxograma_ag
+
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam ArrowColor #000000
+skinparam ArrowThickness 1.5
+
+skinparam activity {
+  BackgroundColor #FFFFFF
+  BorderColor #000000
+  BorderThickness 1.2
+  FontColor #000000
+  FontSize 13
+  DiamondBackgroundColor #FFF8E1
+  DiamondBorderColor #E6A817
+  DiamondFontColor #000000
+  StartColor #000000
+  EndColor #000000
+  BarColor #000000
+}
+
+|Algoritmo Genético — TSP|
+
+start
+
+:Inicialização\n<size:11><i>Gerar população inicial de permutações aleatórias</i></size>;
+
+repeat
+
+  :Avaliação de <i>fitness</i>\n<size:11><i>Calcular custo total de cada rota</i></size>;
+
+  :Atualização do melhor indivíduo\n<size:11><i>Preservar elite ou arquivo da melhor solução</i></size>;
+
+  :Seleção por torneio\n<size:11><i>Escolher k indivíduos; manter o melhor</i></size>;
+
+  :Cruzamento ordenado (OX)\n<size:11><i>Combinar dois pais preservando ordem relativa</i></size>;
+
+  :Mutação por inversão\n<size:11><i>Inverter segmento aleatório do cromossomo</i></size>;
+
+  :Nova geração\n<size:11><i>Inserir descendentes e elites na população</i></size>;
+
+  :Avaliação dos descendentes\n<size:11><i>Calcular custo antes da decisão de parada</i></size>;
+
+repeat while (Critério de parada atingido?) is (Não)
+-> Sim;
+
+:Melhor solução encontrada\n<size:11><i>Rota de menor custo</i></size>;
+
+stop
+
+@enduml

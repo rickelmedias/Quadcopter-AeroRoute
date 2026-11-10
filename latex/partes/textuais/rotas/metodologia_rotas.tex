@@ -1,0 +1,135 @@
+% ============================================================================
+% MATERIAIS E MÉTODOS — planejamento de rotas (ordem de visita dos pontos)
+% Chamado em partes/textuais/metodologias.tex.
+% ============================================================================
+
+\subsection{Planejamento de rotas}\label{subsec:metodo_rotas}
+
+O problema de roteamento é modelado como uma variante do Problema do Caixeiro Viajante para um único VANT (Seção~\ref{subsec:tsp}), no qual cada cromossomo do Algoritmo Genético representa uma ordem válida de visita aos pontos. Como o AG não garante o ótimo global, seu resultado é comparado, sempre sobre o mesmo conjunto de pontos e com sementes registradas, à ordem aleatória, à heurística gulosa e, enquanto viáveis, a dois métodos exatos (Seção~\ref{subsec:rotas_referencias}).
+
+\subsubsection{Formulação adotada}\label{subsubsec:rotas_formulacao_adotada}
+
+O planejamento e a execução da rota são realizados pelo computador de missão. No Raspberry Pi, o operador utiliza o comando \texttt{route} do programa \texttt{dronectl} para informar os pontos a visitar. Os pontos são expressos em centímetros no referencial local, com origem no ponto de decolagem.
+
+Com o VANT em voo e no estado \texttt{HOLD}, o programa calcula a ordem de visita pelo algoritmo genético e envia as ações ao STM32. Para alcançar cada ponto, o veículo gira em sua direção, quando necessário, e se desloca até o alvo, podendo variar a altura durante o movimento. O próximo trecho é enviado após a confirmação de conclusão do anterior. Ao final, o VANT retorna ao ponto de partida, onde o pouso pode ser comandado.
+
+A rota parte de $P_0 = (0, 0, h_0)$, em que $h_0$ é a altura registrada no início da rota, visita todos os pontos e retorna a $P_0$. Seu custo é o comprimento do circuito em três dimensões, conforme as Equações~\ref{eq:rotas_custo} e \ref{eq:rotas_distancia}. As coordenadas fornecidas pelo operador são convertidas de centímetros para metros antes do envio ao STM32.
+
+A função de custo considera apenas a distância percorrida; prazos, tempos de serviço, consumo de energia e obstáculos não são modelados. Assim, a distância é usada como critério simplificado de planejamento, sem garantir o menor tempo de voo ou consumo de energia.
+
+\subsubsection{Algoritmos implementados}\label{subsubsec:rotas_algoritmos}
+
+Os algoritmos do Quadro~\ref{qua:rotas_algoritmos} foram implementados em Python, sem bibliotecas numéricas externas, para que o mesmo código rode no computador pessoal e no Raspberry Pi Zero W. Entre os métodos comparados, apenas a força bruta e o Held-Karp garantem o ótimo global quando concluem o cálculo. Os demais não oferecem essa garantia.
+
+\begin{quadro}[H]
+    \centering
+    \caption{Algoritmos de ordem de visita comparados.}
+    \label{qua:rotas_algoritmos}
+    \small
+    \renewcommand{\arraystretch}{1.3}
+    \begin{tabular}{|>{\raggedright\arraybackslash}p{3.0cm}|>{\centering\arraybackslash}p{2.5cm}|>{\raggedright\arraybackslash}p{8.0cm}|}
+        \hline
+        \textbf{Algoritmo} & \textbf{Custo} & \textbf{Descrição} \\
+        \hline
+        Aleatório & $O(N)$ & Uma permutação sorteada; referência do que se obtém sem algoritmo. \\
+        \hline
+        Guloso & $O(N^2)$ & Vizinho mais próximo a partir de $P_0$; empate resolvido pelo menor índice. \\
+        \hline
+        Algoritmo genético & $O(G \cdot P \cdot N)$ & $G$ gerações de uma população de $P$ rotas; parâmetros no Quadro~\ref{qua:rotas_parametros_ag}. \\
+        \hline
+        Força bruta & $O(N \cdot N!)$ & Avalia as $N!$ permutações, sem explorar simetrias. \\
+        \hline
+        Held-Karp & $O(N^2 2^N)$ & Programação dinâmica sobre subconjuntos; cada estado ocupa 9 \textit{bytes} (custo e predecessor). \\
+        \hline
+    \end{tabular}
+    \par\vspace{0.2cm}
+    \footnotesize Fonte: elaborado pelos autores (2026).
+\end{quadro}
+
+O algoritmo genético segue a estrutura da Figura~\ref{fig:fluxograma_ag}, sem busca local: a melhora das rotas resulta apenas de seleção, cruzamento e mutação. Seus parâmetros, fixos em todos os ensaios, estão no Quadro~\ref{qua:rotas_parametros_ag}.
+
+\begin{quadro}[H]
+    \centering
+    \caption{Parâmetros do algoritmo genético.}
+    \label{qua:rotas_parametros_ag}
+    \small
+    \renewcommand{\arraystretch}{1.3}
+    \begin{tabular}{|>{\raggedright\arraybackslash}p{3.6cm}|>{\raggedright\arraybackslash}p{10.0cm}|}
+        \hline
+        \textbf{Elemento} & \textbf{Escolha} \\
+        \hline
+        Indivíduo & Permutação dos $N$ pontos; $P_0$ fixo no início e no fim. \\
+        \hline
+        Aptidão & Comprimento do circuito (Equação~\ref{eq:rotas_custo}); menor é melhor. \\
+        \hline
+        População inicial & 120 permutações aleatórias. \\
+        \hline
+        Seleção & Torneio de 3 indivíduos; vence o de menor custo. \\
+        \hline
+        Cruzamento & \textit{Order crossover} (OX) com probabilidade 0,9. \\
+        \hline
+        Mutação & Inversão de um trecho sorteado, com probabilidade 0,3. \\
+        \hline
+        Elitismo & Os 2 melhores indivíduos passam diretamente à geração seguinte. \\
+        \hline
+        Parada & 800 gerações ou 200 gerações consecutivas sem melhora do melhor indivíduo. \\
+        \hline
+        Semente & 2026, fixa (mesma rota em qualquer máquina). \\
+        \hline
+    \end{tabular}
+    \par\vspace{0.2cm}
+    \footnotesize Fonte: elaborado pelos autores (2026).
+\end{quadro}
+
+De forma exploratória, avaliou-se também a busca local 2-opt repetida a partir de 20 rotas aleatórias, retendo o melhor ótimo local obtido. Ela não faz parte do comparativo principal e seus resultados são apresentados à parte (Seção~\ref{subsec:res_rotas_2opt}).
+
+\subsubsection{Preparação da comparação dos algoritmos}\label{subsubsec:rotas_benchmark}
+
+Para comparar os algoritmos, foram gerados conjuntos de pontos tridimensionais a serem visitados pelo drone. Cada conjunto representa um cenário de teste, denominado instância. Foram usados de 3 a 30 pontos, com 10 conjuntos diferentes para cada quantidade, totalizando 280 cenários. Os pontos foram sorteados por um programa em Python, usando sementes registradas, isto é, valores que permitem repetir o mesmo sorteio.
+
+Em cada cenário, todos os algoritmos receberam os mesmos pontos e o mesmo local de partida. Foram registrados o comprimento da rota, a ordem de visita e o tempo de cálculo. A Tabela~\ref{tab:rotas_protocolo} resume as condições dessa comparação, também chamada de \textit{benchmark}.
+
+\begin{table}[H]
+    \centering
+    \caption{Condições da comparação dos algoritmos de rotas.}
+    \label{tab:rotas_protocolo}
+    \small
+    \renewcommand{\arraystretch}{1.25}
+    \begin{tabular}{p{4.2cm}p{9.6cm}}
+        \hline
+        \textbf{Item} & \textbf{Valor} \\
+        \hline
+        Número de pontos ($N$) & 3 a 30, além de $P_0$ \\
+        Cenários por quantidade de pontos & 10 (sementes 1 a 10), totalizando 280 cenários \\
+        Pontos & $x$ e $y$ inteiros em um quadrado de 6~m $\times$ 6~m centrado na decolagem; $z$ inteiro de 30 a 150~cm (limites de altura aceitos pelo STM32) \\
+        Ponto de partida & $P_0 = (0, 0, 50)$~cm \\
+        Referência & ótimo global quando um método exato foi executado; caso contrário, a melhor rota conhecida entre todas as obtidas \\
+        Máquina & Intel Core i5-9300HF (2,4~GHz), 7,3~GB de RAM, Linux, Python 3.14.7 \\
+        \hline
+    \end{tabular}
+    \par\vspace{0.2cm}
+    \footnotesize Fonte: elaborado pelos autores (2026).
+\end{table}
+
+Para avaliar os resultados, o comprimento de cada rota ($C$) foi comparado ao da rota de referência ($C_{\mathrm{ref}}$). A referência é a solução ótima quando disponível; nos demais casos, é a menor rota encontrada pelos métodos avaliados. Foram consideradas as seguintes medidas:
+
+\begin{alineastcc}
+    \item \textbf{\textit{gap}}: quanto a rota é mais longa que a referência, $100 \cdot (C/C_{\mathrm{ref}} - 1)$, em porcentagem;
+    \item \textbf{qualidade da rota}: $100 \cdot C_{\mathrm{ref}}/C$, em porcentagem, em que 100\% corresponde à rota de referência e valores maiores são melhores;
+    \item \textbf{acertos}: número de cenários em que o algoritmo encontrou uma rota com o mesmo comprimento da referência;
+    \item \textbf{tempo de cálculo}: tempo decorrido para calcular a rota.
+\end{alineastcc}
+
+\subsubsection{Critério de viabilidade dos métodos exatos}\label{subsubsec:rotas_viabilidade}
+
+Esse critério evita que a comparação fique limitada pelo tempo e pela memória exigidos pelos métodos exatos. Foram adotados limites de 10~s para a força bruta e 70~s para o Held-Karp. Antes de aumentar o número de pontos, o tempo necessário era estimado com base nas execuções anteriores; quando a estimativa ultrapassava o limite, o método deixava de participar dos cenários maiores. Quando ambos eram executados, suas distâncias eram comparadas para conferir se encontravam o mesmo ótimo.
+
+Em um ensaio separado, foram medidos o tempo e o maior consumo de memória para diferentes quantidades de pontos. Para os casos não executados, o tempo foi estimado a partir do crescimento teórico de cada método: $N!$ para a força bruta e $N^2 2^N$ para o Held-Karp, ajustados aos tempos medidos. A memória do Held-Karp foi estimada pelo número de estados armazenados ($N2^N$), com 9 bytes por estado. Essas estimativas permitem explicar os limites apresentados nos resultados, distinguindo-os das medições realizadas.
+
+\subsubsection{Reprodutibilidade}\label{subsubsec:rotas_reprodutibilidade}
+
+Para permitir a repetição dos testes, foram mantidos o mesmo código, os mesmos pontos, as mesmas sementes de sorteio e os mesmos parâmetros do algoritmo genético. A comparação completa foi executada no computador pessoal, devido ao custo dos métodos exatos. Em seguida, três cenários foram executados também no Raspberry Pi, comparando a ordem de visita e o comprimento das rotas por meio de um resumo digital SHA-256 dos dados. A igualdade desses resumos confirmou resultados idênticos nos casos testados, embora os tempos de cálculo fossem diferentes. O código e os registros para repetir a comparação são disponibilizados no repositório descrito no Apêndice~\ref{ap:repositorio}.
+
+\subsubsection{Execução das rotas no controlador de voo}\label{subsubsec:rotas_execucao_stm32}
+
+Foi realizado um teste de integração entre as rotas calculadas e o controlador de voo. O STM32 real executou o modelo simulado do VANT, com \texttt{FLT\_SIM = 1} e os motores parados. Um programa no computador enviou os movimentos pela USB, aguardando a confirmação de conclusão antes de enviar o próximo. Foram conferidos a ordem de visita, o retorno à partida e o erro de posição nos pontos, sem realizar voo físico.

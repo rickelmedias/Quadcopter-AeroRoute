@@ -1,0 +1,5 @@
+428.346	voo: ARMADO a seco (Pi)
+428.370	voo: decolando para 30 cm
+436.454	pouso: reduzindo motores
+437.939	voo: desarmado (pouso concluido)
+437.945	dist z=0 th=0 phi=0 psi=0 rad/s

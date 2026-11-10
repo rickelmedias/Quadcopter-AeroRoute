@@ -1,0 +1,106 @@
+% ============================================================
+% Diagrama de Blocos — Controlador PID em Cascata
+%
+% Uso na figura:
+%   \begin{figure}[H]
+%     \centering
+%     \caption{Arquitetura do controlador PID em cascata.}
+%     \resizebox{\textwidth}{!}{%
+%         \input{images/referencial_teorico/pid_cascata.tex}%
+%     }
+%     \label{fig:cascata}
+%     \par\vspace{0.2cm}
+%     \centering\footnotesize Fonte: Elaborado pelo autor (2025),
+%     baseado em \citeonline{lopezsanchez2023}.
+%   \end{figure}
+% ============================================================
+
+\begin{tikzpicture}[
+  bloco/.style={
+    rectangle, draw, thick,
+    minimum width=2.6cm, minimum height=1.2cm,
+    align=center, rounded corners=3pt, font=\small
+  },
+  blocomix/.style={
+    rectangle, draw, thick,
+    minimum width=1.5cm, minimum height=1.2cm,
+    align=center, rounded corners=3pt, font=\small, fill=gray!12
+  },
+  soma/.style={
+    circle, draw, thick,
+    minimum size=0.6cm, inner sep=0pt, font=\normalsize
+  },
+  arr/.style={-{Stealth[length=5pt,width=4pt]}, thick},
+  fb/.style={-{Stealth[length=5pt,width=4pt]}, thick, gray}
+]
+
+% ---- Junções de soma ----------------------------------------
+\node[soma] at (0.0, 0) (s1) {$+$};
+\node[soma] at (5.3, 0) (s2) {$+$};
+\node[soma] at (10.6,0) (s3) {$+$};
+
+% ---- Blocos -------------------------------------------------
+\node[bloco, fill=violet!15] at (2.3,  0) (pp)
+  {\textbf{PID Posi\c{c}\~ao}\\\footnotesize$\sim$50--100\,Hz};
+
+\node[bloco, fill=teal!15]   at (7.6,  0) (pa)
+  {\textbf{PID Atitude}\\\footnotesize$\sim$250--500\,Hz};
+
+\node[bloco, fill=cyan!12]   at (12.9, 0) (pr)
+  {\textbf{PID Taxa}\\\footnotesize$\sim$500--1000\,Hz};
+
+\node[blocomix]              at (15.95,0) (mx) {\textbf{Mixing}};
+
+\node[bloco, fill=orange!15] at (18.8, 0) (pl)
+  {\textbf{Motores}\\\footnotesize e Planta};
+
+% ---- Sinais negativos --------------------------------------
+\node[font=\footnotesize] at ($(s1)+(0,-0.38)$) {$-$};
+\node[font=\footnotesize] at ($(s2)+(0,-0.38)$) {$-$};
+\node[font=\footnotesize] at ($(s3)+(0,-0.38)$) {$-$};
+
+% ---- Entrada -----------------------------------------------
+\draw[arr] (-1.4,0) -- (s1);
+\node[font=\normalsize, above=0.85cm] at (-0.7, 0)
+  {Ref.\ $(x_d,\,y_d,\,z_d)$};
+
+% ---- Setas diretas ------------------------------------------
+\draw[arr] (s1)      -- (pp);
+\draw[arr] (pp.east) -- (s2.west);
+\draw[arr] (s2)      -- (pa);
+\draw[arr] (pa.east) -- (s3.west);
+\draw[arr] (s3)      -- (pr);
+\draw[arr] (pr.east) -- (mx.west);
+\draw[arr] (mx.east) -- (pl.west);
+\draw[arr] (pl.east) -- ++(0.6,0) coordinate (saida);
+
+% ---- Rótulos intermediários — \normalsize acima dos blocos -
+\node[font=\normalsize, above=0.85cm]
+  at ($(pp.east)!0.5!(s2.west)$)
+  {$\phi_d,\;\theta_d,\;T$};
+
+\node[font=\normalsize, above=0.85cm]
+  at ($(pa.east)!0.5!(s3.west)$)
+  {$p_d,\;q_d,\;r_d$};
+
+\node[font=\normalsize, above=0.85cm]
+  at ($(pr.east)!0.5!(mx.west)$)
+  {$\tau_\phi,\;\tau_\theta,\;\tau_\psi$};
+
+% ---- Realimentações ----------------------------------------
+\draw[fb] (saida) -- ++(0,-1.0) -| (s3.south);
+\node[font=\small, black, anchor=west]
+  at ($(s3.south)+(0.15,-1.02)$)
+  {taxas $(p,\,q,\,r)$ --- girosc\'opio};
+
+\draw[fb] (saida) -- ++(0,-1.9) -| (s2.south);
+\node[font=\small, black, anchor=west]
+  at ($(s2.south)+(0.15,-1.92)$)
+  {\^Angulos $(\phi,\,\theta,\,\psi)$ --- IMU};
+
+\draw[fb] (saida) -- ++(0,-2.8) -| (s1.south);
+\node[font=\small, black, anchor=west]
+  at ($(s1.south)+(0.15,-2.82)$)
+  {Posi\c{c}\~ao $(x,\,y,\,z)$ --- fluxo \'optico / GPS};
+
+\end{tikzpicture}

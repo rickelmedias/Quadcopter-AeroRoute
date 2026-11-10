@@ -1,0 +1,4 @@
+https://github.com/ceva-dsp/sh2 commit b514b1e2586ddc195e553dac89fc94c637b25298
+
+Unmodified: vendored as-is. Keep it that way - the BNO08x bring-up problems
+traced back to our own HAL layer, never to this driver.

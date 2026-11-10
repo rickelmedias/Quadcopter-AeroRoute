@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+.venv/
+/build/
+latex/*.aux
+latex/*.bbl
+latex/*.blg
+latex/*.log
+latex/*.out
+latex/*.toc
+latex/*.lof
+latex/*.lot
+latex/*.loq
+latex/*.fls
+latex/*.fdb_latexmk

@@ -1,0 +1,237 @@
+% ============================================================================
+% MATERIAIS E MÉTODOS — comunicação entre o Raspberry Pi e o STM32 (DroneLink)
+% Chamado em partes/textuais/metodologias.tex, depois de "Implementação
+% embarcada e comunicação".
+% ============================================================================
+
+\subsection{Comunicação entre o computador de missão e o controlador de voo}\label{subsec:metodo_comunicacao}
+
+A comunicação entre o Raspberry Pi (computador de missão) e o STM32 (controlador de voo) segue o DroneLink, protocolo de aplicação desenvolvido neste trabalho sobre o enquadramento MAVLink 2 (Seção~\ref{subsec:mavlink}). A divisão de responsabilidades é a seguinte: o Raspberry Pi decide \textbf{o que} fazer, isto é, a ordem dos pontos e o próximo objetivo; o STM32 decide \textbf{como} e \textbf{se} fazer, validando cada pedido, executando-o com o controlador LQG e mantendo o VANT seguro mesmo que o Raspberry Pi falhe.
+
+\subsubsection{Enlace físico e ambiente do Raspberry Pi}\label{subsubsec:com_enlace}
+
+No enlace físico entre Raspberry Pi e STM32, a configuração adotada é UART \textit{full-duplex} em lógica de 3,3~V, 115200~bit/s, 8N1 e sem controle de fluxo. O GPIO14/TXD do Raspberry Pi, pino físico 8, liga-se ao PA10/USART1\_RX do STM32; o PA9/USART1\_TX do STM32 liga-se ao GPIO15/RXD do Raspberry Pi, pino físico 10; e o GND comum é obrigatório. No Raspberry Pi, a interface serial está exposta em \texttt{/dev/serial0}, apontando para \texttt{ttyAMA0}, com \texttt{enable\_uart=1}, Bluetooth desabilitado pelo \textit{overlay} \texttt{disable-bt} e console serial desativado, de modo que a UART fique dedicada à comunicação com o controlador de voo.
+
+O software do Raspberry Pi foi desenvolvido em Python 3.13.5, com as bibliotecas \texttt{pyserial} 3.5, \texttt{pymavlink} 2.4.49 e \texttt{numpy} 2.2.4, no Raspberry Pi OS 13 (ARMv6). Sua preparação foi verificada pela abertura da interface serial e pela recepção das mensagens periódicas do STM32. O código e sua organização estão disponíveis no repositório apresentado no Apêndice~\ref{ap:repositorio}.
+
+\subsubsection{Construção do dialeto DroneLink}\label{subsubsec:com_dialeto}
+
+O protocolo é definido em um único arquivo, \texttt{protocol/drone\_controller.xml}, que inclui o \texttt{common.xml} do MAVLink e acrescenta as mensagens próprias do projeto, com identificadores a partir de 51000, faixa não usada pelo \texttt{common.xml}. Desse arquivo são gerados os dois lados do enlace: os \textit{headers} C do STM32, pelo gerador oficial \texttt{mavgen}, e o módulo Python do Raspberry Pi, pela biblioteca \texttt{pymavlink}, que o regera automaticamente sempre que o XML muda. A geração a partir da mesma definição mantém a estrutura das mensagens consistente entre os dois lados, e o \texttt{CRC\_EXTRA} auxilia na detecção de definições incompatíveis.
+
+O STM32 usa o \textit{System ID}~1 e o \textit{Component ID}~1 (piloto automático), e o Raspberry Pi, o mesmo \textit{System ID} com o \textit{Component ID}~191 (computador de bordo). O STM32 só processa mensagens com essa origem e com o destino indicado nos campos \texttt{target\_system} e \texttt{target\_component} de cada mensagem; as demais são ignoradas. As mensagens utilizadas estão no Quadro~\ref{qua:dronelink_mensagens}.
+
+\begin{quadro}[H]
+    \centering
+    \caption{Mensagens do DroneLink.}
+    \label{qua:dronelink_mensagens}
+    \footnotesize
+    \renewcommand{\arraystretch}{1.25}
+    \setlength{\tabcolsep}{3pt}
+    \begin{tabular}{|>{\raggedright\arraybackslash}p{4.2cm}|>{\centering\arraybackslash}p{1.1cm}|>{\centering\arraybackslash}p{1.1cm}|>{\raggedright\arraybackslash}p{1.6cm}|>{\raggedright\arraybackslash}p{5.4cm}|}
+        \hline
+        \textbf{Mensagem} & \textbf{De} & \textbf{Para} & \textbf{Taxa} & \textbf{Função} \\
+        \hline
+        \multicolumn{5}{|l|}{\textbf{Padrão (\texttt{common.xml})}} \\
+        \hline
+        \texttt{HEARTBEAT} & Pi & STM32 & 4~Hz & Presença do computador de missão. \\
+        \hline
+        \texttt{HEARTBEAT} & STM32 & Pi & 2~Hz & Estado de voo e indicação de armado. \\
+        \hline
+        \texttt{COMMAND\_\allowbreak LONG} & Pi & STM32 & Por pedido & Solicitação de armar ou desarmar. \\
+        \hline
+        \texttt{COMMAND\_\allowbreak ACK} & STM32 & Pi & Por resposta & Aceite ou recusa do comando. \\
+        \hline
+        \texttt{PARAM\_\allowbreak *} & Pi & STM32 & Por pedido & Consulta ou alteração de parâmetros. \\
+        \hline
+        \texttt{PARAM\_\allowbreak VALUE} & STM32 & Pi & Por resposta & Valor efetivamente adotado. \\
+        \hline
+        \texttt{ATTITUDE, LOCAL\_\allowbreak POSITION\_\allowbreak NED} & STM32 & Pi & 5~Hz & Atitude e posição estimadas. \\
+        \hline
+        \texttt{SYS\_\allowbreak STATUS, STATUSTEXT} & STM32 & Pi & Periódica / por evento & Estado do sistema e avisos; bateria quando disponível. \\
+        \hline
+        \texttt{TIMESYNC} & Pi & STM32 & Por pedido & Solicitação de sincronização dos relógios. \\
+        \hline
+        \texttt{TIMESYNC} & STM32 & Pi & Por resposta & Horário local para sincronização. \\
+        \hline
+        \multicolumn{5}{|l|}{\textbf{Próprias do DroneLink}} \\
+        \hline
+        \texttt{DRONE\_\allowbreak PROTOCOL\_\allowbreak INFO} & STM32 & Pi & 1~Hz & Versão, identidade de boot e capacidades. \\
+        \hline
+        \texttt{DRONE\_\allowbreak LEG\_\allowbreak COMMAND} & Pi & STM32 & Por pedido & Solicitação de um trecho. \\
+        \hline
+        \texttt{DRONE\_\allowbreak LEG\_\allowbreak ACK} & STM32 & Pi & Por resposta & Situação e resultado do trecho. \\
+        \hline
+        \texttt{DRONE\_\allowbreak LEG\_\allowbreak CANCEL} & Pi & STM32 & Por pedido & Cancelamento do trecho. \\
+        \hline
+        \texttt{DRONE\_\allowbreak CONTROL\_\allowbreak LEASE} & Pi & STM32 & 5~Hz & Autorização válida por 1~s. \\
+        \hline
+        \texttt{DRONE\_\allowbreak GAIN\_\allowbreak ROW, DRONE\_\allowbreak GAIN\_\allowbreak COMMIT} & Pi & STM32 & Por ajuste & Envio e aplicação dos ganhos do LQG. \\
+        \hline
+        \texttt{DRONE\_\allowbreak GAIN\_\allowbreak ACK} & STM32 & Pi & Por resposta & Resultado do ajuste dos ganhos. \\
+        \hline
+        \texttt{DRONE\_\allowbreak CTRL\_\allowbreak DEBUG} & STM32 & Pi & Por ajuste & Medições, estimativas, comandos e referências. \\
+        \hline
+    \end{tabular}
+    \par\vspace{0.2cm}
+    \footnotesize Fonte: elaborado pelos autores (2026).
+\end{quadro}
+
+\subsubsection{Trecho de missão (\textit{leg})}\label{subsubsec:com_trecho}
+
+Um trecho é uma ação solicitada pelo Raspberry Pi ao STM32, como decolar, girar, deslocar-se, manter a posição ou pousar. O pedido contém a ação, o alvo, os limites de execução e os identificadores que o associam à missão e à resposta correspondente.
+
+Antes de aceitar o pedido, o STM32 verifica sua compatibilidade com o estado do veículo, os limites de movimento e as condições de comunicação e autorização. Se o pedido for recusado, o controlador informa o motivo por meio dos códigos apresentados no Quadro~\ref{qua:dronelink_motivos}.
+
+As respostas são enviadas em campos numéricos da mensagem \texttt{DRONE\_LEG\_ACK}, indicando se a operação está em andamento, foi concluída, recusada ou falhou. Os nomes apresentados no quadro correspondem aos identificadores em inglês definidos pelo protocolo.
+
+Na decolagem e nos trechos de movimento, a conclusão depende de o veículo permanecer no alvo por 1~s, dentro das tolerâncias definidas e com velocidades estimadas baixas. Nos ensaios, foram adotadas tolerâncias de 5~cm para posição e 0,05~rad para guinada, além de limites de 5~cm/s para velocidade linear e 0,1~rad/s para velocidade angular. A confirmação de conclusão é enviada após essa verificação.
+
+
+\begin{quadro}[H]
+    \centering
+    \caption{Principais motivos de recusa de um trecho.}
+    \label{qua:dronelink_motivos}
+    \small
+    \renewcommand{\arraystretch}{1.25}
+    \begin{tabular}{|>{\raggedright\arraybackslash}p{4.8cm}|>{\raggedright\arraybackslash}p{9cm}|}
+        \hline
+        \textbf{Motivo} & \textbf{Situação} \\
+        \hline
+        \texttt{BAD\_STATE} &
+        O estado do VANT não permite executar a ação solicitada. \\
+        \hline
+        \texttt{BUSY} &
+        Há outra operação em execução. \\
+        \hline
+        \texttt{OUT\_OF\_BOUNDS} &
+        Algum campo do pedido está fora da faixa permitida. \\
+        \hline
+        \texttt{STALE\_BOOT} &
+        A identidade de inicialização informada não corresponde à atual do STM32. \\
+        \hline
+        \texttt{SEQUENCE\_ERROR} &
+        O índice do trecho não corresponde à sequência esperada. \\
+        \hline
+        \texttt{OPERATOR\_LEASE\_LOST} &
+        A autorização do operador não está ativa. \\
+        \hline
+        \texttt{LINK\_LOST} &
+        O \textit{HEARTBEAT} do Raspberry Pi não é recebido há pelo menos 1~s. \\
+        \hline
+        \texttt{SENSOR\_UNHEALTHY} &
+        Uma condição de sensor necessária à operação não foi atendida. \\
+        \hline
+        \texttt{ID\_COLLISION} &
+        Os mesmos identificadores foram usados em pedidos com conteúdos diferentes. \\
+        \hline
+    \end{tabular}
+    \par\vspace{0.2cm}
+    \footnotesize Fonte: elaborado pelos autores (2026).
+\end{quadro}
+
+\subsubsection{Idempotência e identidade de \textit{boot}}\label{subsubsec:com_idempotencia}
+
+O Raspberry Pi aguarda até 1~s pela primeira resposta de cada trecho e, se ela não chega, reenvia o mesmo pedido, com os mesmos identificadores, até três vezes. Para que o reenvio seja seguro, o STM32 guarda um histórico circular das 32 últimas transações, com os identificadores e um \textit{hash} do conteúdo. Um pedido repetido recebe a mesma resposta já enviada, sem ser executado de novo, o que implementa a semântica de no máximo uma vez (Seção~\ref{subsec:comunicacao_confiavel}); um pedido com os mesmos identificadores e conteúdo diferente é recusado por colisão de identificador.
+
+A cada inicialização, o STM32 incrementa um contador de \textit{boots} gravado em um registro na memória \textit{flash} externa W25Q64, e o valor é publicado como \texttt{boot\_id}. O Raspberry Pi copia esse valor em todos os pedidos. Se o STM32 reiniciar durante uma missão, os pedidos antigos passam a ser recusados por \textit{boot} desatualizado, impedindo que um comando anterior à reinicialização seja executado. Sem um \texttt{boot\_id} persistente, o STM32 não aceita armar nem executar trechos.
+
+\subsubsection{Supervisão do enlace e da autorização do operador}\label{subsubsec:com_supervisao}
+
+Durante o voo, o STM32 supervisiona o enlace com o Raspberry Pi e a autorização do operador. Em caso de perda, solicita as ações do Quadro~\ref{qua:dronelink_failsafe}: \textit{HOLD}, para manter a posição, ou \textit{LAND}, para pousar.
+  
+
+\begin{quadro}[H]
+    \centering
+    \caption{Ações do STM32 diante da perda do enlace ou da autorização.}
+    \label{qua:dronelink_failsafe}
+    \small
+    \renewcommand{\arraystretch}{1.25}
+    \begin{tabular}{|>{\raggedright\arraybackslash}p{7.6cm}|>{\raggedright\arraybackslash}p{6.2cm}|}
+        \hline
+        \textbf{Condição} & \textbf{Ação solicitada} \\
+        \hline
+        Sem \textit{HEARTBEAT} do Raspberry Pi por 1~s &
+        \textit{Request HOLD}; novos trechos são recusados. \\
+        \hline
+        Sem \textit{HEARTBEAT} por 2~s e com navegação degradada
+        (posição, altura ou atitude inválidas) &
+        \textit{Request LAND}. \\
+        \hline
+        Sem \textit{HEARTBEAT} por 5~s &
+        \textit{Request LAND}. \\
+        \hline
+        Autorização do operador expirada ou retirada &
+        \textit{Request HOLD}. \\
+        \hline
+        Autorização expirada ou retirada por 5~s &
+        \textit{Request LAND}. \\
+        \hline
+    \end{tabular}
+    \par\vspace{0.2cm}
+    \footnotesize Fonte: elaborado pelos autores (2026), a partir da configuração do protocolo.
+\end{quadro}
+
+Essa supervisão vale somente para voos iniciados pelo Raspberry Pi. Voos de bancada comandados pelo console USB do STM32 não dependem do enlace, o que permitiu os ensaios descritos na Seção~\ref{subsubsec:com_ensaios}.
+
+\subsubsection{Implementação no STM32}\label{subsubsec:com_firmware}
+
+No STM32, a comunicação é dividida entre transporte, tratamento do protocolo e telemetria. A USART1 recebe por DMA circular de 512~bytes, e uma tarefa do FreeRTOS processa as mensagens. Na transmissão, respostas de comandos e \textit{HEARTBEAT} têm prioridade sobre a telemetria ainda na fila. Todos os módulos compartilham o contador de sequência MAVLink, necessário à identificação de mensagens ausentes.
+
+O protocolo utiliza o histórico de pedidos e a identidade de inicialização descritos anteriormente. Uma interface de comandos conecta a comunicação ao controle de voo, permitindo que tanto o Raspberry Pi quanto o console USB solicitem ações ao mesmo controlador. A telemetria informa atitude, posição e estado de voo; a altura publicada é medida a partir do chão registrado ao armar, referência também usada na decolagem.
+
+\subsubsection{Ferramenta do Raspberry Pi e comandos do operador}\label{subsubsec:com_comandos}
+
+O programa \texttt{dronectl} permite ao operador executar comandos e missões pelo Raspberry Pi. No modo \texttt{missao}, as instruções podem ser fornecidas pelo terminal ou por arquivo, conforme o Quadro~\ref{qua:dronelink_comandos}.
+
+Por exemplo, durante uma rota, o Raspberry Pi aguarda a confirmação do STM32 antes de avançar ao próximo trecho. Enquanto o trecho está em execução, o controlador informa \texttt{MAV\_RESULT\_IN\_PROGRESS}; ao concluí-lo, envia \texttt{MAV\_RESULT\_ACCEPTED} com progresso de 100\%. Em caso de erro no arquivo ou interrupção pelo operador, o Raspberry Pi solicita o pouso.
+
+
+
+\begin{quadro}[H]
+    \centering
+    \caption{Comandos do operador no modo de missão.}
+    \label{qua:dronelink_comandos}
+    \footnotesize
+    \renewcommand{\arraystretch}{1.25}
+    \begin{tabular}{|>{\raggedright\arraybackslash}p{3.6cm}|>{\raggedright\arraybackslash}p{6.2cm}|>{\raggedright\arraybackslash}p{4.1cm}|}
+        \hline
+        \textbf{Comando} & \textbf{Função} & \textbf{Mensagens enviadas} \\
+        \hline
+        \texttt{takeoff <cm>} & Arma e sobe até a altura; termina com o VANT estável. & \texttt{COMMAND\_LONG} (armar) e trecho de decolagem \\
+        \hline
+        \texttt{yaw <graus>} & Gira no lugar; positivo é horário visto de cima. & Trecho de giro \\
+        \hline
+        \texttt{forward}, \texttt{back}, \texttt{right}, \texttt{left}, \texttt{climb}, \texttt{descend} \texttt{<cm>} & Desloca-se no referencial do corpo. & Trecho de translação \\
+        \hline
+        \texttt{goto <x> <y> [z]} & Vai ao ponto do referencial local: gira até ficar de frente para ele e anda em linha reta. & Giro, quando necessário, e translação \\
+        \hline
+        \texttt{waypoints <x,y[,z]> ...} & Executa \texttt{goto} para cada ponto, na ordem dada. & Até dois trechos por ponto \\
+        \hline
+        \texttt{route [alg] [x,y[,z] ...]} & Executa a rota: ordena os pontos pelo algoritmo escolhido (genético por padrão), visita todos e volta à partida; sem pontos, lê o arquivo de pontos do Raspberry Pi (Seção~\ref{subsubsec:rotas_formulacao_adotada}). & Até dois trechos por ponto \\
+        \hline
+        \texttt{rtl} & Retorna ao ponto de decolagem (\textit{return to launch}). & Trecho de giro e de translação \\
+        \hline
+        \texttt{hold} & Mantém a posição atual. & Trecho de HOLD \\
+        \hline
+        \texttt{land} & Pousa e desarma. & Trecho de pouso \\
+        \hline
+        \texttt{wait <s>}, \texttt{status}, \texttt{help}, \texttt{exit} & Espera, mostra estado e posição, lista os comandos, encerra (pousando antes, se em voo). & --- \\
+        \hline
+    \end{tabular}
+    \par\vspace{0.2cm}
+    \footnotesize Fonte: elaborado pelos autores (2026).
+\end{quadro}
+
+Uma missão pode reunir decolagem, execução da rota e pouso, por meio dos comandos \texttt{takeoff}, \texttt{route} e \texttt{land}. No ensaio integrado com o VANT simulado, foram escolhidos três pontos que, junto ao ponto de partida, formam um quadrado de 40~cm de lado. Esse percurso simples permitiu verificar a visita aos pontos e o retorno à origem; trata-se de um cenário de teste, e não de uma restrição do planejamento de rotas.
+
+\subsubsection{Procedimento de ensaio}\label{subsubsec:com_ensaios}
+
+A comunicação foi avaliada por testes automatizados do software do Raspberry Pi, ensaios do STM32 pela USB e um ensaio integrado entre os dois dispositivos pela UART. Os testes verificaram a troca de mensagens, a sequência de comandos, as recusas e as respostas a falhas.
+
+Nos ensaios com o STM32, utilizou-se o modo \texttt{FLT\_SIM = 1}, com os motores desligados. Nesse modo, um modelo linear do veículo, empregado no projeto do controlador LQG e executado no STM32, fornece medições simuladas ao controlador. O modelo também inclui uma representação simplificada do contato com o solo.
+
+A cada ciclo de controle, o modelo calcula a evolução do veículo a partir dos comandos recebidos. A conclusão de um movimento é informada quando o estado simulado atende aos critérios de chegada e estabilidade. Dessa forma, o ensaio avalia a integração entre comunicação e controle, sem reproduzir todas as condições de um voo real.
+
+No ensaio integrado, foram medidas as perdas e os erros de comunicação durante 60~s e a latência de 100 pedidos. Também foram executadas uma missão e verificações de pedidos inválidos ou repetidos, além de interrupções da autorização e do enlace.
+
+Os resultados de comunicação são apresentados na Seção~\ref{subsec:res_com_missao}, separadamente dos ensaios de voo físico da Seção~\ref{sec:resultados_voo}.

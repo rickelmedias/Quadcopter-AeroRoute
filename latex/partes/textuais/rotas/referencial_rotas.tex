@@ -1,0 +1,88 @@
+% ============================================================================
+% REFERENCIAL TEÓRICO — Otimização de rotas (TSP, AG, métodos exatos e
+% heurísticas de referência). Chamado em partes/textuais/referencial_teorico.tex.
+% ============================================================================
+
+% ================================================================
+\section{OTIMIZAÇÃO DE ROTAS}\label{sec:otimizacao}
+% ================================================================
+
+A eficiência de um sistema de entregas por VANT depende não apenas do controle de voo, mas da ordem estratégica em que os pontos são visitados. Nesta seção, formaliza-se o problema de otimização sob a ótica do Problema do Caixeiro Viajante e justifica-se o uso de Algoritmos Genéticos para lidar com a complexidade inerente ao cenário logístico; por fim, apresentam-se os métodos exatos e as heurísticas usados como referência de comparação.
+
+% ----------------------------------------------------------------
+\subsection{O Problema do Caixeiro Viajante e sua Complexidade}\label{subsec:tsp}
+% ----------------------------------------------------------------
+
+O planejamento de visitas a pontos de entrega pode ser modelado a partir do Problema do Caixeiro Viajante (TSP --- \textit{Travelling Salesman Problem}), cujo objetivo clássico é determinar o percurso de menor custo que visite um conjunto de pontos exatamente uma vez, retornando à origem. Considerando um ponto de partida $P_0$ e $N$ pontos a visitar, uma rota é uma permutação $\pi = (\pi_1, \dots, \pi_N)$, e seu custo é o comprimento do circuito:
+
+\begin{equation}\label{eq:rotas_custo}
+    C(\pi) = d(P_0, P_{\pi_1}) + \sum_{i=1}^{N-1} d(P_{\pi_i}, P_{\pi_{i+1}}) + d(P_{\pi_N}, P_0),
+\end{equation}
+
+\noindent em que, para pontos tridimensionais, $d(a,b)$ é a distância euclidiana
+
+\begin{equation}\label{eq:rotas_distancia}
+    d(a,b) = \sqrt{(x_a-x_b)^2 + (y_a-y_b)^2 + (z_a-z_b)^2}.
+\end{equation}
+
+Segundo \citeonline{cormen2012}, o TSP é classificado como NP-difícil: não se conhece algoritmo de tempo polinomial que resolva exatamente todas as suas instâncias, e sua dificuldade é expressa por reduções entre problemas. Com $n = N+1$ vértices, existem $N!$ permutações e, identificando os percursos reversos, $(n-1)!/2$ circuitos distintos para $n \geq 3$. A rota de menor custo entre todas é o \textbf{ótimo global}; uma rota que nenhuma modificação de uma vizinhança previamente definida consegue melhorar é um \textbf{ótimo local}, que pode ser bem pior que o global, e cuja quantidade cresce com o número de pontos \cite{johnson1997}.
+
+A busca pela rota mais curta não é apenas uma questão geométrica. Em operações logísticas, a rota afeta o tempo de missão e o cumprimento de prazos de entrega \cite{rinaldi2024}; em um multirrotor, a distância percorrida também determina boa parte do consumo de energia, e a autonomia é limitada pela bateria \cite{wu2024}. Assim, encurtar a rota reduz ao mesmo tempo o tempo de voo e a energia necessária para a missão.
+
+Dado o crescimento do espaço de busca em instâncias maiores e a possibilidade de soluções locais, métodos exatos podem se tornar computacionalmente onerosos. Algoritmos Genéticos (AGs) oferecem uma alternativa estocástica para explorar soluções candidatas por meio de população, seleção e variação \cite{goldberg1989,ahmed2024}. Contudo, o AG não garante ótimo global nem convergência rápida em toda instância; seu desempenho precisa ser avaliado sob configuração, sementes e critérios de parada explicitamente registrados.
+
+% ----------------------------------------------------------------
+\subsection{Algoritmos Genéticos Aplicados ao Planejamento de Missões}\label{subsec:ag}
+% ----------------------------------------------------------------
+
+Os Algoritmos Genéticos (AGs) são meta-heurísticas de busca global fundamentadas nos princípios da evolução biológica, associadas historicamente aos trabalhos de \citeonline{holland1992} e sistematizadas para problemas de busca e otimização por \citeonline{goldberg1989}. Para solucionar o problema de entrega por VANTs, o AG opera sobre uma população de cromossomos em que cada indivíduo representa uma rota candidata.
+
+Em problemas com frota, a estrutura de duplo cromossomo proposta por \citeonline{rinaldi2024} permite representar a sequência de tarefas e os pontos de partição entre veículos. No escopo experimental deste trabalho, o protótipo físico corresponde a um único VANT; portanto, o AG é formulado como ordenação de pontos para uma rota individual. A avaliação pode incorporar distância, tempo estimado, restrições de missão e penalizações, desde que a função de custo seja explicitada com unidades, pesos e normalizações. Os operadores considerados são:
+
+\begin{alineastcc}
+    \item \textbf{seleção por torneio}: este método sorteia subconjuntos da população e seleciona, em cada torneio, o indivíduo de melhor aptidão. Caso seja adotado torneio dinâmico, a regra de variação do tamanho do torneio deve ser declarada;
+    \item \textbf{\textit{crossover} ordenado (OX)}: em problemas de permutação como o TSP, o operador OX preserva um segmento de um dos pais e completa o cromossomo com os demais genes na ordem relativa em que aparecem no outro pai \cite{dalkilic2025};
+    \item \textbf{mutação por inversão}: introduz variabilidade genética ao inverter segmentos aleatórios da rota sem repetir pontos. A literatura compara diferentes operadores de mutação para o TSP, mas seus resultados dependem da instância, dos demais operadores e dos parâmetros usados \cite{ahmed2024}.
+\end{alineastcc}
+
+A integração desses componentes permite explorar rotas candidatas considerando os critérios definidos na função de custo. Ganhos de distância, tempo ou energia dependem do cenário, do modelo de consumo e da baseline de comparação; portanto, devem ser apresentados somente a partir de execuções reproduzíveis do algoritmo sobre os dados do trabalho \cite{shivgan2020,wu2024}. O AG não garante o ótimo global nem mesmo um ótimo local: ele para após um número de gerações sem melhora, sem verificar se uma pequena modificação da melhor rota ainda a encurtaria. Por isso, é comum combiná-lo com busca local (Seção~\ref{subsec:rotas_referencias}) aplicada aos descendentes, combinação conhecida como algoritmo memético \cite{moscato1989}.
+
+\begin{figure}[H]
+    \centering
+    \caption{Fluxograma da solução com AG.}
+    \label{fig:fluxograma_ag}
+    \input{images/referencial_teorico/fluxograma_ag_tikz.tex}
+    \par\vspace{0.2cm}
+    \centering\footnotesize Fonte: elaborado pelos autores (2026), com base em \citeonline{goldberg1989} e \citeonline{lila2025}.
+\end{figure}
+
+% ----------------------------------------------------------------
+\subsection{Métodos exatos e heurísticas de referência}\label{subsec:rotas_referencias}
+% ----------------------------------------------------------------
+
+Para avaliar o AG, são necessárias referências: métodos exatos, que fornecem o ótimo global, e heurísticas simples, que indicam o que se obtém com pouco esforço computacional.
+
+A \textbf{força bruta} avalia as $N!$ permutações e retém a de menor custo, com tempo $O(N \cdot N!)$ e memória $O(N)$. O algoritmo de \textbf{Held-Karp} \cite{bellman1962,held1962} obtém o mesmo ótimo por programação dinâmica: dois caminhos parciais que visitaram o mesmo conjunto de pontos e terminam no mesmo ponto têm o mesmo futuro, e basta guardar o mais curto. Com isso, o problema passa a ter $N \cdot 2^N$ estados (subconjunto visitado e ponto final), resolvidos em tempo $O(N^2 2^N)$ e com memória $O(N 2^N)$ \cite{held1962}. O ganho sobre a força bruta é grande (Tabela~\ref{tab:rotas_crescimento}), mas o crescimento continua exponencial, e a memória dobra a cada ponto. \textit{Solvers} de \textit{branch-and-cut}, como o Concorde, resolvem instâncias muito maiores, mas dependem de programação linear e não têm tempo garantido \cite{applegate2006}; por isso, a inviabilidade discutida neste trabalho refere-se aos métodos exatos avaliados, e não ao TSP em sentido absoluto.
+
+\begin{table}[H]
+    \centering
+    \caption{Número de operações da força bruta e do Held-Karp.}
+    \label{tab:rotas_crescimento}
+    \small
+    \renewcommand{\arraystretch}{1.25}
+    \begin{tabular}{cccc}
+        \hline
+        \textbf{Pontos ($N$)} & \textbf{Ordens ($N!$)} & \textbf{Held-Karp ($N^2 2^N$)} & \textbf{Estados guardados ($N 2^N$)} \\
+        \hline
+        10 & $3{,}6 \times 10^{6}$ & $1{,}0 \times 10^{5}$ & $1{,}0 \times 10^{4}$ \\
+        20 & $2{,}4 \times 10^{18}$ & $4{,}2 \times 10^{8}$ & $2{,}1 \times 10^{7}$ \\
+        30 & $2{,}7 \times 10^{32}$ & $9{,}7 \times 10^{11}$ & $3{,}2 \times 10^{10}$ \\
+        \hline
+    \end{tabular}
+    \par\vspace{0.2cm}
+    \footnotesize Fonte: elaborado pelos autores (2026).
+\end{table}
+
+Entre as heurísticas, o \textbf{vizinho mais próximo} (guloso) parte de $P_0$ e visita sempre o ponto não visitado mais próximo, em $O(N^2)$; por decidir cada passo isoladamente, tende a deixar pontos distantes para o fim, e sua razão de aproximação no pior caso cresce com $\log N$ \cite{rosenkrantz1977}.
+
+Uma \textbf{busca local} parte de uma rota completa, testa pequenas modificações dela (a vizinhança) e aceita as que a encurtam, até que nenhuma modificação melhore a rota, ou seja, até um ótimo local. Na \textbf{busca local 2-opt} \cite{croes1958}, a modificação consiste em inverter um trecho da rota, o que troca duas arestas por outras duas. O ótimo local obtido depende da rota de partida; repetir a busca a partir de várias rotas iniciais aumenta a chance de alcançar o ótimo global \cite{johnson1997}.

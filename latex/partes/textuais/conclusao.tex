@@ -1,0 +1,10 @@
+\chapter{CONSIDERAÇÕES FINAIS}
+\label{cap:conclusao}
+No que tange ao sistema de controle e estabilização, os ensaios práticos evidenciaram que a abordagem LQR/LQG, em conjunto com o Filtro de Kalman linear, manteve a estabilidade de rolamento e arfagem do veículo. Em ensaios com o deslocamento horizontal restringido por um apoio físico, a altura de referência foi alcançada; em voo livre, porém, o veículo não manteve a posição nos eixos $X$ e $Y$ nem a guinada durante a subida. Essa deriva o expôs a forças externas do ambiente de ensaio, como cabos, paredes e correntes de ar, que provocaram a inclinação excessiva e o acionamento do sistema de segurança (\textit{failsafe}). A manutenção da posição horizontal mostrou-se, assim, o principal ponto a aperfeiçoar, pois expôs o impacto de perturbações não modeladas e de torques constantes gerados por assimetrias físicas.
+
+Diante desses resultados, como trabalhos futuros na área de controle, sugere-se o aprimoramento das técnicas de modelagem matemática da planta, buscando uma representação que englobe efeitos aerodinâmicos e aproxime o modelo no espaço de estados do comportamento físico real. Recomenda-se também um rigor maior no projeto mecânico para garantir o balanceamento adequado da carga estrutural no drone, alinhando o centro de gravidade de modo a mitigar os torques parasitas. Por fim, propõe-se a adoção de técnicas de estimação de estados mais sofisticadas, substituindo o filtro linear pelo Filtro de Kalman Estendido (EKF -- \textit{Extended Kalman Filter}) baseado na cinemática de quatérnios. Em contraste com os ângulos de Euler tradicionais, o uso de quatérnios eliminaria as singularidades matemáticas (\textit{gimbal lock}) e reduziria substancialmente a carga de cálculos trigonométricos no microcontrolador, proporcionando uma fusão sensorial mais robusta, computacionalmente eficiente e adequada à dinâmica inerentemente não linear do VANT.
+% Comunicação Raspberry Pi <-> STM32
+\input{partes/textuais/comunicacao/conclusao_comunicacao.tex}
+
+% Planejamento de rotas
+\input{partes/textuais/rotas/conclusao_rotas.tex}

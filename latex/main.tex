@@ -1,0 +1,450 @@
+% !TEX program = xelatex
+%% ============================================================================
+%% Template TCC - Centro Universitário UniFacens
+%% Atualizado em: Março/2026
+%% Baseado em: abnTeX2 v1.9.7 e normas ABNT NBR 14724:2011
+%% Validado contra: Manual de Textos Técnicos MSGQ-21.01 REV.18
+%% ============================================================================
+%% 
+%% CORREÇÕES APLICADAS (validadas contra MANUAL MSGQ-21.01 REV.18):
+%% - Seções secundárias: removido \bfseries (manual: "SEM negrito")
+%% - Ordem ABNT dos pré-textuais: adicionados errata e dedicatória (comentados)
+%% - Comentários atualizados para referenciar o manual correto
+%% - Listas de Ilustrações/Quadros com chamada em MAIÚSCULAS e ponto
+%% - Fonte das figuras em Arial 10pt centralizada
+%%
+%% CONFORMIDADES VERIFICADAS:
+%% - Margens: 3cm superior/esquerda, 2cm inferior/direita (ABNT NBR 14724:2011)
+%% - Fonte Arial/compatível: 12pt texto, 14pt capítulos, 10pt notas/citações longas
+%% - Recuo de parágrafo: 1.25cm (ABNT NBR 14724:2011)
+%% - Espaçamento 1,5 para texto; simples para notas, resumo, referências
+%% - Paginação no canto superior direito a partir da Introdução
+%%
+%% ============================================================================
+
+\documentclass[
+    % ========================================================================
+    % OPÇÕES DA CLASSE MEMOIR (base do abnTeX2)
+    % ========================================================================
+    12pt,                % Tamanho da fonte base (corpo do texto)
+    fleqn,               % Equações alinhadas à esquerda, com numeração à direita
+                        % FONTE: MODELO DOCX - texto normal em Arial 12pt
+    oneside,            % Impressão apenas em recto (frente das páginas)
+                        % Padrão para TCCs conforme orientação ABNT
+    a4paper,            % Tamanho do papel: A4 (21.00 cm × 29.70 cm)
+                        % FONTE: MODELO DOCX - Seção 1
+    % ========================================================================
+    % OPÇÕES DA CLASSE ABNTEX2
+    % ========================================================================
+    chapter=TITLE,        % Títulos de capítulos convertidos em MAIÚSCULAS
+                        % FONTE: MODELO DOCX - Heading 1 está em UPPERCASE
+    section=TITLE,        % Títulos de seções convertidos em MAIÚSCULAS  
+                        % FONTE: MODELO DOCX - Heading 2 está em UPPERCASE
+    sumario=tradicional,% Estilo do sumário (tradicional = indentado)
+                        % FONTE: MODELO DOCX - sumário com indentação
+    % ========================================================================
+    % OPÇÕES DO PACOTE BABEL (idiomas)
+    % ========================================================================
+    english,            % Idioma adicional para hifenização de termos técnicos
+    brazilian               % Idioma principal do documento (último da lista)
+]{abntex2}
+
+% ============================================================================
+% PACOTES BÁSICOS E ESSENCIAIS
+% ============================================================================
+% --- FONTE ARIAL ---
+% Para cumprir literalmente o manual institucional, compile com XeLaTeX ou LuaLaTeX
+% e mantenha a fonte Arial instalada. Em pdfLaTeX, o documento compila com
+% Helvetica/Nimbus como substituta métrica, mas o PDF não incorpora Arial real.
+\usepackage[section]{placeins} %Impedir elementos fliutuantes de ultrapassarem a seção
+
+\usepackage{iftex}
+\ifPDFTeX
+    \usepackage[T1]{fontenc}
+    \usepackage[utf8]{inputenc}
+    \usepackage{helvet}
+\else
+    \usepackage{fontspec}
+    \IfFileExists{fonts/arial.ttf}{
+        \setmainfont{Arial}[
+            Path=fonts/,
+            Extension=.ttf,
+            UprightFont=arial,
+            BoldFont=arialbd,
+            ItalicFont=ariali,
+            BoldItalicFont=arialbi
+        ]
+        \setsansfont{Arial}[
+            Path=fonts/,
+            Extension=.ttf,
+            UprightFont=arial,
+            BoldFont=arialbd,
+            ItalicFont=ariali,
+            BoldItalicFont=arialbi
+        ]
+    }{
+        \IfFileExists{fonts/Arial.ttf}{
+            \setmainfont{Arial}[
+                Path=fonts/,
+                Extension=.ttf,
+                UprightFont=Arial,
+                BoldFont=Arial Bold,
+                ItalicFont=Arial Italic,
+                BoldItalicFont=Arial Bold Italic
+            ]
+            \setsansfont{Arial}[
+                Path=fonts/,
+                Extension=.ttf,
+                UprightFont=Arial,
+                BoldFont=Arial Bold,
+                ItalicFont=Arial Italic,
+                BoldItalicFont=Arial Bold Italic
+            ]
+        }{
+            \IfFontExistsTF{Arial}{
+                \setmainfont{Arial}
+                \setsansfont{Arial}
+            }{
+                \PackageWarning{Fonte Arial}{A fonte Arial não foi encontrada; usando fonte sans-serif disponível no ambiente}
+            }
+        }
+    }
+\fi
+\renewcommand{\familydefault}{\sfdefault}
+
+% --- FORMATAÇÃO DE PARÁGRAFOS ---
+\usepackage{indentfirst}        % Indenta o primeiro parágrafo de cada seção
+                                % FONTE: ABNT NBR 14724:2011 - todos parágrafos indentados
+
+% --- MARGENS DA PÁGINA ---
+% Declaradas explicitamente para blindar contra variações nos defaults do abnTeX2
+% FONTE: ABNT NBR 14724:2011 + Manual Facens MSGQ-21.01 REV.18 (Folha de Rosto)
+\usepackage[
+    top=3cm,                    % Margem superior: 3cm
+    bottom=2cm,                 % Margem inferior: 2cm
+    left=3cm,                   % Margem esquerda: 3cm
+    right=2cm                   % Margem direita: 2cm
+]{geometry}
+
+% --- CORES E GRÁFICOS ---
+\usepackage{color}                % Controle de cores (para links coloridos)
+                                % VALIDADO: Necessário para hyperref
+\usepackage{graphicx}            % Inclusão de gráficos (PNG, JPG, PDF)
+                                % VALIDADO: Padrão para figuras em LaTeX
+
+% --- MELHORIAS TIPOGRÁFICAS ---
+\usepackage{microtype}             % Melhorias de justificação e espaçamento
+                                   % VALIDADO: Melhora aparência do texto justificado
+\setlength{\emergencystretch}{3em} 
+% --- PACOTES INSTITUCIONAIS ---
+\usepackage{lib/unifacens}      % Adaptações específicas da UniFacens
+                                % FONTE: Template institucional
+\usepackage{pdfpages}           % Para incluir PDFs no documento (ficha catalográfica)
+                                % VALIDADO: Necessário para incluir PDF da biblioteca
+\usepackage{ragged2e}           % Alinhamento de texto melhorado
+                                % VALIDADO: Usado em citações e elementos especiais
+\usepackage{enumitem}           % Configuração de alíneas com recuo suspenso
+
+\usepackage[bottom]{footmisc}   % Fixa posição de notas de rodapé no fim da página
+                                % FONTE: ABNT NBR 14724:2011 - notas no rodapé
+
+% ============================================================================
+% PACOTES PARA CITAÇÕES E REFERÊNCIAS
+% ============================================================================
+\usepackage[alf]{abntex2cite}    % Citações padrão ABNT (sistema alfabético)
+%\addtociteoptionlist{abnt-style-options}
+                                % Citações (Author, YEAR) e destaque bibliográfico em negrito
+                                % FONTE: ABNT NBR 10520:2002 e NBR 6023:2018
+\usepackage{lib/url6023}        % Remove < > nas URLs das referências
+                                % FONTE: Customização para melhor formatação
+
+% Pacotes solicitados para referencial teorico
+\usepackage{amsmath}
+\setcounter{MaxMatrixCols}{20}
+
+\usepackage{amssymb}
+\usepackage{array}
+\usepackage{tikz}
+\usetikzlibrary{shapes, shapes.geometric, arrows.meta, positioning, calc}
+\counterwithout{equation}{chapter}
+\renewcommand{\theHequation}{\arabic{equation}}
+\renewcommand{\theHfigure}{\arabic{figure}}
+\renewcommand{\theHtable}{\arabic{table}}
+\setlength{\mathindent}{1.25cm}
+
+% ============================================================================
+% CONFIGURAÇÕES DE ESTILO E TAMANHO DA FONTE
+% ============================================================================
+
+% --- TAMANHO DA FONTE DOS CAPÍTULOS ---
+% FONTE: MANUAL MSGQ-21.01 REV.18 - Capítulos em Arial 14pt negrito MAIÚSCULO
+\renewcommand*{\chapnumfont}{\normalfont\large\bfseries\sffamily}
+                                % Numeração do capítulo: 14pt (large), negrito, sans-serif
+\renewcommand*{\chaptitlefont}{\normalfont\large\bfseries\sffamily}
+                                % Título do capítulo: 14pt (large), negrito, sans-serif
+
+% --- TAMANHO DA FONTE DAS SEÇÕES E SUBSEÇÕES ---
+\setsecheadstyle{\normalfont\normalsize\sffamily}
+\setsubsecheadstyle{\normalfont\normalsize\sffamily}
+\setsubsubsecheadstyle{\normalfont\normalsize\sffamily}
+
+% --- CAMINHO PARA IMAGENS ---
+\graphicspath{{./images/}}      % Define pasta padrão para buscar imagens
+
+% ============================================================================
+% INFORMAÇÕES SOBRE O TRABALHO
+% ============================================================================
+\coordenadoria{Coordenadoria de Engenharia da Computação}
+\titulo{Desenvolvimento de VANT Automatizado para Logística Urbana e Otimização de Rotas}
+\subtitulo{} 
+\integranteum{Rickelme Gabriel Dias}  
+\integrantedois{Thalison Rosa}
+\local{SOROCABA, SP}            
+\data{2026}                     
+
+% ============================================================================
+% INFORMAÇÕES SOBRE ORIENTAÇÃO
+% ============================================================================
+\orientador{Sidney Montebeller}
+\coorientador{}                 
+
+% ============================================================================
+% PREÂMBULO (natureza do trabalho)
+% ============================================================================
+\preambulo{Trabalho de conclusão de curso apresentado ao Centro Universitário UniFacens como exigência parcial para obtenção do diploma de graduação em Engenharia da Computação.\\ 
+Orientador: Me. Sidney Montebeller}
+
+% ============================================================================
+% CONFIGURAÇÕES DE APARÊNCIA DO PDF FINAL
+% ============================================================================
+
+\definecolor{blue}{RGB}{41,5,195}  
+
+\makeatletter
+\hypersetup{
+    pdftitle={\@title},         
+    pdfauthor={\@author},       
+    pdfsubject={\imprimirpreambulo}, 
+    pdfcreator={LaTeX with abnTeX2}, 
+    pdfkeywords={abnt}{latex}{abntex}{abntex2}{trabalho acadêmico}, 
+    colorlinks=true,            
+    linkcolor=black,            
+    citecolor=black,            
+    filecolor=black,            
+    urlcolor=black,             
+    bookmarksdepth=4            
+}
+\makeatother
+
+% ============================================================================
+% POSICIONAMENTO DE FLOATS (FIGURAS E TABELAS)
+% ============================================================================
+\makeatletter
+\setlength{\@fptop}{5pt}        
+\makeatother
+
+% ============================================================================
+% CRIAÇÃO DE QUADROS E LISTA DE QUADROS / FIGURAS
+% ============================================================================
+
+\newcommand{\quadroname}{Quadro}
+\newcommand{\listofquadrosname}{Lista de quadros}
+
+\newfloat[chapter]{quadro}{loq}{\quadroname}
+\newlistof{listofquadros}{loq}{\listofquadrosname}
+\newlistentry{quadro}{loq}{0}
+
+% --- CONFIGURAÇÕES PARA ATENDER ABNT NAS LISTAS ---
+\setfloatadjustment{quadro}{\centering}
+\counterwithout{quadro}{chapter}
+\renewcommand{\theHquadro}{\arabic{quadro}}
+
+% Formatação na lista de quadros (MAIÚSCULA E PONTO)
+\renewcommand{\cftquadroname}{\MakeUppercase{\quadroname}\space} 
+\renewcommand*{\cftquadroaftersnum}{.}
+
+% Formatação na lista de figuras (MAIÚSCULA E PONTO)
+\renewcommand{\cftfigurename}{FIGURA\space}
+\renewcommand*{\cftfigureaftersnum}{.}
+
+\setfloatlocations{quadro}{hbtp}
+
+% Legendas de figuras, quadros e tabelas: título acima, centralizado, 12pt.
+\captionnamefont{\normalfont\normalsize}
+\captiontitlefont{\normalfont\normalsize}
+\captiondelim{ -- }
+\captionstyle{\centering}
+
+% Formatação da Fonte das ilustrações (Arial 10 centralizado)
+\makeatletter
+\renewcommand{\fonte}[1]{%
+  \vspace{4pt} % pequeno espaço entre a figura/quadro e a fonte
+  \begin{center}\footnotesize Fonte: #1\end{center}%
+}
+\makeatother
+
+% ============================================================================
+% ADAPTAÇÕES DO SUMÁRIO PARA BIBLIOTECA FACENS
+% ============================================================================
+
+\makeatletter
+\settocpreprocessor{chapter}{%
+    \let\tempf@rtoc\f@rtoc%     
+    \def\f@rtoc{%               
+      \texorpdfstring{\MakeTextUppercase{%
+        \tempf@rtoc}%           
+      }{\tempf@rtoc}%           
+    }% 
+}
+\makeatother
+
+\makeatletter
+\let\oldcontentsline\contentsline
+\def\contentsline#1#2{%
+  \expandafter\ifx\csname l@#1\endcsname\l@section
+    \expandafter\@firstoftwo      
+  \else
+    \expandafter\@secondoftwo     
+  \fi
+  {%
+    \oldcontentsline{#1}{\MakeTextUppercase{#2}}%  
+  }{%
+    \oldcontentsline{#1}{#2}%     
+  }%
+}
+\makeatother
+
+\cftsetindents{chapter}{0cm}{0.5cm}
+\cftsetindents{section}{0cm}{0.8cm}
+\cftsetindents{subsection}{0cm}{1.1cm}
+\cftsetindents{subsubsection}{0cm}{1.45cm}
+
+% ============================================================================
+% PACOTE FLOAT
+% ============================================================================
+\usepackage{float}              
+
+% ============================================================================
+% ESPAÇAMENTOS ENTRE LINHAS E PARÁGRAFOS
+% ============================================================================
+
+\setlength{\parindent}{1.25cm}  
+\setlength{\parskip}{0.0cm}     
+
+% --- ALÍNEAS ---
+\newlist{alineastcc}{enumerate}{1}
+\setlist[alineastcc]{
+    label=\alph*),
+    align=left,
+    labelindent=1.88cm,
+    labelwidth=0.44cm,
+    labelsep=0.20cm,
+    leftmargin=2.52cm,
+    itemindent=0pt,
+    listparindent=0pt,
+    itemsep=0pt,
+    parsep=0pt,
+    topsep=0.5\baselineskip
+}
+
+\setlength{\afterchapskip}{\baselineskip}
+\setlength{\aftersecskip}{\baselineskip}
+\setlength{\aftersubsecskip}{\baselineskip}
+
+% ============================================================================
+% COMPILAÇÃO DO ÍNDICE REMISSIVO
+% ============================================================================
+\makeindex                      
+
+% ============================================================================
+% ESTILO DE PÁGINA (CABEÇALHO E RODAPÉ)
+% ============================================================================
+
+\makepagestyle{cabecalhopaginaimpar}
+  \makeoddhead{cabecalhopaginaimpar}  
+    {}                          
+    {}                          
+    {\small\thepage}            
+
+% ============================================================================
+% INÍCIO DO DOCUMENTO
+% ============================================================================
+\begin{document}
+
+\selectlanguage{brazil}         
+\frenchspacing                  
+
+% ============================================================================
+% ELEMENTOS PRÉ-TEXTUAIS
+% ============================================================================
+
+\imprimircapa                   
+\imprimirfolhaderosto* 
+
+\input{partes/pre_textuais/ficha_catalografica.tex}
+%\input{partes/pre_textuais/errata.tex}
+\input{partes/pre_textuais/folha_aprovacao.tex}
+\input{partes/pre_textuais/dedicatoria.tex}
+\input{partes/pre_textuais/agradecimentos.tex}
+%\input{partes/pre_textuais/epigrafe.tex}
+
+\input{partes/pre_textuais/resumo.tex}
+
+% --- LISTAS ---
+\input{partes/pre_textuais/lista_figuras.tex}
+\input{partes/pre_textuais/lista_quadros.tex}
+\input{partes/pre_textuais/lista_tabelas.tex}
+\input{partes/pre_textuais/lista_siglas.tex}
+\clearpage
+\input{partes/pre_textuais/lista_simbolos.tex}
+\clearpage
+
+% --- SUMÁRIO ---
+\input{partes/pre_textuais/sumario.tex}
+
+% ============================================================================
+% ELEMENTOS TEXTUAIS (CORPO DO TRABALHO)
+% ============================================================================
+
+\textual                        
+\pagestyle{cabecalhopaginaimpar}
+
+\input{partes/textuais/introducao.tex}
+\clearpage
+\input{partes/textuais/referencial_teorico.tex}
+\clearpage
+\input{partes/textuais/metodologias.tex}
+\clearpage
+\input{partes/textuais/resultados.tex}
+\clearpage
+
+\input{partes/textuais/conclusao.tex}
+\clearpage
+
+% ============================================================================
+% ELEMENTOS PÓS-TEXTUAIS
+% ============================================================================
+
+\makeatletter
+\renewcommand{\bibsection}{%
+    \cleardoublepage
+    \phantomsection
+    \Hy@raisedlink{\hyper@anchorstart{referencias.titulo}\hyper@anchorend}%
+    \def\@currentHref{referencias.titulo}%
+    \addcontentsline{toc}{chapter}{REFERÊNCIAS}
+    \begin{flushleft}
+        \chaptitlefont\MakeTextUppercase{\bibname}
+    \end{flushleft}
+    \vspace{\afterchapskip}
+}
+\makeatother
+\begin{SingleSpace}
+\bibliography{references}       
+\end{SingleSpace}
+
+\input{partes/pos_textuais/apendices.tex}
+%\input{partes/pos_textuais/anexos.tex}
+
+\printindex                     
+
+\end{document}

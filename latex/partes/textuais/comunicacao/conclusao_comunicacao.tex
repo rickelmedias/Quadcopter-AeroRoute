@@ -1,0 +1,11 @@
+% ============================================================================
+% CONSIDERAÇÕES FINAIS — comunicação entre o Raspberry Pi e o STM32
+% Chamado em partes/textuais/conclusao.tex.
+% ============================================================================
+
+
+Na comunicação entre o computador de missão e o controlador de voo, foi desenvolvido o DroneLink, protocolo de aplicação sobre o enquadramento MAVLink 2, definido em um único arquivo XML do qual são gerados os códigos do STM32 e do Raspberry Pi. O protocolo divide a missão em trechos executados um de cada vez: cada trecho é validado pelo STM32 antes de ser aceito, só é dado como concluído quando o VANT está estável no alvo e pode ser retransmitido com segurança, pois pedidos repetidos não são executados duas vezes. A identidade de \textit{boot} persistente impede a execução de comandos anteriores a uma reinicialização, e a supervisão do \textit{HEARTBEAT} e da autorização do operador leva o VANT a manter a posição e, em seguida, a pousar se o Raspberry Pi deixar de responder.
+
+Sobre esse protocolo, o Raspberry Pi oferece ao operador comandos com a nomenclatura aeronáutica usual, entre eles o \texttt{route}, que ordena os pontos pelo algoritmo genético e executa a rota de forma automática. No ensaio integrado pela UART, com o VANT simulado no STM32, não foram registradas perdas nem erros de \textit{checksum} durante os 60~s de observação do enlace, com latência de ida e volta em torno de 10~ms; todas as recusas ocorreram com o motivo previsto; um pedido repetido foi executado uma única vez; a missão completa foi executada com erro máximo de 1,4~cm por ponto; e o STM32 manteve a posição em cerca de 1~s e iniciou o pouso entre 5,29 e 5,98~s diante da perda da autorização ou do encerramento do programa do Raspberry Pi. Os ensaios também permitiram identificar e corrigir seis falhas de integração, três delas visíveis somente com os dois lados conectados.
+
+Como trabalhos futuros, recomenda-se realizar ensaios integrados com os motores em funcionamento, avaliando a comunicação sob vibração e interferência elétrica; reduzir o tempo de cálculo do algoritmo genético no Raspberry Pi Zero W; e avaliar a assinatura de mensagens do MAVLink 2 para autenticação da origem, especialmente caso a comunicação seja disponibilizada por rede sem fio.

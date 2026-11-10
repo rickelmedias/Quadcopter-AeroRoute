@@ -1,0 +1,65 @@
+% ============================================================================
+% REFERENCIAL TEÓRICO — protocolo MAVLink e comunicação confiável entre o
+% computador de missão e o controlador de voo.
+% Chamado em partes/textuais/referencial_teorico.tex, na seção de sistemas
+% embarcados e comunicação.
+% ============================================================================
+
+% ----------------------------------------------------------------
+\subsection{Protocolo MAVLink}\label{subsec:mavlink}
+% ----------------------------------------------------------------
+
+O MAVLink (\textit{Micro Air Vehicle Link}) é um protocolo de mensagens binárias leve, projetado para sistemas com recursos limitados e enlaces de comunicação com largura de banda restrita \cite{koubaa2019, mavlinkguide}. É o protocolo utilizado pelos pilotos automáticos de código aberto PX4 e ArduPilot e por estações de solo como o QGroundControl, o que o tornou um padrão de fato na comunicação com VANTs \cite{koubaa2019}. Ele suporta fluxos periódicos de telemetria e microsserviços como missões, parâmetros e comandos; confirmações, retransmissões e semântica de conclusão dependem do microsserviço e da implementação adotada \cite{mavlinkguide}.
+
+As mensagens são definidas em arquivos XML, que descrevem, para cada mensagem, seu identificador numérico, seus campos, os tipos e as unidades. O arquivo \texttt{common.xml} provê a maioria das mensagens utilizadas por pilotos automáticos e estações de controle, e um projeto pode criar um \textbf{dialeto} próprio, isto é, um XML que inclui o \texttt{common.xml} e acrescenta mensagens e enumerações específicas \cite{mavlinkguide}. A partir do XML, o gerador oficial (\texttt{mavgen}) produz o código de empacotamento e desempacotamento para diferentes linguagens; para sistemas embarcados como o STM32F411, a implementação de referência é uma biblioteca C \textit{header-only}, otimizada para o uso eficiente de RAM e \textit{Flash}, e, para Python, a biblioteca \texttt{pymavlink} \cite{koubaa2019, mavlinkguide}. Como os dois lados do enlace são gerados da mesma definição, a estrutura das mensagens é necessariamente a mesma em ambos.
+
+No MAVLink 2, cada mensagem é transmitida em um pacote com a estrutura do Quadro~\ref{qua:mavlink_pacote}. O byte inicial permite ao receptor ressincronizar-se após a perda ou corrupção de bytes, procurando o próximo início de pacote; o número de sequência permite detectar pacotes perdidos; e os identificadores de sistema e componente indicam o remetente. Zeros no fim do \textit{payload} são omitidos na transmissão e restaurados na recepção, o que reduz o tamanho das mensagens \cite{mavlinkguide}.
+
+\begin{quadro}[H]
+    \centering
+    \caption{Estrutura do pacote MAVLink 2.}
+    \label{qua:mavlink_pacote}
+    \small
+    \renewcommand{\arraystretch}{1.3}
+    \begin{tabular}{|>{\raggedright\arraybackslash}p{3.4cm}|>{\centering\arraybackslash}p{1.6cm}|>{\raggedright\arraybackslash}p{8.4cm}|}
+        \hline
+        \textbf{Campo} & \textbf{Bytes} & \textbf{Função} \\
+        \hline
+        Início (\texttt{0xFD}) & 1 & Marca o começo do pacote e permite a ressincronização. \\
+        \hline
+        Comprimento & 1 & Tamanho do \textit{payload}, de 0 a 255 \textit{bytes}. \\
+        \hline
+        \textit{Flags} & 2 & Indicações de compatibilidade, como o uso de assinatura. \\
+        \hline
+        Sequência & 1 & Contador de pacotes do remetente; saltos indicam perdas. \\
+        \hline
+        \textit{System ID} & 1 & Veículo ou sistema que enviou a mensagem. \\
+        \hline
+        \textit{Component ID} & 1 & Componente do sistema que enviou a mensagem. \\
+        \hline
+        \textit{Message ID} & 3 & Identificador da mensagem (até 16\,777\,215). \\
+        \hline
+        \textit{Payload} & 0 a 255 & Campos da mensagem em binário. \\
+        \hline
+        \textit{Checksum} & 2 & CRC-16/MCRF4XX do pacote, incluindo o \texttt{CRC\_EXTRA}. \\
+        \hline
+        Assinatura (opcional) & 13 & Autenticação da origem. \\
+        \hline
+    \end{tabular}
+    \par\vspace{0.2cm}
+    \footnotesize Fonte: elaborado pelos autores (2026), com base em \citeonline{mavlinkguide}.
+\end{quadro}
+
+No padrão MAVLink v1, o protocolo acrescenta 8~\textit{bytes} ao \textit{payload}. No MAVLink v2 sem assinatura, são acrescentados 12~\textit{bytes}; quando a assinatura opcional é usada, acrescentam-se mais 13~\textit{bytes}, totalizando 25~\textit{bytes} além do \textit{payload} \cite{mavlinkguide,mavlinksigning}. A integridade contra corrupção acidental é verificada por um \textit{checksum} CRC-16/MCRF4XX. O \texttt{CRC\_EXTRA}, um valor calculado a partir da definição da mensagem no XML, participa do cálculo desse \textit{checksum}: se emissor e receptor usarem definições diferentes para a mesma mensagem, o \textit{checksum} não confere e a mensagem é descartada, em vez de ser interpretada de forma errada. Ele não é um segundo \textit{checksum} transmitido separadamente \cite{mavlinkguide}.
+
+Entre os microsserviços padronizados, destacam-se o \textit{HEARTBEAT}, mensagem periódica pela qual cada componente anuncia sua presença, seu tipo e seu estado, e cuja ausência indica a perda do enlace; o protocolo de comandos (\texttt{COMMAND\_LONG} e \texttt{COMMAND\_ACK}), em que cada comando recebe uma resposta com o resultado; e o protocolo de parâmetros (\texttt{PARAM\_*}), que permite ler e alterar valores de configuração do veículo durante a operação \cite{mavlinkguide}.
+
+% ----------------------------------------------------------------
+\subsection{Comunicação confiável entre o computador de missão e o controlador de voo}\label{subsec:comunicacao_confiavel}
+% ----------------------------------------------------------------
+
+Um enlace serial pode perder, corromper ou atrasar mensagens. O \textit{checksum} descarta mensagens corrompidas, mas não garante que uma mensagem chegue. Para que um comando seja executado com segurança, o protocolo de aplicação precisa de confirmações e de retransmissão: o emissor reenvia o pedido quando não recebe resposta dentro de um prazo. A retransmissão, porém, cria um problema: se o pedido foi executado e apenas a resposta se perdeu, o reenvio pode fazer o receptor executá-lo duas vezes \cite{tanenbaum2007}.
+
+Para comandos que movem um veículo, a execução duplicada é inaceitável: um deslocamento de 1~m executado duas vezes leva o veículo a 2~m. A solução usual é tornar o pedido \textbf{idempotente}: cada pedido recebe um identificador único, o receptor guarda os pedidos já tratados e, ao receber um pedido repetido, apenas reenvia a resposta já dada, sem executá-lo de novo. Essa garantia é conhecida como semântica de \textbf{no máximo uma vez} (\textit{at-most-once}) \cite{tanenbaum2007}.
+
+Também é necessário que o controlador de voo detecte a falha do computador de missão. Mensagens periódicas, como o \textit{HEARTBEAT}, funcionam como um \textit{watchdog} do enlace: se deixam de chegar por um tempo definido, o controlador assume que a comunicação foi perdida e executa uma ação segura, como manter a posição ou pousar \cite{mavlinkguide}. O mesmo princípio pode ser aplicado a uma autorização explícita do operador, renovada periodicamente, de forma análoga ao dispositivo de homem morto (\textit{dead man's switch}): o veículo só executa novos movimentos enquanto essa autorização continua a ser recebida.

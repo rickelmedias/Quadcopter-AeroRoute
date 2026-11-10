@@ -1,0 +1,298 @@
+\chapter{RESULTADOS E DISCUSSÃO}\label{cap:resultados}
+
+Neste capítulo são apresentados e discutidos os resultados obtidos ao longo do desenvolvimento experimental e computacional da plataforma proposta. Inicialmente, expõem-se os resultados dos ensaios de bancada voltados à calibração e à caracterização estocástica dos sensores embarcados, cujas variâncias medidas fundamentam a parametrização do Filtro de Kalman. Na sequência, apresentam-se os resultados das simulações numéricas em malha fechada conduzidas no ambiente MATLAB/Simulink, comparando o desempenho do controlador LQG aplicado ao modelo linearizado e à planta dinâmica não linear do quadricóptero. Por fim, apresentam-se o ensaio de voo real, os ensaios de comunicação entre o Raspberry Pi e o STM32 e os resultados do planejamento de rotas.
+
+% =============================================================
+\section{CARACTERIZAÇÃO EXPERIMENTAL E CALIBRAÇÃO DOS SENSORES}\label{sec:res_sensores}
+
+Conforme estabelecido na metodologia (Seção~\ref{subsec:modelagem_projeto_controle}), a implementação prática do Filtro de Kalman exige o conhecimento prévio da matriz de covariância do ruído de medição $\mathbf{R}_v$, evitando que a sintonia do estimador dependa exclusivamente de ajustes empíricos. Para determinar as variâncias reais ($\sigma_v^2$) de cada canal sensorial, realizaram-se ensaios estáticos de bancada com a plataforma imobilizada sobre uma superfície nivelada, sem acionamento dos propulsores.
+
+\subsection{Análise de ruído e desempenho temporal da IMU BNO08X}\label{subsec:res_bno08x}
+
+Durante o ensaio estático da unidade de medição inercial BNO08X, foram coletadas $N = 1092$ amostras consecutivas, registradas a 10~Hz pelo \textit{log} USB, com os \textit{reports} da IMU configurados a uma taxa nominal de 100~Hz via barramento I$^2$C2 a 400~kHz. A Figura~\ref{fig:ruido_bno08x} apresenta o comportamento temporal das leituras dos ângulos de Euler ($\phi, \theta, \psi$) e das velocidades angulares ($p, q, r$). A Figura~\ref{fig:bancada_bno08x} mostra a montagem em protoboard usada nesse ensaio, com a IMU ligada à placa STM32F411.
+
+\begin{figure}[H]
+    \centering
+    \caption{Montagem em protoboard para o ensaio de bancada da IMU BNO08X com o STM32F411.}
+    \label{fig:bancada_bno08x}
+    \includegraphics[width=0.4\textwidth]{images/testes/bno-bancada.png}
+    \par\vspace{0.2cm}
+    \footnotesize Fonte: elaborado pelos autores (2026).
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \caption{Leituras estáticas e distribuição de ruído dos canais da IMU BNO08X.}
+    \label{fig:ruido_bno08x}
+    \includegraphics[width=0.85\textwidth]{images/resultados/plotBNO.png}
+    \par\vspace{0.2cm}
+    \footnotesize Fonte: elaborado pelos autores (2026).
+\end{figure}
+
+Com esses dados observados na Figura~\ref{fig:ruido_bno08x}, foi realizada a distribuição estatística do ruído observada em torno do valor médio (ajuste gaussiano).
+
+\begin{figure}[H]
+    \centering
+    \caption{Distribuição de ruído em roll.}
+    \label{fig:dn_roll}
+    \includegraphics[width=0.85\textwidth]{images/resultados/DNRoll.png}
+    \par\vspace{0.2cm}
+    \footnotesize Fonte: elaborado pelos autores (2026).
+\end{figure}
+
+Observa-se na Figura~\ref{fig:dn_roll} que o sinal apresenta um comportamento compatível com a hipótese de ruído branco gaussiano adotada na formulação do Filtro de Kalman, com desvios contidos em uma faixa estreita em torno da média. Quanto ao determinismo temporal, os carimbos de tempo do \textit{log} mostram que a tarefa de registro no STM32F411 sob FreeRTOS manteve intervalo médio de 100,5~ms (9,95~Hz), com \textit{jitter} (desvio padrão de $\Delta t_i$) de 1,2~ms, intervalos entre 99 e 108~ms e nenhuma lacuna ao longo de aproximadamente 110~s de ensaio. Como o registro foi feito a 10~Hz, uma fração da taxa de 100~Hz dos \textit{reports} SH-2, esses valores descrevem a tarefa de \textit{log}; a taxa efetiva e o \textit{jitter} de cada \textit{report} exigem o registro individual com carimbo de tempo, previsto como etapa seguinte.
+Os ensaios foram realizados com os motores desligados. A caracterização da influência da vibração dos motores sobre o ruído da IMU requer um ensaio com os motores em funcionamento, fora do escopo deste ensaio estático.
+
+\subsection{Caracterização do sensor de fluxo óptico e LiDAR MTF-01}\label{subsec:res_mtf01}
+
+De maneira análoga, o módulo MicoAir MTF-01 foi submetido a ensaios estáticos a uma distância vertical fixa de referência em relação ao solo, coletando $N = 729$ amostras consecutivas e operando via interface UART a 115200~bit/s com taxa nominal de saída de aproximadamente 100~Hz, sendo as leituras registradas a 10~Hz pelo \textit{log} USB. O contador de quadros recebidos avançou em média 10,04 quadros por intervalo de registro de 100~ms, o que corresponde a uma taxa efetiva de cerca de 100~Hz, sem erros de CRC, lacunas de sequência, erros de UART ou bytes descartados. A Figura~\ref{fig:bancada_mtf01} mostra o sensor fixado em um suporte provisório durante esse ensaio.
+
+\begin{figure}[H]
+    \centering
+    \caption{Montagem provisória do sensor MTF-01 para o ensaio de bancada.}
+    \label{fig:bancada_mtf01}
+    \includegraphics[width=0.4\textwidth]{images/testes/mtf01-bancada.png}
+    \par\vspace{0.2cm}
+    \footnotesize Fonte: elaborado pelos autores (2026).
+\end{figure}
+
+A Figura~\ref{fig:ruido_mtf01} ilustra as séries temporais obtidas para a medição de distância do sensor ToF ($z$) e para as componentes de velocidade linear horizontal ($\dot{x}$ e $\dot{y}$) derivadas do fluxo óptico.
+
+\begin{figure}[H]
+    \centering
+    \caption{Caracterização experimental de ruído das medições do sensor MTF-01.}
+    \label{fig:ruido_mtf01}
+    \includegraphics[width=0.85\textwidth]{images/resultados/plotMTF01.png}
+    \par\vspace{0.2cm}
+    \footnotesize Fonte: elaborado pelos autores (2026).
+\end{figure}
+
+Analisando a distribuição de ruído das medições do MTF-01 (Figura~\ref{fig:dn_xyz}), verificou-se que o comportamento estatístico das variáveis $z$, $\dot{x}$ e $\dot{y}$ também se aproxima de uma distribuição gaussiana, com desvios padrão relativamente baixos, indicando boa estabilidade e confiabilidade do sensor em condições estáticas.
+
+\begin{figure}[H]
+    \centering
+    \caption{Distribuição de ruído em $z$, $\dot{x}$ e $\dot{y}$.}
+    \label{fig:dn_xyz}
+    \includegraphics[width=0.85\textwidth]{images/resultados/DNXYZ.png}
+    \par\vspace{0.2cm}
+    \footnotesize Fonte: elaborado pelos autores (2026).
+\end{figure}
+
+O Quadro~\ref{qua:estatistica_sensores} consolida os parâmetros estatísticos extraídos dos ensaios de bancada para ambos os sensores, discriminando a média amostral (\textit{bias} residual), o desvio padrão ($\sigma_v$) e a variância resultante ($\sigma_v^2$) adotada na construção da diagonal da matriz $\mathbf{R}_v$.
+
+
+\begin{quadro}[H]
+\centering
+\caption{Parâmetros estatísticos medidos nos sensores e variâncias aplicadas à matriz $\mathbf{R}_v$.}
+\label{qua:estatistica_sensores}
+\small
+\renewcommand{\arraystretch}{1.25}
+\setlength{\tabcolsep}{5pt} % Reduz suavemente o espaçamento horizontal entre as colunas
+\begin{tabular}{|l|c|c|c|c|c|}
+\hline
+\textbf{Variável Medida} & \textbf{Sensor} & \textbf{Unidade} & \textbf{\shortstack{Média\\(\textit{Bias})}} & \textbf{\shortstack{Desvio Padrão\\($\sigma_v$)}} & \textbf{\shortstack{Variância\\($\sigma_v^2$)}} \\
+\hline
+Altitude ($z$) & MTF-01 & m & 1{,}1300 & $1{,}07 \times 10^{-2}$ & $1{,}15 \times 10^{-4}$ \\
+Velocidade em $x$ ($\dot{x}$) & MTF-01 & m/s & 0{,}0000 & $1{,}13 \times 10^{-1}$ & $1{,}28 \times 10^{-2}$ \\
+Velocidade em $y$ ($\dot{y}$) & MTF-01 & m/s & 0{,}0000 & $4{,}74 \times 10^{-2}$ & $2{,}20 \times 10^{-3}$ \\
+Rolamento ($\phi$) & BNO08X & rad & 0{,}0382 & $2{,}24 \times 10^{-4}$ & $5{,}00 \times 10^{-8}$ \\
+Arfagem ($\theta$) & BNO08X & rad & 0{,}0013 & $4{,}40 \times 10^{-4}$ & $1{,}94 \times 10^{-7}$ \\
+Guinada ($\psi$) & BNO08X & rad & 2{,}3245 & $2{,}46 \times 10^{-4}$ & $6{,}04 \times 10^{-8}$ \\
+Taxa de rolamento ($p$) & BNO08X & rad/s & 0{,}0000 & $1{,}44 \times 10^{-3}$ & $2{,}06 \times 10^{-6}$ \\
+Taxa de arfagem ($q$) & BNO08X & rad/s & 0{,}0000 & $5{,}70 \times 10^{-4}$ & $3{,}24 \times 10^{-7}$ \\
+Taxa de guinada ($r$) & BNO08X & rad/s & 0{,}0000 & $4{,}88 \times 10^{-4}$ & $2{,}38 \times 10^{-7}$ \\
+\hline
+\end{tabular}
+\par\vspace{0.2cm}
+\footnotesize Fonte: elaborado pelos autores (2026).
+\end{quadro}
+
+% =============================================================
+\section{SIMULAÇÕES EM AMBIENTE MATLAB/SIMULINK}\label{sec:res_simulacoes}
+
+Para realizar a validação do projeto de controle LQG antes dos ensaios de voo livre, foram conduzidas simulações numéricas no ambiente MATLAB/Simulink (versão R2024a). Primeiramente, implementou-se o modelo linearizado do quadricóptero em torno da condição de \textit{hover}, fundamentado nas matrizes de espaço de estados derivadas na Seção~\ref{subsubsec:linearizacao_sistema}, com a finalidade de verificar as propriedades estruturais de controlabilidade, observabilidade e estabilidade em malha fechada, além de sintonizar as matrizes de ponderação $\mathbf{Q}$ e $\mathbf{R}_{\mathrm{lqr}}$. Na sequência, o mesmo compensador LQG e os mesmos ganhos ($\mathbf{K}$ e $\mathbf{L}$) foram aplicados ao modelo dinâmico completo não linear do quadricóptero, incorporando os acoplamentos inerciais, as não linearidades trigonométricas e o ruído estocástico parametrizado pelo Quadro~\ref{qua:estatistica_sensores}.
+
+\subsection{Verificação estrutural e sintonia das matrizes do controlador}\label{subsec:res_sintonia}
+
+A verificação algébrica preliminar do par $(\mathbf{A}, \mathbf{B})$ confirmou o posto completo da matriz de controlabilidade ($\operatorname{rank}(\mathcal{C}) = 12$). Por outro lado, o par $(\mathbf{A}, \mathbf{C})$ apresentou deficiência de posto na matriz de observabilidade ($\operatorname{rank}(\mathcal{O}) = 10$), indicando que o sistema é completamente controlável nos 12 estados, porém não é observável nas posições translacionais $x$ e $y$ devido à ausência de medições de posição absoluta no plano horizontal. Dessa forma, comprova-se a necessidade da aplicação de um estimador de estados ótimo, como o Filtro de Kalman, para realizar a fusão sensorial, atenuar ruídos de medição e reconstruir dinamicamente o subsistema observável.
+
+Após o processo iterativo de ajuste baseado no compromisso entre velocidade de resposta e limitação de esforço nos atuadores, definiram-se os seguintes valores para as diagonais das matrizes de ponderação de estados ($\mathbf{Q}$) e de controle ($\mathbf{R}_{\mathrm{lqr}}$):
+
+\begin{equation}\label{eq:valores_Q_R_sim}
+\begin{aligned}
+\mathbf{Q} &= \operatorname{diag}\left(5,\, 5,\, 500,\, 500,\, 500,\, 50,\, 5,\, 5,\, 5,\, 10,\, 10,\, 5\right), \\
+\mathbf{R}_{\mathrm{lqr}} &= \operatorname{diag}\left(0{,}1,\, 0{,}1,\, 0{,}1,\, 0{,}1\right).
+\end{aligned}
+\end{equation}
+
+Todos os autovalores das matrizes de malha fechada do regulador ($\mathbf{A} - \mathbf{B}\mathbf{K}$) e do observador ($\mathbf{A} - \mathbf{L}\mathbf{C}$) posicionaram-se estritamente no semiplano esquerdo do plano complexo (ou no interior do círculo unitário, na formulação discreta com período de amostragem $T_s = 100$~ms), confirmando a estabilidade assintótica local do sistema.
+
+\subsection{Desempenho do Filtro de Kalman na estimação de estados}\label{subsec:res_kalman}
+
+A eficácia do Filtro de Kalman na rejeição do ruído de medição foi avaliada comparando-se os estados reais da planta, os sinais corrompidos pelo ruído sensorial ($\mathbf{y}$) e os estados reconstruídos pelo estimador ($\hat{\mathbf{x}}$). A Figura~\ref{fig:simulacao_kalman} apresenta a sobreposição entre a leitura ruidosa e a estimativa filtrada para as variáveis do sistema.
+
+\begin{figure}[H]
+    \centering
+    \caption{Comparação entre estados reais, medições ruidosas e estimativas do Filtro de Kalman.}
+    \label{fig:simulacao_kalman}
+    \includegraphics[width=0.85\textwidth]{images/resultados/kalman.png}
+    \par\vspace{0.2cm}
+    \footnotesize Fonte: elaborado pelos autores (2026).
+\end{figure}
+
+Verifica-se na Figura~\ref{fig:simulacao_kalman} que o estimador atenua significativamente as flutuações de alta frequência oriundas dos sensores sem introduzir atraso de fase excessivo na malha, fornecendo uma estimativa suave ($\hat{\mathbf{x}}$) para o cálculo da lei de controle LQR e evitando que o ruído de medição seja amplificado pelos ganhos da matriz $\mathbf{K}$ nos comandos enviados aos motores.
+
+\subsection{Comparação entre o modelo linear e o modelo não linear}\label{subsec:res_linear_vs_naolinear}
+
+Para avaliar o domínio de validade da linearização por série de Taylor e a robustez do controlador LQG frente às dinâmicas não lineares do quadricóptero, ambos os modelos foram submetidos às mesmas condições iniciais e perfis de referência. O ensaio consiste em inicializar a aeronave na origem do referencial inercial, $[x,\, y,\, z]^{\top} = [0,\, 0,\, 0]^{\top}\text{ m}$, comandando-se inicialmente uma manobra de subida para a altitude de $0{,}7\text{ m}$. Em seguida, aplica-se uma rotação de $45^\circ$ ($\pi/4\text{ rad}$) em torno do eixo de guinada ($\psi$) em $t = 5\text{ s}$ e, posteriormente, um deslocamento translacional no plano horizontal em $t = 10\text{ s}$ (suavizado por um limitador de taxa) até as coordenadas de magnitude $[1{,}0,\, 1{,}0]\text{ m}$. Após a estabilização, o sistema é submetido, entre $t = 15\text{ s}$ e $t = 17\text{ s}$, a um distúrbio externo de atitude equivalente a $10^\circ$ em rolamento ($\phi$), $-5^\circ$ em arfagem ($\theta$) e $10^\circ$ em guinada ($\psi$), devendo rejeitar a perturbação e retomar a atitude de equilíbrio. Por fim, em $t = 25\text{ s}$, executa-se a manobra de redução de altitude (pouso).
+
+A Figura~\ref{fig:comp_atitude} apresenta a resposta transitória comparativa dos ângulos de atitude ($\phi$, $\theta$ e $\psi$) entre o modelo linear e o modelo não linear, a Figura~\ref{fig:comp_posicaoXY} exibe o rastreamento de posição $x$ e $y$, e por fim a Figura~\ref{fig:comp_posicaoZ} mostra o rastreamento de posição $z$.
+
+\begin{figure}[H]
+    \centering
+    \caption{Comparação da resposta de atitude ($\phi, \theta, \psi$): modelo linear vs. modelo não linear.}
+    \label{fig:comp_atitude}
+    \includegraphics[width=0.85\textwidth]{images/resultados/comparacao_atitude.png}
+    \par\vspace{0.2cm}
+    \footnotesize Fonte: elaborado pelos autores (2026).
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \caption{Comparação da resposta de posição ($x, y, z$): modelo linear vs. modelo não linear.}
+    \label{fig:comp_posicaoXY}
+    \includegraphics[width=0.85\textwidth]{images/resultados/comparacao_posicaoXY.png}
+    \par\vspace{0.2cm}
+    \footnotesize Fonte: elaborado pelos autores (2026).
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \caption{Comparação da resposta de posição ($x, y, z$): modelo linear vs. modelo não linear.}
+    \label{fig:comp_posicaoZ}
+    \includegraphics[width=0.85\textwidth]{images/resultados/comparacao_posicaoZ.png}
+    \par\vspace{0.2cm}
+    \footnotesize Fonte: elaborado pelos autores (2026).
+\end{figure}
+
+Adicionalmente, a Figura~\ref{fig:esforco_motores} ilustra o comportamento das velocidades angulares comandadas aos quatro rotores ($\omega_1, \omega_2, \omega_3, \omega_4$) durante a manobra, demonstrando que as ações de controle convergem para a rotação nominal de equilíbrio ($\omega_0 \approx 146{,}23$~rad/s) e permanecem dentro dos limites físicos de saturação dos propulsores.
+
+\begin{figure}[H]
+    \centering
+    \caption{Velocidades angulares comandadas aos quatro motores ($\omega_1$ a $\omega_4$) na simulação.}
+    \label{fig:esforco_motores}
+    \includegraphics[width=0.85\textwidth]{images/resultados/esforco_motores.png}
+    \par\vspace{0.2cm}
+    \footnotesize Fonte: elaborado pelos autores (2026).
+\end{figure}
+
+Para quantificar objetivamente a aderência entre a aproximação linear e a planta não linear, conforme definido na Seção~\ref{subsec:metricas_lqr}, o Quadro~\ref{qua:metricas_simulacao} resume os indicadores de desempenho obtidos para cada grau de liberdade: Raiz do Erro Quadrático Médio (RMSE), Erro Absoluto Médio (MAE), sobressinal percentual ($M_p$), tempo de acomodação ($t_s$ para banda de 2\%) e erro em regime permanente ($e_{\mathrm{ss}}$).
+
+\begin{quadro}[H]
+\centering
+\caption{Comparativo das métricas de desempenho de controle entre o modelo linear e o não linear.}
+\label{qua:metricas_simulacao}
+\small
+\renewcommand{\arraystretch}{1.25}
+\setlength{\tabcolsep}{5pt} % Reduz levemente o espaçamento horizontal entre as colunas
+\begin{tabular}{|l|c|c|c|c|c|c|}
+\hline
+\textbf{Variável / Modelo} & \textbf{Unid.} & \textbf{RMSE} & \textbf{MAE} & \textbf{\shortstack{Sobressinal\\($M_p$)}} & \textbf{\shortstack{Acomodação\\($t_s$)}} & \textbf{\shortstack{Erro Estac.\\($e_{\mathrm{ss}}$)}} \\
+\hline
+\multicolumn{7}{|l|}{\textbf{Modelo Linearizado}} \\
+\hline
+Posição $x$ & m & 0,289 & 0,205 & 0,0\% & 14,90~s & 0,073 \\
+Posição $y$ & m & 0,271 & 0,177 & 2,5\% & 14,90~s & 0,023 \\
+Altitude $z$ & m & 0,098 & 0,022 & 4,2\% & 2,73~s & 0,002 \\
+Rolamento ($\phi$) & graus & 0,633 & 0,447 & 1,7$^\circ$\textsuperscript{*} & 2,95~s & 0,009 \\
+Arfagem ($\theta$) & graus & 0,543 & 0,410 & 1,6$^\circ$\textsuperscript{*} & 2,93~s & 0,282 \\
+Guinada ($\psi$) & graus & 6,385 & 1,630 & 0,0\% & 1,27~s & 0,001 \\
+\hline
+\multicolumn{7}{|l|}{\textbf{Modelo Não Linear Completo}} \\
+\hline
+Posição $x$ & m & 0,363 & 0,313 & 29,4\% & 14,90~s & 0,285 \\
+Posição $y$ & m & 0,725 & 0,544 & 0,0\% & 14,90~s & 0,132 \\
+Altitude $z$ & m & 0,097 & 0,023 & 4,2\% & 17,69~s & 0,001 \\
+Rolamento ($\phi$) & graus & 3,931 & 2,082 & 12,2$^\circ$\textsuperscript{*} & 6,41~s & 0,040 \\
+Arfagem ($\theta$) & graus & 1,955 & 1,162 & 6,0$^\circ$\textsuperscript{*} & 5,63~s & 0,005 \\
+Guinada ($\psi$) & graus & 6,387 & 1,632 & 0,0\% & 1,27~s & 0,003 \\
+\hline
+\end{tabular}
+\par\vspace{0.15cm}
+\footnotesize \textsuperscript{*}Para $\phi$ e $\theta$ (regulação em $0^\circ$), $M_p$ representa a deflexão angular máxima absoluta atingida nas manobras e rejeição de distúrbios.\\
+Fonte: elaborado pelos autores (2026).
+\end{quadro}
+
+A análise comparativa das curvas e das métricas do Quadro~\ref{qua:metricas_simulacao} demonstra que, dentro do envelope operacional de pequenos ângulos ($|\phi|, |\theta| \le 15^\circ$), as respostas dos modelos linear e não linear apresentam elevada concordância. As pequenas divergências observadas durante os instantes iniciais do regime transitório no modelo não linear devem-se ao termo de acoplamento trigonométrico do empuxo ($\cos\phi\cos\theta$) na dinâmica vertical e aos termos giroscópicos cruzados nas equações rotacionais, os quais são prontamente compensados pela malha fechada LQG sem comprometer a estabilidade do sistema.
+
+Graficamente se observa um grande desvio nas posições $x$ e $y$ do modelo não linear, no momento que ocorre o distúrbio. Após a tentativa de estabilização, acaba ocorrendo um erro de regime permanente, que é explicado pela falta de observabilidade das posições horizontais, uma vez que o sistema não possui sensores de posição absoluta. Por outro lado, a altitude $z$ e os ângulos de atitude ($\phi$, $\theta$, $\psi$) apresentam excelente rastreamento e rejeição de distúrbios, com erros em regime permanente desprezíveis.
+
+\section{Validação em Voo Real}\label{sec:resultados_voo}
+
+Após a calibração do Filtro de Kalman e a validação teórica das matrizes de ganho do controlador ótimo em ambiente de simulação, procedeu-se aos ensaios práticos de voo. O objetivo desta etapa consistiu em avaliar a capacidade do controlador LQR/LQG embarcado em manter o quadricóptero estabilizado na origem do plano horizontal ($X=0, Y=0$) e na altitude de referência de $15\,\mathrm{cm}$. Os dados telemétricos foram transmitidos via interface serial e gravados com uma taxa de amostragem de $50\,\mathrm{Hz}$.
+
+A Figura \ref{fig:telemetria_atitude} apresenta a resposta temporal do sistema em malha fechada para as variáveis de atitude (rolamento, arfagem e guinada), a altitude em relação ao solo e o respectivo esforço de controle aplicado aos atuadores. A decolagem autônoma ocorreu aproximadamente no instante $t = 7\,\mathrm{s}$.
+
+\begin{figure}[H]
+\centering
+\caption{Telemetria completa do voo: atitude, altitude e esforço de controle.}
+\label{fig:telemetria_atitude}
+\includegraphics[width=0.9\textwidth]{images/resultados/telemetria_voo_completa.png}
+\vspace{0.2cm}
+\par\footnotesize Fonte: elaborado pelos autores (2026).
+\end{figure}
+
+A análise das curvas de atitude revela que o controlador foi capaz de manter os ângulos de rolamento ($\phi$) e arfagem ($\theta$) estabilizados em uma faixa estreita de oscilação em torno de suas referências, mesmo sob os ruídos mecânicos de alta frequência gerados pelos propulsores. A guinada ($\psi$), por outro lado, não foi regulada, variando entre aproximadamente $+80^\circ$ e $-60^\circ$ ao longo do voo. A altura estimada estabilizou-se entre 4 e 5~cm, abaixo da referência de 15~cm. Em ensaios complementares, com o deslocamento horizontal restringido por um apoio físico, a altura de referência foi alcançada, o que indica que a manutenção da posição horizontal na origem é a condição que falta para a subida até a altura de referência em voo livre.
+
+Contudo, apesar da estabilidade de rolamento e arfagem, a malha de controle de posição externa não atingiu o desempenho projetado. A Figura \ref{fig:telemetria_xy} ilustra a trajetória estimada do quadricóptero no plano cartesiano, evidenciando uma oscilação não compensada em torno da origem, com excursões de até cerca de 0,5~m no eixo $X$. 
+
+\begin{figure}[H]
+\centering
+\caption{Trajetória estimada do veículo no plano horizontal ($X \times Y$).}
+\label{fig:telemetria_xy}
+\includegraphics[width=0.7\textwidth]{images/resultados/trajetoria_plano_xy.png}
+\vspace{0.2cm}
+\par\footnotesize Fonte: elaborado pelos autores (2026).
+\end{figure}
+
+Observa-se que, durante a subida em direção à altura de referência, o veículo não manteve a posição horizontal na origem. Ao se deslocar, ficou sujeito a forças externas presentes no ambiente de ensaio, como o cabo USB conectado, a proximidade de paredes, o contato com as mãos do operador ou correntes de ar em espaço aberto, e foram essas forças que o levaram a ultrapassar a inclinação máxima de segurança estabelecida no firmware. Nesse limiar, a supervisão acionou a rotina de pouso seguida do corte dos motores (\textit{failsafe}). Nos ensaios em que nenhuma força externa atuou sobre o veículo, a inclinação de \textit{failsafe} não foi atingida.
+
+A divergência na posição plana, coexistindo com rolamento e arfagem estabilizados, sugere a presença de perturbações externas constantes não modeladas (como um deslocamento do centro de massa em relação à controladora de voo ou correntes de ar) combinadas ao acúmulo de erros de integração (\textit{drift}) típicos do sensor de fluxo óptico MTF-01 ao operar perto do solo. Em trabalhos futuros, a introdução de uma malha adaptativa para estimar o desbalanceamento estático ou o refinamento empírico da matriz de covariância de ruído do processo ($Q$) poderiam mitigar esse comportamento.
+
+\subsection{Registro do voo sem cabo e acompanhamento pelo terminal}
+\label{subsec:voo_sem_cabo}
+
+A imagem (a) da Figura~\ref{fig:voo_terminal} registra o protótipo em voo físico, sem cabo conectado ao computador. Esse registro difere dos ensaios de comunicação com o veículo simulado: neste caso, os motores estavam em funcionamento e o drone se deslocava no ambiente real.
+
+
+
+O ensaio é iniciado pelo operador no terminal do Raspberry Pi, por meio do programa de teste de voo pairado. O comando \texttt{hover-test}, com a opção \texttt{--motors}, solicita a execução física do teste; as opções \texttt{--height} e \texttt{--time} definem a altura de referência e a duração solicitada. Também podem ser fornecidos parâmetros de controle e uma identificação para o registro. O Raspberry Pi coordena o ensaio e coleta a telemetria, enquanto o STM32 executa o controle do veículo. Ao final, o programa salva o registro no Raspberry Pi e apresenta um resumo no terminal. O encerramento pode ocorrer antes do previsto se uma condição de supervisão interromper o teste.
+
+A imagem (b) da Figura~\ref{fig:voo_terminal} apresenta esse relatório ao final de um teste físico de decolagem. No registro mostrado, a referência era de 15~cm, mas a altura máxima informada foi de 6,3~cm. O programa indicou que o alvo não foi atingido em 26~s e iniciou o pouso, seguido do desarme. Foram registradas 2082 amostras de telemetria a 50~Hz, com 3,2\% de perdas informadas no relatório. Esses dados documentam o acompanhamento do ensaio e a limitação de altitude observada nesse registro; não demonstram que a referência de decolagem tenha sido alcançada.
+
+\begin{figure}[htbp]
+    \centering
+    \caption{Registro conjunto do ensaio físico: (a) protótipo em voo sem cabo; (b) relatório apresentado no terminal ao término do teste.}
+    \label{fig:voo_terminal}
+    \begin{minipage}[t]{0.48\textwidth}
+        \centering
+        \vspace{0pt}
+        \includegraphics[width=\linewidth,height=8cm,keepaspectratio]{images/resultados/drone_sem_fio.jpeg}
+        \par\smallskip{\footnotesize (a) Protótipo em voo.}
+    \end{minipage}
+    \hfill
+    \begin{minipage}[t]{0.48\textwidth}
+        \centering
+        \vspace{0pt}
+        \includegraphics[width=\linewidth,height=8cm,keepaspectratio]{images/resultados/terminal.jpeg}
+        \par\smallskip{\footnotesize (b) Relatório do ensaio.}
+    \end{minipage}
+    \par\vspace{0.2cm}
+    \footnotesize Fonte: elaborado pelos autores (2026).
+\end{figure}
+
+% Comunicação Raspberry Pi <-> STM32 (testes, ensaios no STM32, problemas corrigidos)
+\input{partes/textuais/comunicacao/resultados_comunicacao.tex}
+
+% Planejamento de rotas (benchmark, limite dos exatos, AG, execução no STM32)
+\input{partes/textuais/rotas/resultados_rotas.tex}

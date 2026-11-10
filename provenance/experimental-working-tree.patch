@@ -1,0 +1,2292 @@
+diff --git a/.gitignore b/.gitignore
+index f5127e5..e22e76a 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -17,6 +17,7 @@ venv/
+ # Ensaios locais -------------------------------------------------------------
+ # CSVs de telemetria gravados pelo dronectl (tools/pi) na Pi ou no PC.
+ tools/pi/logs/
++/real_log_kit/
+ 
+ # Conversas completas usadas como referência são arquivos locais. Os
+ # documentos consolidados e revisados continuam em docs/.
+diff --git a/App/Inc/control/ctrl_params.h b/App/Inc/control/ctrl_params.h
+index 69505a4..083dff2 100644
+--- a/App/Inc/control/ctrl_params.h
++++ b/App/Inc/control/ctrl_params.h
+@@ -74,6 +74,36 @@ typedef struct {
+   float flow_yaw_x;
+   /** FLOW_YAW_Y: idem para y do corpo. */
+   float flow_yaw_y;
++  /** FLOW_GYRO_XY: ganho do giro y do BNO (roll) no fluxo X; 0 desliga (pareamento cruzado). */
++  float flow_gyro_xy;
++  /** FLOW_GYRO_YX: ganho do giro x do BNO (pitch) no fluxo Y; 0 desliga. */
++  float flow_gyro_yx;
++  /** FLOW_EKF: 1 = o LQG recebe vx, vy do EKF de navegação (control/nav_ekf.h). */
++  float flow_ekf;
++  /** Z_EKF: 1 = o LQG recebe o z do EKF de navegação (distância filtrada e acelerômetro). */
++  float z_ekf;
++  /** FEKF_ACC_N: ruído da aceleração horizontal no EKF, em m/s². */
++  float fekf_acc_noise;
++  /** FEKF_ACCZ_N: ruído da aceleração vertical no EKF, em m/s². */
++  float fekf_accz_noise;
++  /** FEKF_BIAS_N: passeio do viés do acelerômetro, em m/s² por raiz de s. */
++  float fekf_bias_noise;
++  /** FEKF_FLOW_N: ruído do fluxo no EKF, em rad/s (vezes a distância = m/s). */
++  float fekf_flow_noise;
++  /** FEKF_RNG_N: ruído da distância no EKF, em m. */
++  float fekf_range_noise;
++  /** FEKF_GATE: gate de inovação do EKF, em desvios (0 desliga). */
++  float fekf_gate;
++  /** FLOW_GATE: 1 = rejeita fluxo de baixa qualidade, com inclinação grande ou absurdo. */
++  float flow_gate;
++  /** FLOW_CENS: 1 = fluxo zero vira "dentro de uma contagem": usa a predição do Kalman nessa faixa. */
++  float flow_cens;
++  /** FLOW_BIAS_X: viés do fluxo X do sensor parado, em rad/s (subtraído da leitura). */
++  float flow_bias_x;
++  /** FLOW_BIAS_Y: idem para o fluxo Y. */
++  float flow_bias_y;
++  /** FLOW_SWAP: 1 = o canal Y do fluxo é a frente e o X é a esquerda (eixos do MTF girados). */
++  float flow_swap;
+   /** FLT_HOVER_H: altura padrão do comando hover, em m. */
+   float hover_height;
+   /** FLT_Z_RATE: velocidade da rampa de referência vertical, em m/s (0 = degrau). */
+@@ -94,6 +124,12 @@ typedef struct {
+   float debug_rate_hz;
+   /** LOG_EST_HZ: taxa da linha EST no log USB, em Hz (0 desliga). */
+   float log_est_hz;
++  /** NAV_DBG_HZ: taxa do DRONE_NAV_DEBUG para a Pi, em Hz (0 desliga). */
++  float nav_debug_rate_hz;
++  /** CTL_KI_XY: ganho do integral do erro de posição x, y, em 1/s (0 desliga). */
++  float ki_xy;
++  /** CTL_XY_I_MAX: limite do deslocamento integral de x, y, em m. */
++  float xy_i_max;
+   /** SNS_ZERO_ROLL: roll cru do BNO08x com o drone nivelado, em graus. */
+   float zero_roll_deg;
+   /** SNS_ZERO_PITCH: pitch cru do BNO08x com o drone nivelado, em graus. */
+@@ -131,6 +167,10 @@ typedef struct {
+   float use_dist;
+   /** FLT_PRESO: 1 = liga o detector de subida presa (bancada com cordinhas). */
+   float stuck_detect;
++  /** CTL_PSI_MAX: limite da guinada total (LQG + FF + estimador), rad/s; 0 desliga. */
++  float psi_max;
++  /** FLT_RAMP_CM: 1 = a rampa de partida só reduz a média, sem encolher a diferença entre motores. */
++  float ramp_common_mode;
+ } ctrl_params_t;
+ 
+ /** @brief Regras de um parâmetro. */
+diff --git a/App/Inc/control/flight_ctrl.h b/App/Inc/control/flight_ctrl.h
+index 296bacd..84a613e 100644
+--- a/App/Inc/control/flight_ctrl.h
++++ b/App/Inc/control/flight_ctrl.h
+@@ -60,6 +60,25 @@ typedef enum {
+   FLIGHT_FLAG_SATURATED = 1U << 3        /**< Algum motor bateu em MOT_MIN ou MOT_MAX. */
+ } flight_flags_t;
+ 
++/** @brief EKF de navegação de um passo (control/nav_ekf.h), para o DRONE_NAV_DEBUG. */
++typedef struct {
++  float flow_raw[2];        /**< Fluxo do MTF, x e y do sensor, em rad/s. */
++  float flow_body[2];       /**< Velocidade do fluxo no corpo (frente, direita), em m/s. */
++  float range_raw;          /**< Distância lida, em m. */
++  float range_filt;         /**< Distância filtrada, em m. */
++  float pos[3];             /**< Posição do EKF: x, y locais e z NED, em m. */
++  float vel[3];             /**< Velocidade do EKF, em m/s. */
++  float bias[3];            /**< Viés do acelerômetro estimado, em m/s². */
++  float accel[3];           /**< Aceleração usada na predição, em m/s². */
++  float flow_ratio;         /**< Última razão de teste do par x, y. */
++  float z_ratio;            /**< Última razão de teste de z. */
++  uint32_t flow_rejected;   /**< Correções de fluxo recusadas. */
++  uint32_t z_rejected;      /**< Correções de distância recusadas pelo EKF. */
++  uint32_t range_rejected;  /**< Leituras recusadas pelo filtro de distância. */
++  uint16_t flags;           /**< ::meas_diag_flag_t e ::MEAS_DIAG_Z_TO_LQG. */
++  uint8_t quality;          /**< Qualidade do fluxo, 0..255. */
++} flight_nav_telemetry_t;
++
+ /** @brief Fotografia de um passo da malha. */
+ typedef struct {
+   /** Tick do passo, em ms. */
+@@ -92,6 +111,8 @@ typedef struct {
+   uint32_t mtf_misses;
+   /** z NED do chão onde armou, em m; NAN até a primeira medida após armar. */
+   float z_ground;
++  /** EKF de navegação neste passo (DRONE_NAV_DEBUG). */
++  flight_nav_telemetry_t nav;
+ } flight_telemetry_t;
+ 
+ /** @brief Fim de um trecho (TAKEOFF ou leg), para o DroneLink publicar. */
+diff --git a/App/Inc/control/lqg_dist.h b/App/Inc/control/lqg_dist.h
+index 2bbf6d7..e2468a2 100644
+--- a/App/Inc/control/lqg_dist.h
++++ b/App/Inc/control/lqg_dist.h
+@@ -62,6 +62,21 @@ typedef struct {
+ 
+ /** Canais gerados por tools/lqg_ajustado.py. */
+ extern const lqg_dist_channel_t LQG_DIST_CHANNELS[LQG_DIST_NC];
++
++/**
++ * @brief Limita a parcela de guinada do du a ±@p limit, sem mexer nas demais.
++ *
++ * A guinada tem pouca autoridade no drone real, então um giro súbito leva o
++ * LQG a pedir centenas de rad/s nos quatro motores e isso arrasta a atitude
++ * (roll e pitch) junto. A parcela de guinada é a projeção de @p du no padrão do
++ * canal ::LQG_DIST_PSI; só ela é encurtada.
++ *
++ * @param[in]  du     Saída do LQG.
++ * @param[out] out    du com a guinada limitada (igual a @p du se não precisar).
++ * @param[in]  limit  Limite em rad/s (<= 0 desliga).
++ * @return true se algum valor mudou.
++ */
++bool lqg_dist_limit_yaw(const lqg_real_t du[LQG_NU], lqg_real_t out[LQG_NU], float limit);
+ /** Kd do LQG ajustado (gerado). */
+ extern const lqg_real_t LQG_AJ_KD[LQG_NU][LQG_NX];
+ /** Kfd do LQG ajustado (gerado). */
+@@ -70,6 +85,10 @@ extern const lqg_real_t LQG_AJ_KFD[LQG_NU][LQG_NR];
+ extern const lqg_real_t LQG_AJ_M[LQG_NX][LQG_NY];
+ /** L do Kalman do LQG ajustado (gerado). */
+ extern const lqg_real_t LQG_AJ_L[LQG_NX][LQG_NY];
++/** M do Kalman para a velocidade fundida (FLOW_EKF): vx, vy menos ruidosos (gerado). */
++extern const lqg_real_t LQG_AJ_M_FUSED[LQG_NX][LQG_NY];
++/** L do Kalman para a velocidade fundida (gerado). */
++extern const lqg_real_t LQG_AJ_L_FUSED[LQG_NX][LQG_NY];
+ /**
+  * Autoridade real de guinada dividida pela do B do TCC (gerado, ~3e-4). O B do
+  * TCC põe ~2000 vezes mais aceleração de guinada por rad/s do que o drone tem;
+@@ -95,10 +114,15 @@ void lqg_dist_apply_gains(lqg_gains_t *gains);
+ /**
+  * @brief Troca L e M pelos do Kalman do LQG ajustado numa cópia dos ganhos.
+  *
+- * Só as linhas de y e vy diferem das do Simulink: o TCC supunha o fluxo em vy
+- * bem menos ruidoso que em vx, e no drone os dois têm o mesmo ruído.
++ * Sem fusão, só as linhas de y e vy diferem das do Simulink: o TCC supunha o
++ * fluxo em vy bem menos ruidoso que em vx, e no drone os dois têm o mesmo
++ * ruído. Com @p fused (FLOW_EKF), vx e vy vêm do filtro de fusão e o Kalman
++ * confia mais neles.
++ *
++ * @param[in,out] gains  Cópia dos ganhos em uso.
++ * @param[in]     fused  Velocidade horizontal fundida com o acelerômetro.
+  */
+-void lqg_dist_apply_kalman(lqg_gains_t *gains);
++void lqg_dist_apply_kalman(lqg_gains_t *gains, bool fused);
+ 
+ /**
+  * @brief Entrada da predição do Kalman com a guinada e a altura na escala real.
+diff --git a/App/Inc/control/meas.h b/App/Inc/control/meas.h
+index e33c5d6..6cebfec 100644
+--- a/App/Inc/control/meas.h
++++ b/App/Inc/control/meas.h
+@@ -31,6 +31,7 @@
+ #define CONTROL_MEAS_H
+ 
+ #include "control/ctrl_params.h"
++#include "control/nav_ekf.h"
+ #include "control/lqg_ert.h"
+ 
+ #include <stdbool.h>
+@@ -70,8 +71,56 @@ typedef struct {
+   float flow_y;
+   /** Fluxo utilizável. */
+   bool flow_valid;
++  /** Qualidade da imagem do fluxo, 0..255 (usada só com FLOW_GATE). */
++  uint8_t flow_quality;
++  /** Velocidade vx prevista pelo Kalman para este passo (x̂[k|k-1]), em m/s; NAN se não houver. */
++  float pred_vx;
++  /** Velocidade vy prevista pelo Kalman para este passo, em m/s; NAN se não houver. */
++  float pred_vy;
++  /** Aceleração linear do BNO08x (gravidade já removida), em m/s², eixos do sensor. */
++  float lin_accel[3];
++  /** Aceleração linear válida (BNO online). */
++  bool accel_valid;
++  /** Drone apoiado no chão (armado e ainda não levantou): aplica velocidade zero ao EKF. */
++  bool on_ground;
++  /** Contador de quadros do MTF-01: as correções do EKF só usam quadro novo. */
++  uint32_t mtf_frame;
++  /** Relógio do MTF-01 no quadro, em ms (intervalo entre quadros). */
++  uint32_t mtf_time_ms;
+ } meas_input_t;
+ 
++/** Menor distância aceita pelo filtro de distância do EKF, em m. */
++#define NAV_MIN_RANGE_M 0.02F
++
++/** Distância mínima do MTF para o fluxo entrar no EKF (abaixo disso o fluxo é ruído), em m. */
++#define NAV_FLOW_MIN_RANGE_M 0.12F
++
++/** @brief Bits de ::meas_diag_t::flags (o que o EKF de navegação fez neste passo). */
++typedef enum {
++  MEAS_DIAG_NEW_FRAME = 1U << 0,       /**< Chegou quadro novo do MTF. */
++  MEAS_DIAG_FLOW_FUSED = 1U << 1,      /**< Velocidade do fluxo fundida no EKF. */
++  MEAS_DIAG_FLOW_REJECTED = 1U << 2,   /**< Velocidade do fluxo recusada pelo gate. */
++  MEAS_DIAG_XY_USABLE = 1U << 3,       /**< Velocidade x, y do EKF convergida e recente. */
++  MEAS_DIAG_XY_TO_LQG = 1U << 4,       /**< O LQG recebeu a velocidade do EKF (FLOW_EKF). */
++  MEAS_DIAG_RANGE_REJECTED = 1U << 5,  /**< Distância recusada pelo filtro de distância. */
++  MEAS_DIAG_Z_REJECTED = 1U << 6,      /**< Altura recusada pelo gate do EKF. */
++  MEAS_DIAG_Z_USABLE = 1U << 7         /**< z do EKF recente. */
++} meas_diag_flag_t;
++
++/** Bit extra (fora do uint8 de telemetria): o LQG recebeu o z do EKF (Z_EKF). */
++#define MEAS_DIAG_Z_TO_LQG (1U << 8)
++
++/** @brief O que o EKF de navegação viu neste passo, para a telemetria. */
++typedef struct {
++  float flow_raw[2];   /**< Fluxo do MTF, x e y do sensor, em rad/s. */
++  float flow_body[2];  /**< Velocidade do fluxo nos eixos do corpo (frente, direita), em m/s. */
++  float range_raw;     /**< Distância lida, em m. */
++  float range_filt;    /**< Distância filtrada, em m. */
++  float accel[3];      /**< Aceleração usada na predição: x, y locais e para baixo, em m/s². */
++  uint16_t flags;      /**< Combinação de ::meas_diag_flag_t e ::MEAS_DIAG_Z_TO_LQG. */
++  uint8_t quality;     /**< Qualidade do fluxo, 0..255. */
++} meas_diag_t;
++
+ /** @brief Estado da conversão (referência da guinada e última medida). */
+ typedef struct {
+   /** Última medida de cada saída (repetida quando o sensor falha). */
+@@ -84,6 +133,16 @@ typedef struct {
+   float yaw_unwrapped;
+   /** A origem da guinada já foi definida. */
+   bool yaw_ready;
++  /** Qualidade do fluxo acima do limiar, com histerese (FLOW_GATE). */
++  bool flow_quality_ok;
++  /** EKF de navegação x, y, z (control/nav_ekf.h). */
++  nav_ekf_t nav;
++  /** Último quadro do MTF usado nas correções. */
++  uint32_t last_mtf_frame;
++  /** Relógio do MTF no último quadro, em ms. */
++  uint32_t last_mtf_time_ms;
++  /** Diagnóstico do passo, para a telemetria. */
++  meas_diag_t diag;
+ } meas_state_t;
+ 
+ /**
+diff --git a/App/Inc/control/throttle.h b/App/Inc/control/throttle.h
+index 40b925c..a8abc18 100644
+--- a/App/Inc/control/throttle.h
++++ b/App/Inc/control/throttle.h
+@@ -52,6 +52,23 @@ float throttle_ramp_up(uint32_t elapsed_ms, uint32_t total_ms);
+  */
+ float throttle_blend(float throttle, float idle, float factor);
+ 
++/**
++ * @brief Aplica a rampa só à aceleração média, preservando a diferença entre os motores.
++ *
++ * ::throttle_blend encolhe cada motor em direção à marcha lenta, e com isso
++ * também a diferença que segura o nível (correção de atitude e desequilíbrio
++ * fixo): no instante em que o drone sai do chão a rampa ainda não terminou, e
++ * essa diferença chegaria atenuada. Aqui só a média entra em rampa e cada
++ * motor mantém seu desvio da média. Se algum motor ficar abaixo do mínimo,
++ * use ::throttle_desaturate em seguida.
++ *
++ * @param[in,out] throttle  Aceleração de cada motor (fração 0..1).
++ * @param[in]     count     Quantidade de motores.
++ * @param[in]     idle      Marcha lenta (fração 0..1).
++ * @param[in]     factor    Fração da rampa, 0..1.
++ */
++void throttle_blend_common(float *throttle, unsigned count, float idle, float factor);
++
+ /**
+  * @brief Desloca os motores juntos para caberem em [min, max].
+  *
+diff --git a/App/Inc/flight_config.h b/App/Inc/flight_config.h
+index 3d9b099..6e67c3e 100644
+--- a/App/Inc/flight_config.h
++++ b/App/Inc/flight_config.h
+@@ -58,7 +58,7 @@
+  * controle com 0,8.
+  */
+ #define DEFAULT_MOT_MAX   0.95F
+-/** Aceleração com o drone armado e parado no chão (fração 0..1). */
++/** Aceleração durante a partida de decolagem (fração 0..1); ARMADO envia zero. */
+ #define DEFAULT_MOT_IDLE  0.05F
+ 
+ /* ---- Zero (nível) do BNO08x -------------------------------------------
+@@ -121,13 +121,13 @@
+ /** Escala do fluxo em Y (ver DEFAULT_FLOW_SCALE_X). */
+ #define DEFAULT_FLOW_SCALE_Y 0.942F
+ /**
+- * Compensação da rotação no fluxo: a rotação do corpo também move a imagem.
+- * Nesta placa o pareamento é no mesmo eixo, com X invertido e Y não (ensaios
+- * isolados por eixo, ver docs/acompanhamento_tecnico.md).
++ * Compensação da rotação no fluxo pelo eixo de mesmo nome (pareamento direto).
++ * Desligada: neste drone o fluxo responde ao giro do outro eixo (ver
++ * ::DEFAULT_FLOW_GYRO_XY). Os ensaios antigos usavam X = +1 e Y = -1.
+  */
+-#define DEFAULT_FLOW_GYRO_X  (+1.0F)
+-/** Compensação da rotação no fluxo Y (ver DEFAULT_FLOW_GYRO_X). */
+-#define DEFAULT_FLOW_GYRO_Y  (-1.0F)
++#define DEFAULT_FLOW_GYRO_X  0.0F
++/** Ver ::DEFAULT_FLOW_GYRO_X. */
++#define DEFAULT_FLOW_GYRO_Y  0.0F
+ /**
+  * O MTF-01 fica longe do centro do drone (na traseira): girando em guinada, ele
+  * descreve um arco e mede uma velocidade que o centro não tem, r × distância.
+@@ -141,6 +141,88 @@
+ #define DEFAULT_FLOW_YAW_X   0.0F
+ /** Ver ::DEFAULT_FLOW_YAW_X. */
+ #define DEFAULT_FLOW_YAW_Y   0.09F
++/**
++ * Eixos do fluxo trocados em relação ao corpo. Ensaios de mão de 08/11 (a seco,
++ * nivelado): o movimento para o lado aparece no canal X do fluxo (direita
++ * negativa, esquerda positiva); frente e trás parecem cair no canal Y (frente
++ * positiva), com menos certeza. 0 mantém o mapeamento original (X = frente,
++ * Y = direita); 1 usa Y = frente e X = esquerda (padrão: é o que os voos usam).
++ */
++#define DEFAULT_FLOW_SWAP    1.0F
++/**
++ * 1 = o fluxo só entra se a qualidade passa de 30 (liga) e não cai a 15
++ * (desliga), a inclinação é menor que ~37° (cos ≥ 0,8) e |fluxo| ≤ 4,2 rad/s,
++ * como no estimador da branch mtf-bno-test (que seguia o ArduPilot). 0 =
++ * qualquer fluxo com qualidade > 0, como antes.
++ */
++#define DEFAULT_FLOW_GATE    0.0F
++/**
++ * 1 = o LQG recebe vx, vy do EKF de navegação (control/nav_ekf.h: fluxo +
++ * acelerômetro do BNO, com viés, quantização e gate) e usa o Kalman
++ * "fundido" (M, L com menos ruído em vx, vy; tools/lqg_ajustado.py). O EKF
++ * roda sempre, como diagnóstico (DRONE_NAV_DEBUG); este parâmetro só decide
++ * se o controle usa o que ele estima.
++ */
++#define DEFAULT_FLOW_EKF     0.0F
++/** 1 = o LQG recebe o z do EKF de navegação em vez da distância crua corrigida. */
++#define DEFAULT_Z_EKF        0.0F
++/** Ruído da aceleração horizontal do BNO em voo, em m/s² (desvio medido: 0,4 a 0,5). */
++#define DEFAULT_FEKF_ACC_N   1.0F
++/** Ruído da aceleração vertical do BNO em voo, em m/s². */
++#define DEFAULT_FEKF_ACCZ_N  1.0F
++/** Passeio do viés do acelerômetro, em m/s² por raiz de s. */
++#define DEFAULT_FEKF_BIAS_N  0.02F
++/**
++ * Ruído do fluxo, em rad/s. Vezes a distância dá m/s: 0,8 a 12 cm do chão são
++ * ~0,10 m/s, o desvio amostra a amostra medido em voo (o ArduPilot usa 0,25,
++ * mas o MTF em voo baixo é mais ruidoso).
++ */
++#define DEFAULT_FEKF_FLOW_N  0.8F
++/** Ruído da distância, em m (desvio medido parado: 4 a 6 mm). */
++#define DEFAULT_FEKF_RNG_N   0.006F
++/** Gate de inovação, em desvios (o padrão do ArduPilot é 3). */
++#define DEFAULT_FEKF_GATE    3.0F
++/**
++ * Taxa do DRONE_NAV_DEBUG (EKF de navegação) para a Pi, em Hz. O enlace é de
++ * 115200 baud e o DRONE_CTRL_DEBUG a 50 Hz já ocupa ~65% dele; a 10 Hz esta
++ * mensagem soma ~1 kB/s.
++ */
++#define DEFAULT_NAV_DBG_HZ   10.0F
++/**
++ * Integral do erro de posição x, y, em 1/s (0 desliga). O LQG só tem termo
++ * proporcional em x, y, e fraco (0,37° de inclinação por 10 cm): um erro de
++ * nível ou de equilíbrio de 1–2° deixava o drone 30–50 cm fora do ponto ou
++ * derivando para um lado. O integral desloca a referência que o LQG recebe até
++ * o erro médio zerar, como o I do laço de velocidade do ArduPilot. 0,3/s fica
++ * abaixo da banda do laço de posição (oscilação de x a ~0,2 Hz nos voos).
++ */
++#define DEFAULT_CTL_KI_XY    0.3F
++/** Limite do deslocamento integral de x, y, em m (anti-windup). */
++#define DEFAULT_CTL_XY_I_MAX 0.30F
++/**
++ * Pareamento cruzado da compensação do giro (FLOW_GYRO_XY e FLOW_GYRO_YX).
++ * Num voo de 08/11 (captura USB, hélices, 18 s de hover, ajuste por mínimos
++ * quadrados sem atraso) o fluxo bruto respondeu a gy no canal X e a gx no
++ * canal Y, não ao eixo do mesmo nome: flow_x ≈ -1,3 a -1,6·gy e
++ * flow_y ≈ +1,6 a +1,7·gx. Os módulos acima de 1 incluem o braço do sensor.
++ * Os ensaios a seco de 08/11 (222149, 220912) confirmaram flow_x ≈ -1,7·gy.
++ * Padrão desde 08/11: em 21:08–22:21 o --set esqueceu estes valores e todos
++ * os voos rodaram com o pareamento direto, errado.
++ */
++#define DEFAULT_FLOW_GYRO_XY 1.45F
++/** Ver ::DEFAULT_FLOW_GYRO_XY. */
++#define DEFAULT_FLOW_GYRO_YX (-1.65F)
++/**
++ * 1 = quando o MTF-01 devolve contagem zero num eixo (ele só reporta degraus
++ * de 0,2 rad/s), o Kalman recebe a própria predição, limitada à faixa de
++ * ±0,1 rad/s, no lugar de "velocidade = 0". Capturas de 08/11 mostraram que
++ * o sensor parado leva a um desvio de ~0,65 rad/s por amostra.
++ */
++#define DEFAULT_FLOW_CENS    0.0F
++/** Viés do fluxo X do sensor, em rad/s (medido parado: ~+0,047). 0 = sem correção. */
++#define DEFAULT_FLOW_BIAS_X  0.0F
++/** Viés do fluxo Y do sensor, em rad/s (medido parado: ~-0,024). 0 = sem correção. */
++#define DEFAULT_FLOW_BIAS_Y  0.0F
+ 
+ /* ---- Voo ---------------------------------------------------------------- */
+ 
+@@ -170,6 +252,8 @@
+ #define FLIGHT_TAKEOFF_RAMP_MS 2000U
+ /** Altura estimada acima da qual o drone conta como "saiu do chão", em m. */
+ #define FLIGHT_LIFTED_HEIGHT_M 0.03F
++/** Altura estimada abaixo da qual o drone conta como apoiado no chão (ZUPT do EKF), em m. */
++#define FLIGHT_GROUNDED_HEIGHT_M 0.01F
+ /** Menor velocidade de descida no pouso, em m/s (a rampa do pouso nunca é um degrau). */
+ #define FLIGHT_LAND_MIN_RATE_M_S 0.03F
+ /**
+@@ -201,6 +285,20 @@
+  * do efeito solo o drone sobe devagar enquanto o estimador acha o empuxo.
+  */
+ #define DEFAULT_FLT_PRESO      0.0F
++/**
++ * 1 = a rampa de partida só reduz a aceleração média, e a diferença entre os
++ * motores (atitude e desequilíbrio fixo) chega inteira (FLT_RAMP_CM). Em 7
++ * voos reais o pitch disparou (14 a 20°) logo depois de o drone sair do chão,
++ * quando a rampa ainda encolhia essa diferença a ~90%; o pico sempre cai no
++ * fim da rampa. 0 = comportamento anterior, para comparar.
++ */
++#define DEFAULT_FLT_RAMP_CM    0.0F
++/**
++ * Limite da guinada total (LQG + FF + estimador), em rad/s (0 = sem limite).
++ * Em 5 voos reais de 08/11 um giro súbito (|r| de 1,2 a 3,7 rad/s) fez o LQG
++ * pedir ±200 a ±400 rad/s e levou roll e pitch ao failsafe.
++ */
++#define DEFAULT_CTL_PSI_MAX    0.0F
+ /** Subida que conta como progresso e recomeça a contagem, em m (ver ::FLIGHT_STUCK_ERROR_M). */
+ #define FLIGHT_STUCK_RISE_M    0.02F
+ /** Tempo travado até segurar na altura medida, em ms (ver ::FLIGHT_STUCK_ERROR_M). */
+@@ -228,10 +326,10 @@
+ #define DEFAULT_LAND_HEIGHT_M  0.03F
+ /**
+  * 1 = o LQG também segura x e y (usa o fluxo óptico); 0 = só atitude e
+- * altura (control/attitude_mode.h). Ligado: o voo livre (sem cordinhas, sem
+- * cabo) precisa segurar o ponto de decolagem.
++ * altura (control/attitude_mode.h). Padrão desligado até a atitude e a altura
++ * serem validadas. O ensaio de XY deve ser ativado explicitamente com CTL_XY=1.
+  */
+-#define DEFAULT_CTL_XY         1.0F
++#define DEFAULT_CTL_XY         0.0F
+ 
+ /* ---- Ajuste lento do hover e do equilíbrio (control/trim.h) ---------------
+    O LQR do TCC não tem integrador, então um hover errado ou um peso mal
+@@ -263,10 +361,10 @@
+  * rad/s por motor (+ na frente, − atrás). Até 05/11 a traseira era mais pesada
+  * e o drone precisava de −90. Em 06/11 entrou o chumbo de verdade e o frame
+  * ficou mais equilibrado; nos hovers de 06/11 o estimador de perturbação
+- * parou sempre perto de θ = −22 e φ = −40 rad/s. Começar já neles evita que o
+- * drone saia para o lado enquanto o estimador (lento, de propósito) aprende.
++ * parou perto de θ = −22 e φ = −40 rad/s. Usa-se o valor conservador de θ
++ * anterior à integração Pi; o estimador continua livre para corrigir o restante.
+  */
+-#define DEFAULT_CTL_FF_TH      (-50.0F)
++#define DEFAULT_CTL_FF_TH      (-20.0F)
+ /**
+  * Desequilíbrio esquerda/direita fixo, em rad/s (+ na esquerda; mesmo padrão do
+  * φ do estimador). Nos hovers de 06/11 o estimador parou em −40 em todos os
+@@ -277,12 +375,10 @@
+  * Torque de guinada fixo, em rad/s (mesmo padrão do ψ do estimador). Nos voos
+  * de 06/11 com o estimador de guinada, ele parou em +49 a +61.
+  *
+- * Os três desequilíbrios juntos (θ −50, φ −40, ψ +50) são o motor M4 (u1,
+- * frente esquerda) precisando de ~15% menos aceleração que os outros: no voo de
+- * 50 cm de 06/11 os motores ficaram em 76, 74, 76 e 61%. Valores da mediana
+- * do total (fixo + estimado) no fim dos voos de 06/11 com o chumbo.
++ * Desligado por padrão: o torque fixo de guinada não foi qualificado no voo
++ * livre desta integração. Pode ser testado isoladamente com CTL_FF_PSI.
+  */
+-#define DEFAULT_CTL_FF_PSI     50.0F
++#define DEFAULT_CTL_FF_PSI     0.0F
+ 
+ /** 1 = liga o ajuste lento (CTL_TRIM). Padrão desligado: o painel liga. */
+ #define DEFAULT_CTL_TRIM       0.0F
+diff --git a/App/Inc/motors.h b/App/Inc/motors.h
+index 4cb3e00..61ebeb0 100644
+--- a/App/Inc/motors.h
++++ b/App/Inc/motors.h
+@@ -12,7 +12,8 @@
+  *   escreve a aceleração dos quatro motores a cada passo do LQG.
+  *
+  * ::motors_stop() pode ser chamada de qualquer task e zera tudo no próximo
+- * quadro. O dono atual percebe a parada por ::motors_owner().
++ * quadro. No voo, a saída também desarma se não receber atualização do controle
++ * por 100 ms. O dono atual percebe a parada por ::motors_owner().
+  *
+  * Numeração: M1..M4 = PB6..PB9, a numeração física do drone (frente = M2 e
+  * M4, trás = M1 e M3, direita = M1 e M2, esquerda = M3 e M4; M1 e M4 têm
+diff --git a/App/Src/control/ctrl_params.c b/App/Src/control/ctrl_params.c
+index e57345a..8d9c32e 100644
+--- a/App/Src/control/ctrl_params.c
++++ b/App/Src/control/ctrl_params.c
+@@ -107,6 +107,46 @@ static const ctrl_param_desc_t TABLE[] = {
+           CTRL_PARAM_BOOL | CTRL_PARAM_DISARMED_ONLY, "1 = estimador de perturbacao"),
+     PARAM("FLT_PRESO", stuck_detect, 0.0F, 1.0F, DEFAULT_FLT_PRESO, CTRL_PARAM_BOOL,
+           "1 = detector de subida presa (cordinhas)"),
++    PARAM("CTL_PSI_MAX", psi_max, 0.0F, 400.0F, DEFAULT_CTL_PSI_MAX, CTRL_PARAM_LIVE,
++          "limite da guinada no du (rad/s, 0=sem)"),
++    PARAM("FLT_RAMP_CM", ramp_common_mode, 0.0F, 1.0F, DEFAULT_FLT_RAMP_CM,
++          CTRL_PARAM_BOOL | CTRL_PARAM_DISARMED_ONLY, "1 = rampa so na media, sem encolher a diferenca"),
++    PARAM("FLOW_GYRO_XY", flow_gyro_xy, -3.0F, 3.0F, DEFAULT_FLOW_GYRO_XY, CTRL_PARAM_LIVE,
++          "giro y do BNO (roll) no fluxo X (cruzado)"),
++    PARAM("FLOW_GYRO_YX", flow_gyro_yx, -3.0F, 3.0F, DEFAULT_FLOW_GYRO_YX, CTRL_PARAM_LIVE,
++          "giro x do BNO (pitch) no fluxo Y (cruzado)"),
++    PARAM("FLOW_EKF", flow_ekf, 0.0F, 1.0F, DEFAULT_FLOW_EKF,
++          CTRL_PARAM_BOOL | CTRL_PARAM_DISARMED_ONLY, "1 = LQG usa vx,vy do EKF de navegacao"),
++    PARAM("Z_EKF", z_ekf, 0.0F, 1.0F, DEFAULT_Z_EKF, CTRL_PARAM_BOOL | CTRL_PARAM_DISARMED_ONLY,
++          "1 = LQG usa o z do EKF de navegacao"),
++    PARAM("FEKF_ACC_N", fekf_acc_noise, 0.05F, 5.0F, DEFAULT_FEKF_ACC_N, CTRL_PARAM_LIVE,
++          "ruido da aceleracao horizontal (m/s2)"),
++    PARAM("FEKF_ACCZ_N", fekf_accz_noise, 0.05F, 5.0F, DEFAULT_FEKF_ACCZ_N, CTRL_PARAM_LIVE,
++          "ruido da aceleracao vertical (m/s2)"),
++    PARAM("FEKF_BIAS_N", fekf_bias_noise, 0.001F, 0.5F, DEFAULT_FEKF_BIAS_N, CTRL_PARAM_LIVE,
++          "passeio do vies do acelerometro"),
++    PARAM("FEKF_FLOW_N", fekf_flow_noise, 0.05F, 5.0F, DEFAULT_FEKF_FLOW_N, CTRL_PARAM_LIVE,
++          "ruido do fluxo no EKF (rad/s)"),
++    PARAM("FEKF_RNG_N", fekf_range_noise, 0.001F, 0.1F, DEFAULT_FEKF_RNG_N, CTRL_PARAM_LIVE,
++          "ruido da distancia no EKF (m)"),
++    PARAM("FEKF_GATE", fekf_gate, 0.0F, 10.0F, DEFAULT_FEKF_GATE, CTRL_PARAM_LIVE,
++          "gate de inovacao do EKF (desvios)"),
++    PARAM("FLOW_GATE", flow_gate, 0.0F, 1.0F, DEFAULT_FLOW_GATE,
++          CTRL_PARAM_BOOL | CTRL_PARAM_DISARMED_ONLY, "1 = rejeita fluxo ruim (qualidade, inclinacao)"),
++    PARAM("FLOW_CENS", flow_cens, 0.0F, 1.0F, DEFAULT_FLOW_CENS,
++          CTRL_PARAM_BOOL | CTRL_PARAM_DISARMED_ONLY, "1 = fluxo zero usa a predicao do Kalman"),
++    PARAM("FLOW_BIAS_X", flow_bias_x, -0.3F, 0.3F, DEFAULT_FLOW_BIAS_X, CTRL_PARAM_LIVE,
++          "vies do fluxo X parado (rad/s)"),
++    PARAM("FLOW_BIAS_Y", flow_bias_y, -0.3F, 0.3F, DEFAULT_FLOW_BIAS_Y, CTRL_PARAM_LIVE,
++          "vies do fluxo Y parado (rad/s)"),
++    PARAM("NAV_DBG_HZ", nav_debug_rate_hz, 0.0F, 25.0F, DEFAULT_NAV_DBG_HZ, CTRL_PARAM_LIVE,
++          "DRONE_NAV_DEBUG para a Pi (Hz)"),
++    PARAM("FLOW_SWAP", flow_swap, 0.0F, 1.0F, DEFAULT_FLOW_SWAP,
++          CTRL_PARAM_BOOL | CTRL_PARAM_DISARMED_ONLY, "1 = fluxo Y e a frente, X e a esquerda"),
++    PARAM("CTL_KI_XY", ki_xy, 0.0F, 2.0F, DEFAULT_CTL_KI_XY, CTRL_PARAM_LIVE,
++          "integral do erro de x,y (1/s, 0=sem)"),
++    PARAM("CTL_XY_I_MAX", xy_i_max, 0.0F, 1.0F, DEFAULT_CTL_XY_I_MAX, CTRL_PARAM_LIVE,
++          "limite do integral de x,y (m)"),
+ };
+ 
+ /** Quantidade de entradas da tabela. */
+diff --git a/App/Src/control/flight_ctrl.c b/App/Src/control/flight_ctrl.c
+index e59d26d..5c01a44 100644
+--- a/App/Src/control/flight_ctrl.c
++++ b/App/Src/control/flight_ctrl.c
+@@ -178,6 +178,8 @@ static lqg_dist_t dist;
+ static bool dist_released;
+ /** O XY já entrou neste voo (drone fora do chão); a posição foi zerada ali. */
+ static bool xy_engaged;
++/** Deslocamento integral da referência x, y (referencial local), em m: ver ::update_xy_integral. */
++static float xy_int[2];
+ /** Tick do último aviso de fluxo ausente com o XY ligado. */
+ static uint32_t flow_lost_said_ms;
+ /** Altura medida (z NED) deste passo, em m. */
+@@ -683,6 +685,7 @@ static void handle_request(const request_t *req, uint32_t now) {
+       lqg_dist_reset(&dist);
+       dist_released = false;
+       xy_engaged = false;
++      xy_int[0] = xy_int[1] = 0.0F;
+       trim_reset(&trim);
+       if (trim_learned_valid) {
+         trim.theta = trim_learned.theta;
+@@ -836,6 +839,19 @@ static void read_sensors(meas_input_t *in) {
+   in->flow_x = (float)mtf.flow_x * 0.01F;
+   in->flow_y = (float)mtf.flow_y * 0.01F;
+   in->flow_valid = mtf.flow_valid;
++  in->flow_quality = mtf.quality;
++  /* Prior x̂[k|k-1] do Kalman: base da correção censurada do fluxo (FLOW_CENS). */
++  in->pred_vx = (float)lqg.x_pred[LQG_X_VX];
++  in->pred_vy = (float)lqg.x_pred[LQG_X_VY];
++  memcpy(in->lin_accel, bno.lin_accel, sizeof(in->lin_accel));
++  in->accel_valid = bno.online;
++  /* ZUPT só com o drone de fato apoiado: preso a "velocidade zero" depois de sair do chão, o
++     EKF esconderia o deslize (voo de 08/11 21:10: andou ~40 cm com o log em y = -0,9 cm). */
++  in->on_ground = is_armed_state(state) && !lifted &&
++                  (!isfinite(z_ground) ||
++                   z_ground - (float)lqg.x_filt[LQG_X_Z] < FLIGHT_GROUNDED_HEIGHT_M);
++  in->mtf_frame = mtf.frames;
++  in->mtf_time_ms = mtf.time_ms;
+ }
+ 
+ /**
+@@ -890,6 +906,39 @@ static void supervise(uint8_t flags, const lqg_real_t y[LQG_NY], uint32_t now) {
+   }
+ }
+ 
++/**
++ * @brief Integral do erro de posição x, y (CTL_KI_XY).
++ *
++ * O LQG só tem termo proporcional em x, y. Um erro constante (nível do BNO,
++ * desequilíbrio) segura o drone fora do ponto ou o faz derivar para um lado.
++ * O integral soma o erro e desloca a referência que o LQG recebe; o
++ * pré-compensador tem ganho DC unitário, então o equilíbrio anda junto.
++ *
++ * Anti-windup: só integra no ar, com o XY ligado, fora do pouso e com
++ * velocidade x, y válida neste passo (fluxo ou inércia do EKF); fora disso
++ * congela. O deslocamento é limitado a CTL_XY_I_MAX (norma do vetor) e zera
++ * quando o XY desliga ou o ganho é 0.
++ *
++ * @param[in] flags  Medidas válidas deste passo (::meas_flag_t).
++ */
++static void update_xy_integral(uint8_t flags) {
++  if (!xy_engaged || !(prm.ki_xy > 0.0F)) {
++    xy_int[0] = xy_int[1] = 0.0F;
++    return;
++  }
++  const bool integrate = lifted && is_airborne_state(state) && state != FLIGHT_STATE_LAND &&
++                         (flags & MEAS_FLOW) != 0U;
++  if (!integrate) return;
++  xy_int[0] += prm.ki_xy * (ref[LQG_R_X] - (float)lqg.x_filt[LQG_X_X]) * DT_S;
++  xy_int[1] += prm.ki_xy * (ref[LQG_R_Y] - (float)lqg.x_filt[LQG_X_Y]) * DT_S;
++  const float norm = sqrtf(xy_int[0] * xy_int[0] + xy_int[1] * xy_int[1]);
++  const float limit = fmaxf(prm.xy_i_max, 0.0F);
++  if (norm > limit && norm > 0.0F) {
++    xy_int[0] *= limit / norm;
++    xy_int[1] *= limit / norm;
++  }
++}
++
+ /** @brief Avança a referência em rampa até o alvo. */
+ static void update_reference(uint32_t now) {
+   /* A referência só sobe depois da marcha lenta e da rampa de partida. */
+@@ -1139,6 +1188,18 @@ static void update_dist(bool enabled, const float u[LQG_NU]) {
+     say("dist z=%d th=%d phi=%d psi=%d", (int)lqg_dist_get(&dist, LQG_DIST_Z),
+         (int)lqg_dist_get(&dist, LQG_DIST_THETA), (int)lqg_dist_get(&dist, LQG_DIST_PHI),
+         (int)lqg_dist_get(&dist, LQG_DIST_PSI));
++    /* Alturas em cm; velocidades em cm/s NED (+ desce). A Pi guarda este
++       texto mesmo sem USB, permitindo comparar os dois observadores de Z. */
++    if (xy_engaged) {
++      say("XY I cm x=%d y=%d", (int)(xy_int[0] * 100.0F), (int)(xy_int[1] * 100.0F));
++    }
++    if (meas_z_tracking && isfinite(z_ground)) {
++      say("Z cm h=%d ref=%d vz=%d vd=%d",
++          (int)((z_ground - meas_z_smooth) * 100.0F),
++          (int)((z_ground - ref[LQG_R_Z]) * 100.0F),
++          (int)(lqg.x_filt[LQG_X_VZ] * 100.0),
++          (int)(dist.s[LQG_DIST_Z][1] * 100.0F));
++    }
+   }
+   /* No chão o apoio segura o drone, e o estimador leria isso como empuxo
+      sobrando (05/11: d̂ de altura em −160 rad/s e o drone não decolava). Até
+@@ -1166,7 +1227,7 @@ static void update_dist(bool enabled, const float u[LQG_NU]) {
+  * @param[out] du_applied  Entrada aplicada, para a predição.
+  * @param[out] flags       Recebe ::FLIGHT_FLAG_SATURATED e ::FLIGHT_FLAG_CONTROL_ACTIVE.
+  */
+-static void compute_output(const lqg_real_t du[LQG_NU], float throttle[LQG_NU],
++static void compute_output(const lqg_real_t du_lqg[LQG_NU], float throttle[LQG_NU],
+                            lqg_real_t du_applied[LQG_NU], uint8_t *flags) {
+   const uint32_t now = HAL_GetTick();
+   const uint32_t since_arm = now - armed_ms;
+@@ -1181,7 +1242,8 @@ static void compute_output(const lqg_real_t du[LQG_NU], float throttle[LQG_NU],
+   }
+   if (!active) {
+     for (unsigned i = 0U; i < LQG_NU; ++i) {
+-      throttle[i] = is_armed_state(state) ? prm.mot_idle : 0.0F;
++      /* Armar apenas reserva a saída. O ESC só recebe rotação após TAKEOFF. */
++      throttle[i] = state == FLIGHT_STATE_TAKEOFF ? prm.mot_idle : 0.0F;
+     }
+     if (dist_active) {
+       const float idle[LQG_NU] = {0.0F, 0.0F, 0.0F, 0.0F};
+@@ -1213,19 +1275,30 @@ static void compute_output(const lqg_real_t du[LQG_NU], float throttle[LQG_NU],
+     trim_values(&trim, slow_w);
+   }
+   for (unsigned i = 0U; i < LQG_NU; ++i) trim_w[i] += slow_w[i];
++  /* Limita o pedido completo: FF e estimador também produzem torque de yaw.
++     Limitar só du deixava essas parcelas ultrapassarem CTL_PSI_MAX. */
++  lqg_real_t requested[LQG_NU], limited[LQG_NU];
++  for (unsigned i = 0U; i < LQG_NU; ++i) requested[i] = du_lqg[i] + trim_w[i];
++  const bool yaw_cut = lqg_dist_limit_yaw(requested, limited, prm.psi_max);
+   for (unsigned i = 0U; i < LQG_NU; ++i) {
+-    const float w = prm.w0 + (float)du[i] + trim_w[i];
++    const float w = prm.w0 + (float)limited[i];
+     throttle[i] = span > 0.0F ? (w - prm.mot_w_at_0) / span : 0.0F;
+   }
+   /* Um motor no teto desloca os quatro: a diferença que segura o nível fica. */
+   bool modified = throttle_desaturate(throttle, LQG_NU, prm.mot_min, prm.mot_max);
+-  if (modified) *flags |= FLIGHT_FLAG_SATURATED;
++  if (modified || yaw_cut) *flags |= FLIGHT_FLAG_SATURATED;
++  if (yaw_cut) modified = true;
+   if (ramping_up || spinning_down) {
+     const float factor = ramping_up
+         ? throttle_ramp_up(since_arm - SPINUP_MS, FLIGHT_TAKEOFF_RAMP_MS)
+         : throttle_ramp_down(now - land_spindown_ms, FLIGHT_LAND_SPINDOWN_MS);
+-    for (unsigned i = 0U; i < LQG_NU; ++i) {
+-      throttle[i] = throttle_blend(throttle[i], prm.mot_idle, factor);
++    if (ramping_up && prm.ramp_common_mode >= 0.5F) {
++      throttle_blend_common(throttle, LQG_NU, prm.mot_idle, factor);
++      (void)throttle_desaturate(throttle, LQG_NU, prm.mot_min, prm.mot_max);
++    } else {
++      for (unsigned i = 0U; i < LQG_NU; ++i) {
++        throttle[i] = throttle_blend(throttle[i], prm.mot_idle, factor);
++      }
+     }
+     modified = true;
+   }
+@@ -1236,8 +1309,10 @@ static void compute_output(const lqg_real_t du[LQG_NU], float throttle[LQG_NU],
+          saturação nem rampa, é exatamente o du do LQG. */
+       du_applied[i] = modified
+           ? (lqg_real_t)(prm.mot_w_at_0 + throttle[i] * span - prm.w0 - trim_w[i])
+-          : du[i];
+-      sim_input[i] = (float)du_applied[i] + slow_w[i];
++          : du_lqg[i];
++      /* A planta simulada recebe o comando físico completo. O Kalman continua
++         usando du_applied, pois FF/trim são perturbações fora do modelo. */
++      sim_input[i] = (float)du_applied[i] + trim_w[i];
+     }
+   }
+   *flags |= FLIGHT_FLAG_CONTROL_ACTIVE;
+@@ -1252,6 +1327,30 @@ static void compute_output(const lqg_real_t du[LQG_NU], float throttle[LQG_NU],
+   }
+ }
+ 
++/** @brief Copia o estado do EKF de navegação e o diagnóstico do passo para a telemetria. */
++static void nav_snapshot(flight_nav_telemetry_t *n) {
++  const nav_ekf_t *f = &meas.nav;
++  const meas_diag_t *d = &meas.diag;
++  memcpy(n->flow_raw, d->flow_raw, sizeof(n->flow_raw));
++  memcpy(n->flow_body, d->flow_body, sizeof(n->flow_body));
++  memcpy(n->accel, d->accel, sizeof(n->accel));
++  n->range_raw = d->range_raw;
++  n->range_filt = d->range_filt;
++  const nav_ekf_axis_t *axes[3] = {&f->h[0], &f->h[1], &f->z};
++  for (unsigned i = 0U; i < 3U; ++i) {
++    n->pos[i] = axes[i]->x[0];
++    n->vel[i] = axes[i]->x[1];
++    n->bias[i] = axes[i]->x[2];
++  }
++  n->flow_ratio = f->flow_ratio;
++  n->z_ratio = f->z_ratio;
++  n->flow_rejected = f->flow_rejected;
++  n->z_rejected = f->z_rejected;
++  n->range_rejected = f->range.rejected;
++  n->flags = d->flags;
++  n->quality = d->quality;
++}
++
+ /** @brief Publica a fotografia do passo e, na taxa pedida, a linha EST. */
+ static void publish(uint32_t now, uint32_t step_count, uint8_t meas_flags, uint8_t flags,
+                     const lqg_real_t y[LQG_NY], const lqg_real_t du[LQG_NU],
+@@ -1271,6 +1370,7 @@ static void publish(uint32_t now, uint32_t step_count, uint8_t meas_flags, uint8
+   memcpy(t.ref, ref, sizeof(t.ref));
+   memcpy(t.q, bno.q, sizeof(t.q));
+   t.z_ground = z_ground;
++  nav_snapshot(&t.nav);
+   if (step_us > t.max_step_us) t.max_step_us = step_us;
+   if ((meas_flags & (MEAS_ATTITUDE | MEAS_GYRO)) != (MEAS_ATTITUDE | MEAS_GYRO)) ++t.bno_misses;
+   if ((meas_flags & MEAS_RANGE) == 0U) ++t.mtf_misses;
+@@ -1331,7 +1431,7 @@ static void step(uint32_t step_count) {
+      ajustado troca Kd/Kfd (gerados ou do painel USB) e o Kalman. */
+   if (prm.lqg_adjusted >= 0.5F && ctrl_gains_active_is_default()) {
+     lqg_tuning_apply(&lqg_aj_gains, &gains_effective);
+-    lqg_dist_apply_kalman(&gains_effective);
++    lqg_dist_apply_kalman(&gains_effective, prm.flow_ekf >= 0.5F);
+   }
+   meas_z_now = (float)y[LQG_Y_Z];
+   meas_range_ok = (meas_flags & MEAS_RANGE) != 0U;
+@@ -1339,7 +1439,10 @@ static void step(uint32_t step_count) {
+      o fluxo do MTF não vale (sensor a 8–10 cm do piso) e, sem ele, o Kalman
+      integraria a inclinação da mesa como velocidade durante a rampa de
+      partida. Ao entrar, a posição é zerada: o ponto de decolagem é o (0, 0). */
+-  if (use_xy && is_airborne_state(state) && lifted && !xy_engaged) {
++  /* Com FLOW_EKF o XY liga já na partida: o EKF segura a velocidade zero no chão (ZUPT) e,
++     no ar sem fluxo, segue pela inércia, então o drone não perde a origem na subida. */
++  const bool early_xy = prm.flow_ekf >= 0.5F && nav_ekf_xy_inertial(&meas.nav);
++  if (use_xy && is_airborne_state(state) && (lifted || early_xy) && !xy_engaged) {
+     static const unsigned horizontal[] = {LQG_X_X, LQG_X_Y, LQG_X_VX, LQG_X_VY};
+     for (unsigned k = 0U; k < sizeof(horizontal) / sizeof(horizontal[0]); ++k) {
+       lqg.x_filt[horizontal[k]] = 0.0;
+@@ -1347,6 +1450,7 @@ static void step(uint32_t step_count) {
+     }
+     ref[LQG_R_X] = ref[LQG_R_Y] = 0.0F;
+     goal.target[LQG_R_X] = goal.target[LQG_R_Y] = 0.0F;
++    nav_ekf_zero_position(&meas.nav);
+     xy_engaged = true;
+     say("XY: ligado, ponto (0,0) na decolagem");
+   }
+@@ -1411,8 +1515,12 @@ static void step(uint32_t step_count) {
+   check_stuck(now);
+   update_reference(now);
+ 
++  update_xy_integral(meas_flags);
+   lqg_real_t r[LQG_NR];
+   for (unsigned i = 0U; i < LQG_NR; ++i) r[i] = (lqg_real_t)ref[i];
++  /* Só o LQG vê o deslocamento integral; ref (e o log) continua sendo o alvo. */
++  r[LQG_R_X] += (lqg_real_t)xy_int[0];
++  r[LQG_R_Y] += (lqg_real_t)xy_int[1];
+   /* Com o XY na malha, o LQG trabalha no referencial da proa (ver
+      attitude_mode_rotate_horizontal). ψ é o mesmo que girou o fluxo em meas. */
+   const bool heading_frame = use_xy && xy_engaged;
+@@ -1422,6 +1530,13 @@ static void step(uint32_t step_count) {
+     attitude_mode_rotate_pair(&r[LQG_R_X], &r[LQG_R_Y], -psi_now);
+     if (!lqg.ic_load) attitude_mode_rotate_horizontal(lqg.x_pred, -psi_now);
+   }
++  /* O Kalman do LQG não mede vz: ele a tira do modelo de empuxo, e o erro do modelo vira um
++     viés (−14 a −18 cm/s com a altura parada nos voos de 08/11, que segurava o drone a ~5 cm).
++     Com Z_EKF, o prior de vz é o do EKF (distância + acelerômetro), que acompanhou a altura. */
++  if (prm.z_ekf >= 0.5F && is_airborne_state(state) && !lqg.ic_load &&
++      nav_ekf_z_usable(&meas.nav) && isfinite(meas.nav.z.x[1])) {
++    lqg.x_pred[LQG_X_VZ] = (lqg_real_t)meas.nav.z.x[1];
++  }
+   lqg_real_t du[LQG_NU];
+   lqg_ert_output(&lqg, &gains_effective, y, r, du);
+ 
+diff --git a/App/Src/control/lqg_ajustado_gains.c b/App/Src/control/lqg_ajustado_gains.c
+index a8ffb86..1ccc818 100644
+--- a/App/Src/control/lqg_ajustado_gains.c
++++ b/App/Src/control/lqg_ajustado_gains.c
+@@ -62,6 +62,37 @@ const lqg_real_t LQG_AJ_L[LQG_NX][LQG_NY] = {
+   { 0.0, 0.0, 0.0, 5.5929915102872953e-08, 0.0, 0.0, 0.0, 0.0, 0.9997621132205053 },  /* r */
+ };
+ 
++/* Kalman com a velocidade fundida (FLOW_EKF): vx, vy com desvio de 0.03 m/s. */
++const lqg_real_t LQG_AJ_M_FUSED[LQG_NX][LQG_NY] = {
++  { 0.0, 0.0, -2.5718632448602733e-06, 0.0, 0.003640180075362592, 0.0, 0.0, 5.694465552165046e-11, 0.0 },  /* x */
++  { 0.0, 6.656677699835085e-07, 0.0, 0.0, 0.0, 0.003640178016519275, -3.1767572331158495e-10, 0.0, 0.0 },  /* y */
++  { 0.31689367490467113, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 },  /* z */
++  { 0.0, 0.9950494841804627, 0.0, 0.0, 0.0, 9.81063819289756e-09, 1.013552752230501e-07, 0.0, 0.0 },  /* phi */
++  { 0.0, 0.0, 0.9813181453568494, 0.0, -1.4209714414270213e-07, 0.0, 0.0, 6.047077500716258e-08, 0.0 },  /* theta */
++  { 0.0, 0.0, 0.0, 0.9940318937859601, 0.0, 0.0, 0.0, 0.0, 1.419397845613124e-08 },  /* psi */
++  { 0.0, 0.0, -0.0006592135553011944, 0.0, 0.6359786755316587, 0.0, 0.0, -5.566829020030393e-08, 0.0 },  /* vx */
++  { 0.0, 0.00017659148747216854, 0.0, 0.0, 0.0, 0.6359784473238577, 3.622215973480636e-07, 0.0, 0.0 },  /* vy */
++  { 2.437222804921403, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 },  /* vz */
++  { 0.0, 4.175837339233529e-06, 0.0, 0.0, 0.0, 8.290849894852863e-10, 0.9979484436559901, 0.0, 0.0 },  /* p */
++  { 0.0, 0.0, 1.0099242836154602e-07, 0.0, -2.0040584472122993e-11, 0.0, 0.0, 0.9996762097817663, 0.0 },  /* q */
++  { 0.0, 0.0, 0.0, 5.5929915102872953e-08, 0.0, 0.0, 0.0, 0.0, 0.9997621132205053 },  /* r */
++};
++
++const lqg_real_t LQG_AJ_L_FUSED[LQG_NX][LQG_NY] = {
++  { 0.0, 0.0, -0.000490498886130301, 0.0, 0.009999898699931105, 0.0, 0.0, -1.6349959136736454e-06, 0.0 },  /* x */
++  { 0.0, 0.0004905017190746705, 0.0, 0.0, 0.0, 0.009999894294156784, 1.6349958661841118e-06, 0.0, 0.0 },  /* y */
++  { 0.34126590295388515, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 },  /* z */
++  { 0.0, 0.9950495259388361, 0.0, 0.0, 0.0, 9.818929042792413e-09, 0.009979585791835124, 0.0, 0.0 },  /* phi */
++  { 0.0, 0.0, 0.9813181463667736, 0.0, -1.4209734454854686e-07, 0.0, 0.0, 0.00999682256859267, 0.0 },  /* theta */
++  { 0.0, 0.0, 0.0, 0.9940318943452593, 0.0, 0.0, 0.0, 0.0, 0.00999763532618351 },  /* psi */
++  { 0.0, 0.0, -0.09692652366434491, 0.0, 0.6359786894713984, 0.0, 0.0, -0.0004904027813711849, 0.0 },  /* vx */
++  { 0.0, 0.09779094793382379, 0.0, 0.0, 0.0, 0.6359784482866879, 0.0004898658761631106, 0.0, 0.0 },  /* vy */
++  { 2.437222804921403, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 },  /* vz */
++  { 0.0, 4.175837339233529e-06, 0.0, 0.0, 0.0, 8.290849894852863e-10, 0.9979484436559901, 0.0, 0.0 },  /* p */
++  { 0.0, 0.0, 1.0099242836154602e-07, 0.0, -2.0040584472122993e-11, 0.0, 0.0, 0.9996762097817663, 0.0 },  /* q */
++  { 0.0, 0.0, 0.0, 5.5929915102872953e-08, 0.0, 0.0, 0.0, 0.0, 0.9997621132205053 },  /* r */
++};
++
+ const lqg_dist_channel_t LQG_DIST_CHANNELS[LQG_DIST_NC] = {
+   { /* altura */
+     .pos = LQG_X_Z, .vel = LQG_X_VZ, .ny = 1U,
+diff --git a/App/Src/control/lqg_dist.c b/App/Src/control/lqg_dist.c
+index 2c66640..6c94949 100644
+--- a/App/Src/control/lqg_dist.c
++++ b/App/Src/control/lqg_dist.c
+@@ -14,11 +14,13 @@ void lqg_dist_apply_gains(lqg_gains_t *gains) {
+   }
+ }
+ 
+-void lqg_dist_apply_kalman(lqg_gains_t *gains) {
++void lqg_dist_apply_kalman(lqg_gains_t *gains, bool fused) {
++  const lqg_real_t(*M)[LQG_NY] = fused ? LQG_AJ_M_FUSED : LQG_AJ_M;
++  const lqg_real_t(*L)[LQG_NY] = fused ? LQG_AJ_L_FUSED : LQG_AJ_L;
+   for (unsigned i = 0U; i < LQG_NX; ++i) {
+     for (unsigned j = 0U; j < LQG_NY; ++j) {
+-      gains->M[i][j] = LQG_AJ_M[i][j];
+-      gains->L[i][j] = LQG_AJ_L[i][j];
++      gains->M[i][j] = M[i][j];
++      gains->L[i][j] = L[i][j];
+     }
+   }
+ }
+@@ -38,6 +40,20 @@ void lqg_dist_kalman_input(const lqg_real_t du[LQG_NU], lqg_real_t out[LQG_NU])
+   }
+ }
+ 
++bool lqg_dist_limit_yaw(const lqg_real_t du[LQG_NU], lqg_real_t out[LQG_NU], float limit) {
++  for (unsigned j = 0U; j < LQG_NU; ++j) out[j] = du[j];
++  if (!(limit > 0.0F)) return false;
++  const float *pattern = LQG_DIST_CHANNELS[LQG_DIST_PSI].pattern;
++  lqg_real_t yaw = 0.0;
++  for (unsigned j = 0U; j < LQG_NU; ++j) yaw += (lqg_real_t)pattern[j] * du[j];
++  yaw /= (lqg_real_t)LQG_NU;
++  const lqg_real_t lim = (lqg_real_t)limit;
++  if (yaw <= lim && yaw >= -lim) return false;
++  const lqg_real_t excess = yaw > lim ? yaw - lim : yaw + lim;
++  for (unsigned j = 0U; j < LQG_NU; ++j) out[j] = du[j] - excess * (lqg_real_t)pattern[j];
++  return true;
++}
++
+ void lqg_dist_reset(lqg_dist_t *e) { memset(e, 0, sizeof(*e)); }
+ 
+ void lqg_dist_correct(lqg_dist_t *e, const lqg_real_t y[LQG_NY], bool range_ok) {
+diff --git a/App/Src/control/meas.c b/App/Src/control/meas.c
+index a7523b5..e61e665 100644
+--- a/App/Src/control/meas.c
++++ b/App/Src/control/meas.c
+@@ -11,10 +11,12 @@
+ 
+ void meas_reset(meas_state_t *s) {
+   memset(s, 0, sizeof(*s));
++  nav_ekf_reset(&s->nav);
+ }
+ 
+ void meas_rearm(meas_state_t *s) {
+   memset(s->y, 0, sizeof(s->y));
++  nav_ekf_rearm(&s->nav);
+ }
+ 
+ /** Graus para radianos. */
+@@ -33,6 +35,39 @@ static float unwrap_yaw(meas_state_t *s, float yaw) {
+   return s->yaw_unwrapped;
+ }
+ 
++/** Degrau do fluxo do MTF-01, em rad/s (cm/s a 1 m em múltiplos de 20). */
++#define FLOW_LSB_RAD_S 0.2F
++/** Qualidade que liga o fluxo (ArduPilot: QUALITY_HIGH). */
++#define FLOW_QUALITY_HIGH 30U
++/** Qualidade abaixo da qual o fluxo desliga (histerese). */
++#define FLOW_QUALITY_LOW 15U
++/** Cosseno mínimo da inclinação (~37°); além disso a distância deixa de ser a altura. */
++#define FLOW_MIN_COS_TILT 0.80F
++/** Fluxo máximo aceito, em rad/s (mesmo teto do ArduPilot). */
++#define FLOW_MAX_RAD_S 4.2F
++
++/** @brief Limita @p v a [@p lo, @p hi]. */
++static float clampf(float v, float lo, float hi) {
++  return v < lo ? lo : (v > hi ? hi : v);
++}
++
++/**
++ * @brief Filtro de plausibilidade do fluxo (FLOW_GATE), com histerese na qualidade.
++ * @return true se o fluxo deste passo pode ser usado (sempre true com FLOW_GATE = 0).
++ */
++static bool flow_gate_ok(meas_state_t *s, const meas_input_t *in, const ctrl_params_t *p,
++                         euler_t rel) {
++  if (p->flow_gate < 0.5F) return true;
++  if (s->flow_quality_ok) {
++    if (in->flow_quality <= FLOW_QUALITY_LOW) s->flow_quality_ok = false;
++  } else if (in->flow_quality >= FLOW_QUALITY_HIGH) {
++    s->flow_quality_ok = true;
++  }
++  const float cos_tilt = cosf(rel.roll) * cosf(rel.pitch);
++  return s->flow_quality_ok && cos_tilt >= FLOW_MIN_COS_TILT &&
++         fabsf(in->flow_x) <= FLOW_MAX_RAD_S && fabsf(in->flow_y) <= FLOW_MAX_RAD_S;
++}
++
+ uint8_t meas_update(meas_state_t *s, const meas_input_t *in, const ctrl_params_t *p,
+                     lqg_real_t y[LQG_NY]) {
+   uint8_t flags = 0U;
+@@ -68,33 +103,165 @@ uint8_t meas_update(meas_state_t *s, const meas_input_t *in, const ctrl_params_t
+      em ZYX: cos(roll) * cos(pitch), já relativos ao zero). O quatérnio não
+      serve aqui: com o BNO invertido o cosseno dele seria ~ -1. */
+   const bool tilt_known = (flags & MEAS_ATTITUDE) != 0U;
+-  if (in->range_valid && tilt_known && isfinite(in->range_m) && in->range_m > 0.0F) {
+-    s->y[LQG_Y_Z] = -in->range_m * cosf(rel.roll) * cosf(rel.pitch);
++  const float cos_tilt = tilt_known ? cosf(rel.roll) * cosf(rel.pitch) : 1.0F;
++  const bool range_ok = in->range_valid && tilt_known && isfinite(in->range_m) &&
++                        in->range_m > 0.0F;
++  if (range_ok) {
++    s->y[LQG_Y_Z] = -in->range_m * cos_tilt;
+     flags |= MEAS_RANGE;
+   }
+ 
++  /* EKF de navegação (control/nav_ekf.h): roda sempre, como diagnóstico; o
++     LQG só recebe o que ele estima com FLOW_EKF (vx, vy) e Z_EKF (z). A
++     predição usa a aceleração linear do BNO a cada passo. O BNO está girado em
++     relação ao corpo, e o mesmo mapa dos giros vale para a aceleração: frente
++     = sinal de p × eixo y, direita = sinal de q × eixo x, para baixo = sinal
++     de r × eixo z (conferido com o voo capturado em 08/11). */
++  const nav_ekf_config_t ncfg = {p->fekf_acc_noise,   p->fekf_accz_noise, p->fekf_bias_noise,
++                                 p->fekf_flow_noise,  p->fekf_range_noise, p->fekf_gate};
++  const float ang = p->sgn_yaw * s->yaw_unwrapped;
++  s->diag.flags = 0U;
++  if (in->accel_valid && tilt_known && (flags & MEAS_GYRO) != 0U) {
++    float ax, ay;
++    attitude_yaw_rotate(ang, p->sgn_p * in->lin_accel[1], p->sgn_q * in->lin_accel[0], &ax, &ay);
++    s->diag.accel[0] = ax;
++    s->diag.accel[1] = ay;
++    s->diag.accel[2] = p->sgn_r * in->lin_accel[2];
++    nav_ekf_predict(&s->nav, ax, ay, s->diag.accel[2], (float)LQG_TS_S, &ncfg);
++  }
++  /* No chão a velocidade é zero (ZUPT): o EKF chega ao ar já iniciado e sem viés de velocidade. */
++  if (in->on_ground && p->flow_ekf >= 0.5F) nav_ekf_zupt(&s->nav);
++  /* As correções só usam quadro novo do MTF (100 Hz, sem relação fixa com o
++     passo de 10 ms): repetir um quadro contaria a mesma medida duas vezes. */
++  const bool new_frame = in->mtf_frame != s->last_mtf_frame;
++  float frame_dt = (float)LQG_TS_S;
++  if (new_frame) {
++    const uint32_t gap = in->mtf_time_ms - s->last_mtf_time_ms;
++    if (s->last_mtf_frame != 0U && gap > 0U && gap < 250U) frame_dt = (float)gap * 0.001F;
++    s->last_mtf_frame = in->mtf_frame;
++    s->last_mtf_time_ms = in->mtf_time_ms;
++    s->diag.flags |= MEAS_DIAG_NEW_FRAME;
++    s->diag.range_raw = in->range_m;
++    s->diag.quality = in->flow_quality;
++    if (tilt_known && isfinite(in->range_m)) {
++      float filtered;
++      if (range_filter_update(&s->nav.range, in->range_m, frame_dt, in->range_valid,
++                              NAV_MIN_RANGE_M, &filtered)) {
++        s->diag.range_filt = filtered;
++        if (!nav_ekf_update_z(&s->nav, -filtered * cos_tilt, &ncfg)) {
++          s->diag.flags |= MEAS_DIAG_Z_REJECTED;
++        }
++      } else {
++        s->diag.flags |= MEAS_DIAG_RANGE_REJECTED;
++      }
++    }
++  }
++  if (nav_ekf_z_usable(&s->nav)) s->diag.flags |= MEAS_DIAG_Z_USABLE;
++  if (p->z_ekf >= 0.5F && range_ok && nav_ekf_z_usable(&s->nav)) {
++    s->y[LQG_Y_Z] = s->nav.z.x[0];
++    s->diag.flags |= MEAS_DIAG_Z_TO_LQG;
++  }
++
+   /* Fluxo óptico -> velocidade. A rotação do corpo também varre a imagem;
+      somar o giro (com o ganho e o sinal medidos na bancada) deixa só a parte
+      que a translação produziu. Taxa angular vezes distância é velocidade
+      linear nos eixos do corpo; a guinada leva para o referencial local. */
+-  if (in->flow_valid && (flags & MEAS_RANGE) != 0U && (flags & MEAS_GYRO) != 0U &&
+-      isfinite(in->flow_x) && isfinite(in->flow_y)) {
+-    const float trans_x = p->flow_scale_x * in->flow_x + p->flow_gyro_x * in->gyro[0];
+-    const float trans_y = p->flow_scale_y * in->flow_y + p->flow_gyro_y * in->gyro[1];
++  /* Com FLOW_EKF, perto do piso (MTF a menos de NAV_FLOW_MIN_RANGE_M) o fluxo é ruído: vale a
++     inércia do EKF (mais abaixo), não o fluxo. */
++  const bool flow_range_ok = p->flow_ekf < 0.5F || in->range_m >= NAV_FLOW_MIN_RANGE_M;
++  if (in->flow_valid && flow_range_ok && (flags & MEAS_RANGE) != 0U && (flags & MEAS_GYRO) != 0U &&
++      isfinite(in->flow_x) && isfinite(in->flow_y) && flow_gate_ok(s, in, p, rel)) {
++    /* O MTF-01 só reporta degraus de FLOW_LSB_RAD_S; contagem zero quer dizer
++       "dentro de meio degrau", não "parado". */
++    const float zero_x = in->flow_x;
++    const float zero_y = in->flow_y;
++    const float flow_x = in->flow_x - p->flow_bias_x;
++    const float flow_y = in->flow_y - p->flow_bias_y;
++    /* Compensação do giro: o ganho "direto" (X com o giro x, Y com o y) e o
++       cruzado (X com o giro y, Y com o x). O voo de 08/11 mostrou o cruzado. */
++    const float trans_x = p->flow_scale_x * flow_x + p->flow_gyro_x * in->gyro[0] +
++                          p->flow_gyro_xy * in->gyro[1];
++    const float trans_y = p->flow_scale_y * flow_y + p->flow_gyro_y * in->gyro[1] +
++                          p->flow_gyro_yx * in->gyro[0];
+     /* Os sinais levam o fluxo aos eixos do corpo do modelo (frente, direita),
+        medidos com a guinada em zero; a rotação para o local usa ψ do modelo
+        (horário visto de cima, = sgn_yaw × guinada do sensor). Girar pela
+        guinada do sensor, como antes de 06/11, espelhava o y longe do zero. */
+     /* Com o MTF fora do centro, a guinada soma r × distância (FLOW_YAW_X/Y). */
+     const float r = p->sgn_r * in->gyro[2];
+-    const float body_x = p->sgn_vx * trans_x * in->range_m - p->flow_yaw_x * r;
+-    const float body_y = p->sgn_vy * trans_y * in->range_m - p->flow_yaw_y * r;
++    /* Com FLOW_SWAP o MTF está girado em relação ao corpo: o canal Y é a
++       frente e o X aponta para a esquerda (direita = -X). */
++    const bool swap = p->flow_swap >= 0.5F;
++    const float fwd = swap ? trans_y : trans_x;
++    const float right = swap ? -trans_x : trans_y;
++    float body_x = p->sgn_vx * fwd * in->range_m - p->flow_yaw_x * r;
++    float body_y = p->sgn_vy * right * in->range_m - p->flow_yaw_y * r;
++    const float sc_f = fabsf(swap ? p->flow_scale_y : p->flow_scale_x);
++    const float sc_r = fabsf(swap ? p->flow_scale_x : p->flow_scale_y);
++    const bool zero_f = fabsf(swap ? zero_y : zero_x) < 0.5F * FLOW_LSB_RAD_S;
++    const bool zero_r = fabsf(swap ? zero_x : zero_y) < 0.5F * FLOW_LSB_RAD_S;
++    const float hw_f = zero_f ? 0.5F * FLOW_LSB_RAD_S * sc_f * in->range_m : 0.0F;
++    const float hw_r = zero_r ? 0.5F * FLOW_LSB_RAD_S * sc_r * in->range_m : 0.0F;
++    s->diag.flow_raw[0] = in->flow_x;
++    s->diag.flow_raw[1] = in->flow_y;
++    s->diag.flow_body[0] = body_x;
++    s->diag.flow_body[1] = body_y;
++    if (new_frame) {
++      /* O EKF recebe a medida crua (sem censura), girada para o local; a
++         célula de quantização vai junto, como variância. */
++      float vx_raw, vy_raw;
++      attitude_yaw_rotate(ang, body_x, body_y, &vx_raw, &vy_raw);
++      const float c = fabsf(cosf(ang)), sn = fabsf(sinf(ang));
++      if (nav_ekf_update_flow(&s->nav, vx_raw, vy_raw, in->range_m, c * hw_f + sn * hw_r,
++                              sn * hw_f + c * hw_r, &ncfg)) {
++        s->diag.flags |= MEAS_DIAG_FLOW_FUSED;
++      } else {
++        s->diag.flags |= MEAS_DIAG_FLOW_REJECTED;
++      }
++    }
++    if (p->flow_cens >= 0.5F && isfinite(in->pred_vx) && isfinite(in->pred_vy)) {
++      /* Correção censurada: onde o canal leu zero, a velocidade verdadeira só
++         está na faixa de meio degrau em torno do que o giro e o viés explicam.
++         A predição dentro dela não gera inovação; fora, é puxada para a borda. */
++      float pbx, pby;
++      attitude_yaw_rotate(-ang, in->pred_vx, in->pred_vy, &pbx, &pby);
++      const float t0_x = p->flow_scale_x * (-p->flow_bias_x) + p->flow_gyro_x * in->gyro[0] +
++                         p->flow_gyro_xy * in->gyro[1];
++      const float t0_y = p->flow_scale_y * (-p->flow_bias_y) + p->flow_gyro_y * in->gyro[1] +
++                         p->flow_gyro_yx * in->gyro[0];
++      const float f0 = swap ? t0_y : t0_x;
++      const float r0 = swap ? -t0_x : t0_y;
++      if (zero_f) {
++        const float cc = p->sgn_vx * f0 * in->range_m - p->flow_yaw_x * r;
++        body_x = clampf(pbx, cc - hw_f, cc + hw_f);
++      }
++      if (zero_r) {
++        const float cc = p->sgn_vy * r0 * in->range_m - p->flow_yaw_y * r;
++        body_y = clampf(pby, cc - hw_r, cc + hw_r);
++      }
++    }
+     float vx, vy;
+-    attitude_yaw_rotate(p->sgn_yaw * s->yaw_unwrapped, body_x, body_y, &vx, &vy);
++    attitude_yaw_rotate(ang, body_x, body_y, &vx, &vy);
++    if (p->flow_ekf >= 0.5F && nav_ekf_xy_usable(&s->nav)) {
++      /* FLOW_EKF: o LQG recebe a velocidade do EKF (fluxo + acelerômetro). */
++      vx = s->nav.h[0].x[1];
++      vy = s->nav.h[1].x[1];
++      s->diag.flags |= MEAS_DIAG_XY_TO_LQG;
++    }
+     s->y[LQG_Y_VX] = vx;
+     s->y[LQG_Y_VY] = vy;
+     flags |= MEAS_FLOW;
+   }
++  if (!(flags & MEAS_FLOW) && p->flow_ekf >= 0.5F && nav_ekf_xy_inertial(&s->nav) &&
++      (flags & MEAS_ATTITUDE) != 0U) {
++    /* Sem fluxo (MTF muito perto do piso na subida, ou quadro inválido): a velocidade
++       vem do EKF, que segue pela aceleração do BNO por até NAV_EKF_INERTIAL_STEPS. */
++    s->y[LQG_Y_VX] = s->nav.h[0].x[1];
++    s->y[LQG_Y_VY] = s->nav.h[1].x[1];
++    s->diag.flags |= MEAS_DIAG_XY_TO_LQG;
++    flags |= MEAS_FLOW;
++  }
++  if (nav_ekf_xy_usable(&s->nav)) s->diag.flags |= MEAS_DIAG_XY_USABLE;
+ 
+   for (unsigned i = 0U; i < LQG_NY; ++i) {
+     y[i] = (lqg_real_t)s->y[i];
+diff --git a/App/Src/control/throttle.c b/App/Src/control/throttle.c
+index 8c8046c..08f0de6 100644
+--- a/App/Src/control/throttle.c
++++ b/App/Src/control/throttle.c
+@@ -22,6 +22,17 @@ float throttle_blend(float throttle, float idle, float factor) {
+   return idle + (throttle - idle) * factor;
+ }
+ 
++void throttle_blend_common(float *throttle, unsigned count, float idle, float factor) {
++  if (count == 0U) return;
++  float mean = 0.0F;
++  for (unsigned i = 0U; i < count; ++i) mean += throttle[i];
++  mean /= (float)count;
++  if (!(mean > idle) || factor >= 1.0F) return;
++  const float f = factor > 0.0F ? factor : 0.0F;
++  const float shift = (idle + (mean - idle) * f) - mean;
++  for (unsigned i = 0U; i < count; ++i) throttle[i] += shift;
++}
++
+ bool throttle_desaturate(float *throttle, unsigned count, float min, float max) {
+   if (count == 0U) return false;
+   bool changed = false;
+diff --git a/App/Src/dronelink/dronelink_telemetry.c b/App/Src/dronelink/dronelink_telemetry.c
+index 3ab7c21..cceda6b 100644
+--- a/App/Src/dronelink/dronelink_telemetry.c
++++ b/App/Src/dronelink/dronelink_telemetry.c
+@@ -23,6 +23,10 @@ static uint32_t last_state_ms;
+ static uint32_t last_debug_ms;
+ /** Passo do último DRONE_CTRL_DEBUG (para não repetir o mesmo passo). */
+ static uint32_t last_debug_step;
++/** Último envio do DRONE_NAV_DEBUG. */
++static uint32_t last_nav_ms;
++/** Passo do último DRONE_NAV_DEBUG. */
++static uint32_t last_nav_step;
+ 
+ /**
+  * @brief z do LOCAL_POSITION_NED relativo ao chão (0 no chão, -h a h metros).
+@@ -71,10 +75,24 @@ static void send_debug(const flight_telemetry_t *t) {
+   dronelink_send(&m, DRONELINK_TX_NORMAL);
+ }
+ 
++/** @brief DRONE_NAV_DEBUG com o EKF de navegação (control/nav_ekf.h). */
++static void send_nav(const flight_telemetry_t *t) {
++  const flight_nav_telemetry_t *n = &t->nav;
++  mavlink_message_t m;
++  mavlink_msg_drone_nav_debug_pack(DRONELINK_SYSTEM_ID, DRONELINK_FC_COMPONENT_ID, &m, t->time_ms,
++                                   n->flow_raw, n->flow_body, n->range_raw, n->range_filt, n->pos,
++                                   n->vel, n->bias, n->accel, n->flow_ratio, n->z_ratio,
++                                   (uint16_t)n->flow_rejected, (uint16_t)n->z_rejected,
++                                   (uint16_t)n->range_rejected, n->flags, n->quality);
++  dronelink_send(&m, DRONELINK_TX_NORMAL);
++}
++
+ void dronelink_telemetry_init(void) {
+   last_state_ms = 0U;
+   last_debug_ms = 0U;
+   last_debug_step = 0U;
++  last_nav_ms = 0U;
++  last_nav_step = 0U;
+ }
+ 
+ /**
+@@ -107,7 +125,9 @@ void dronelink_telemetry_tick(uint32_t now_ms) {
+   const bool debug_on = rate > 0.0F;
+   const uint32_t period = debug_on ? (uint32_t)(1000.0F / rate) : 0U;
+   const bool debug_due = debug_on && now_ms - last_debug_ms >= period;
+-  if (!state_due && !debug_due) return;
++  const float nav_rate = p.nav_debug_rate_hz;
++  const bool nav_due = nav_rate > 0.0F && now_ms - last_nav_ms >= (uint32_t)(1000.0F / nav_rate);
++  if (!state_due && !debug_due && !nav_due) return;
+ 
+   static flight_telemetry_t t;
+   flight_ctrl_get_telemetry(&t);
+@@ -120,4 +140,9 @@ void dronelink_telemetry_tick(uint32_t now_ms) {
+     last_debug_step = t.step;
+     send_debug(&t);
+   }
++  if (nav_due && t.step != last_nav_step) {
++    last_nav_ms = now_ms;
++    last_nav_step = t.step;
++    send_nav(&t);
++  }
+ }
+diff --git a/App/Src/motors.c b/App/Src/motors.c
+index 0b4e4b5..fea194a 100644
+--- a/App/Src/motors.c
++++ b/App/Src/motors.c
+@@ -18,6 +18,8 @@
+ 
+ /** Período da task e dos quadros DShot, em ms (1 kHz). */
+ #define PERIOD_MS 1U
++/** Sem atualização do controle de voo por este tempo, corta e exige novo armamento. */
++#define FLIGHT_COMMAND_TIMEOUT_MS 100U
+ /** Uma linha MOT a cada N quadros (100 Hz). */
+ #define LOG_EVERY 10U
+ /** Rampa padrão da bancada, em décimos de por cento por segundo (20 %/s). */
+@@ -51,6 +53,8 @@ static uint32_t rate = DEFAULT_RATE;
+ static sweep_t sweep;
+ /** Aceleração pedida pelo voo (0..1). */
+ static float flight_throttle[MOTORS_COUNT];
++/** Tick da última atualização válida do controle de voo. */
++static uint32_t flight_command_ms;
+ /** Pedido de parada; motivo em texto fixo. */
+ static const char *volatile stop_request;
+ /** Motores do beep (máscara). */
+@@ -92,6 +96,7 @@ bool motors_arm(motors_owner_t who) {
+   if (ok) {
+     owner = who;
+     sweep.active = false;
++    flight_command_ms = HAL_GetTick();
+     for (unsigned i = 0U; i < MOTORS_COUNT; ++i) flight_throttle[i] = 0.0F;
+   }
+   taskEXIT_CRITICAL();
+@@ -104,7 +109,10 @@ motors_owner_t motors_owner(void) { return owner; }
+ 
+ void motors_set_flight_throttle(const float throttle[MOTORS_COUNT]) {
+   taskENTER_CRITICAL();
+-  for (unsigned i = 0U; i < MOTORS_COUNT; ++i) flight_throttle[i] = throttle[i];
++  if (owner == MOTORS_OWNER_FLIGHT && stop_request == NULL) {
++    for (unsigned i = 0U; i < MOTORS_COUNT; ++i) flight_throttle[i] = throttle[i];
++    flight_command_ms = HAL_GetTick();
++  }
+   taskEXIT_CRITICAL();
+ }
+ 
+@@ -293,6 +301,9 @@ static void motors_task(void *argument) {
+     if (why != NULL) {
+       stop_request = NULL;
+       stop_now(why);
++    } else if (owner == MOTORS_OWNER_FLIGHT &&
++               HAL_GetTick() - flight_command_ms >= FLIGHT_COMMAND_TIMEOUT_MS) {
++      stop_now("controle de voo sem atualizacao por 100 ms");
+     }
+     uint16_t value[MOTORS_COUNT];
+     bool telemetry;
+diff --git a/Middlewares/Third_Party/mavlink/drone_controller/drone_controller.h b/Middlewares/Third_Party/mavlink/drone_controller/drone_controller.h
+index d78bdef..8b8a3fe 100644
+--- a/Middlewares/Third_Party/mavlink/drone_controller/drone_controller.h
++++ b/Middlewares/Third_Party/mavlink/drone_controller/drone_controller.h
+@@ -23,7 +23,7 @@ extern "C" {
+ #endif
+ 
+ #ifndef MAVLINK_MESSAGE_CRCS
+-#define MAVLINK_MESSAGE_CRCS {{0, 50, 9, 9, 0, 0, 0}, {1, 124, 31, 43, 0, 0, 0}, {2, 137, 12, 12, 0, 0, 0}, {4, 237, 14, 14, 3, 12, 13}, {5, 217, 28, 28, 1, 0, 0}, {6, 104, 3, 3, 0, 0, 0}, {7, 119, 32, 32, 0, 0, 0}, {11, 89, 6, 6, 1, 4, 0}, {20, 214, 20, 20, 3, 2, 3}, {21, 159, 2, 2, 3, 0, 1}, {22, 220, 25, 25, 0, 0, 0}, {23, 168, 23, 23, 3, 4, 5}, {24, 24, 30, 52, 0, 0, 0}, {25, 23, 101, 101, 0, 0, 0}, {26, 170, 22, 24, 0, 0, 0}, {27, 144, 26, 29, 0, 0, 0}, {28, 67, 16, 16, 0, 0, 0}, {29, 115, 14, 16, 0, 0, 0}, {30, 39, 28, 28, 0, 0, 0}, {31, 246, 32, 48, 0, 0, 0}, {32, 185, 28, 28, 0, 0, 0}, {33, 104, 28, 28, 0, 0, 0}, {34, 237, 22, 22, 0, 0, 0}, {35, 244, 22, 22, 0, 0, 0}, {36, 222, 21, 37, 0, 0, 0}, {37, 212, 6, 7, 3, 4, 5}, {38, 9, 6, 7, 3, 4, 5}, {39, 254, 37, 38, 3, 32, 33}, {40, 230, 4, 5, 3, 2, 3}, {41, 28, 4, 4, 3, 2, 3}, {42, 28, 2, 6, 0, 0, 0}, {43, 132, 2, 3, 3, 0, 1}, {44, 221, 4, 5, 3, 2, 3}, {45, 232, 2, 3, 3, 0, 1}, {46, 11, 2, 2, 0, 0, 0}, {47, 153, 3, 4, 3, 0, 1}, {48, 41, 13, 21, 1, 12, 0}, {49, 39, 12, 20, 0, 0, 0}, {50, 78, 37, 37, 3, 18, 19}, {51, 196, 4, 5, 3, 2, 3}, {54, 15, 27, 27, 3, 24, 25}, {55, 3, 25, 25, 0, 0, 0}, {61, 167, 72, 72, 0, 0, 0}, {62, 183, 26, 26, 0, 0, 0}, {63, 119, 181, 181, 0, 0, 0}, {64, 191, 225, 225, 0, 0, 0}, {65, 118, 42, 42, 0, 0, 0}, {66, 148, 6, 6, 3, 2, 3}, {67, 21, 4, 4, 0, 0, 0}, {69, 243, 11, 30, 1, 10, 0}, {70, 124, 18, 38, 3, 16, 17}, {73, 38, 37, 38, 3, 32, 33}, {74, 20, 20, 20, 0, 0, 0}, {75, 158, 35, 35, 3, 30, 31}, {76, 152, 33, 33, 3, 30, 31}, {77, 143, 3, 10, 3, 8, 9}, {81, 106, 22, 22, 0, 0, 0}, {82, 49, 39, 39, 3, 36, 37}, {83, 22, 37, 37, 0, 0, 0}, {84, 143, 53, 53, 3, 50, 51}, {85, 140, 51, 51, 0, 0, 0}, {86, 5, 53, 53, 3, 50, 51}, {87, 150, 51, 51, 0, 0, 0}, {89, 231, 28, 28, 0, 0, 0}, {90, 183, 56, 56, 0, 0, 0}, {91, 63, 42, 42, 0, 0, 0}, {92, 54, 33, 33, 0, 0, 0}, {93, 47, 81, 81, 0, 0, 0}, {100, 175, 26, 34, 0, 0, 0}, {101, 102, 32, 117, 0, 0, 0}, {102, 158, 32, 117, 0, 0, 0}, {103, 208, 20, 57, 0, 0, 0}, {104, 56, 32, 116, 0, 0, 0}, {105, 93, 62, 63, 0, 0, 0}, {106, 138, 44, 44, 0, 0, 0}, {107, 108, 64, 65, 0, 0, 0}, {108, 32, 84, 92, 0, 0, 0}, {109, 185, 9, 9, 0, 0, 0}, {110, 84, 254, 254, 3, 1, 2}, {111, 34, 16, 16, 0, 0, 0}, {112, 174, 12, 12, 0, 0, 0}, {113, 124, 36, 39, 0, 0, 0}, {114, 237, 44, 44, 0, 0, 0}, {115, 4, 64, 64, 0, 0, 0}, {116, 76, 22, 24, 0, 0, 0}, {117, 128, 6, 6, 3, 4, 5}, {118, 56, 14, 14, 0, 0, 0}, {119, 116, 12, 12, 3, 10, 11}, {120, 134, 97, 97, 0, 0, 0}, {121, 237, 2, 2, 3, 0, 1}, {122, 203, 2, 2, 3, 0, 1}, {123, 250, 113, 113, 3, 0, 1}, {124, 87, 35, 57, 0, 0, 0}, {125, 203, 6, 6, 0, 0, 0}, {126, 220, 79, 79, 0, 0, 0}, {127, 25, 35, 35, 0, 0, 0}, {128, 226, 35, 35, 0, 0, 0}, {129, 46, 22, 24, 0, 0, 0}, {130, 29, 13, 13, 0, 0, 0}, {131, 223, 255, 255, 0, 0, 0}, {132, 85, 14, 39, 0, 0, 0}, {133, 6, 18, 18, 0, 0, 0}, {134, 229, 43, 43, 0, 0, 0}, {135, 203, 8, 8, 0, 0, 0}, {136, 1, 22, 22, 0, 0, 0}, {137, 195, 14, 16, 0, 0, 0}, {138, 109, 36, 120, 0, 0, 0}, {139, 168, 43, 43, 3, 41, 42}, {140, 181, 41, 41, 0, 0, 0}, {141, 47, 32, 32, 0, 0, 0}, {142, 72, 243, 243, 0, 0, 0}, {143, 131, 14, 16, 0, 0, 0}, {144, 127, 93, 93, 0, 0, 0}, {146, 103, 100, 100, 0, 0, 0}, {147, 154, 36, 54, 0, 0, 0}, {148, 178, 60, 78, 0, 0, 0}, {149, 200, 30, 60, 0, 0, 0}, {162, 189, 8, 9, 0, 0, 0}, {192, 36, 44, 54, 0, 0, 0}, {225, 208, 65, 73, 0, 0, 0}, {230, 163, 42, 42, 0, 0, 0}, {231, 105, 40, 40, 0, 0, 0}, {232, 151, 63, 65, 0, 0, 0}, {233, 35, 182, 182, 0, 0, 0}, {234, 150, 40, 40, 0, 0, 0}, {235, 179, 42, 42, 0, 0, 0}, {241, 90, 32, 32, 0, 0, 0}, {242, 104, 52, 60, 0, 0, 0}, {243, 85, 53, 61, 1, 52, 0}, {244, 95, 6, 6, 0, 0, 0}, {245, 130, 2, 2, 0, 0, 0}, {246, 184, 38, 38, 0, 0, 0}, {247, 81, 19, 19, 0, 0, 0}, {248, 8, 254, 254, 3, 3, 4}, {249, 204, 36, 36, 0, 0, 0}, {250, 49, 30, 30, 0, 0, 0}, {251, 170, 18, 18, 0, 0, 0}, {252, 44, 18, 18, 0, 0, 0}, {253, 83, 51, 54, 0, 0, 0}, {254, 46, 9, 9, 0, 0, 0}, {256, 71, 42, 42, 3, 8, 9}, {257, 131, 9, 9, 0, 0, 0}, {258, 187, 32, 232, 3, 0, 1}, {259, 92, 235, 237, 0, 0, 0}, {260, 146, 5, 14, 0, 0, 0}, {261, 179, 27, 61, 0, 0, 0}, {262, 12, 18, 23, 0, 0, 0}, {263, 133, 255, 255, 0, 0, 0}, {264, 49, 28, 32, 0, 0, 0}, {265, 26, 16, 20, 0, 0, 0}, {266, 193, 255, 255, 3, 2, 3}, {267, 35, 255, 255, 3, 2, 3}, {268, 14, 4, 4, 3, 2, 3}, {269, 109, 213, 215, 0, 0, 0}, {270, 59, 19, 20, 0, 0, 0}, {271, 22, 52, 53, 0, 0, 0}, {275, 126, 31, 32, 0, 0, 0}, {276, 18, 49, 50, 0, 0, 0}, {277, 62, 30, 30, 0, 0, 0}, {280, 70, 33, 33, 0, 0, 0}, {281, 48, 13, 13, 0, 0, 0}, {282, 123, 35, 35, 3, 32, 33}, {283, 74, 144, 149, 0, 0, 0}, {284, 99, 32, 32, 3, 30, 31}, {285, 137, 40, 49, 3, 38, 39}, {286, 210, 53, 57, 3, 50, 51}, {287, 1, 23, 23, 3, 20, 21}, {288, 20, 23, 23, 3, 20, 21}, {295, 234, 12, 12, 0, 0, 0}, {296, 158, 41, 41, 3, 36, 37}, {299, 19, 96, 96, 0, 0, 0}, {301, 243, 58, 58, 0, 0, 0}, {310, 28, 17, 17, 0, 0, 0}, {311, 95, 116, 116, 0, 0, 0}, {320, 243, 20, 20, 3, 2, 3}, {321, 88, 2, 2, 3, 0, 1}, {322, 243, 149, 149, 0, 0, 0}, {323, 78, 147, 147, 3, 0, 1}, {324, 132, 146, 146, 0, 0, 0}, {330, 23, 158, 167, 0, 0, 0}, {331, 91, 230, 233, 0, 0, 0}, {332, 236, 239, 239, 0, 0, 0}, {333, 231, 109, 109, 0, 0, 0}, {335, 225, 24, 24, 0, 0, 0}, {339, 199, 5, 5, 0, 0, 0}, {340, 99, 70, 70, 0, 0, 0}, {345, 209, 21, 21, 3, 2, 3}, {350, 232, 20, 252, 0, 0, 0}, {360, 11, 25, 25, 0, 0, 0}, {370, 75, 87, 109, 0, 0, 0}, {373, 117, 42, 42, 0, 0, 0}, {375, 251, 140, 140, 0, 0, 0}, {376, 199, 8, 8, 0, 0, 0}, {385, 147, 133, 133, 3, 2, 3}, {386, 132, 16, 16, 3, 4, 5}, {387, 4, 72, 72, 3, 4, 5}, {388, 8, 37, 37, 3, 32, 33}, {390, 156, 238, 240, 0, 0, 0}, {9000, 113, 137, 137, 0, 0, 0}, {9005, 117, 34, 34, 0, 0, 0}, {12900, 114, 44, 44, 3, 0, 1}, {12901, 254, 59, 59, 3, 30, 31}, {12902, 140, 53, 53, 3, 4, 5}, {12903, 249, 46, 46, 3, 0, 1}, {12904, 77, 54, 54, 3, 28, 29}, {12905, 49, 43, 43, 3, 0, 1}, {12915, 94, 249, 249, 3, 0, 1}, {12918, 139, 51, 51, 0, 0, 0}, {12919, 7, 18, 18, 3, 16, 17}, {12920, 20, 5, 5, 0, 0, 0}, {51000, 177, 17, 17, 3, 15, 16}, {51001, 65, 56, 56, 3, 54, 55}, {51002, 114, 29, 29, 3, 27, 28}, {51003, 39, 16, 16, 3, 14, 15}, {51004, 110, 17, 17, 3, 15, 16}, {51010, 39, 57, 57, 3, 55, 56}, {51011, 130, 11, 11, 3, 9, 10}, {51012, 195, 21, 21, 3, 19, 20}, {51020, 28, 135, 135, 0, 0, 0}}
++#define MAVLINK_MESSAGE_CRCS {{0, 50, 9, 9, 0, 0, 0}, {1, 124, 31, 43, 0, 0, 0}, {2, 137, 12, 12, 0, 0, 0}, {4, 237, 14, 14, 3, 12, 13}, {5, 217, 28, 28, 1, 0, 0}, {6, 104, 3, 3, 0, 0, 0}, {7, 119, 32, 32, 0, 0, 0}, {11, 89, 6, 6, 1, 4, 0}, {20, 214, 20, 20, 3, 2, 3}, {21, 159, 2, 2, 3, 0, 1}, {22, 220, 25, 25, 0, 0, 0}, {23, 168, 23, 23, 3, 4, 5}, {24, 24, 30, 52, 0, 0, 0}, {25, 23, 101, 101, 0, 0, 0}, {26, 170, 22, 24, 0, 0, 0}, {27, 144, 26, 29, 0, 0, 0}, {28, 67, 16, 16, 0, 0, 0}, {29, 115, 14, 16, 0, 0, 0}, {30, 39, 28, 28, 0, 0, 0}, {31, 246, 32, 48, 0, 0, 0}, {32, 185, 28, 28, 0, 0, 0}, {33, 104, 28, 28, 0, 0, 0}, {34, 237, 22, 22, 0, 0, 0}, {35, 244, 22, 22, 0, 0, 0}, {36, 222, 21, 37, 0, 0, 0}, {37, 212, 6, 7, 3, 4, 5}, {38, 9, 6, 7, 3, 4, 5}, {39, 254, 37, 38, 3, 32, 33}, {40, 230, 4, 5, 3, 2, 3}, {41, 28, 4, 4, 3, 2, 3}, {42, 28, 2, 6, 0, 0, 0}, {43, 132, 2, 3, 3, 0, 1}, {44, 221, 4, 5, 3, 2, 3}, {45, 232, 2, 3, 3, 0, 1}, {46, 11, 2, 2, 0, 0, 0}, {47, 153, 3, 4, 3, 0, 1}, {48, 41, 13, 21, 1, 12, 0}, {49, 39, 12, 20, 0, 0, 0}, {50, 78, 37, 37, 3, 18, 19}, {51, 196, 4, 5, 3, 2, 3}, {54, 15, 27, 27, 3, 24, 25}, {55, 3, 25, 25, 0, 0, 0}, {61, 167, 72, 72, 0, 0, 0}, {62, 183, 26, 26, 0, 0, 0}, {63, 119, 181, 181, 0, 0, 0}, {64, 191, 225, 225, 0, 0, 0}, {65, 118, 42, 42, 0, 0, 0}, {66, 148, 6, 6, 3, 2, 3}, {67, 21, 4, 4, 0, 0, 0}, {69, 243, 11, 30, 1, 10, 0}, {70, 124, 18, 38, 3, 16, 17}, {73, 38, 37, 38, 3, 32, 33}, {74, 20, 20, 20, 0, 0, 0}, {75, 158, 35, 35, 3, 30, 31}, {76, 152, 33, 33, 3, 30, 31}, {77, 143, 3, 10, 3, 8, 9}, {81, 106, 22, 22, 0, 0, 0}, {82, 49, 39, 39, 3, 36, 37}, {83, 22, 37, 37, 0, 0, 0}, {84, 143, 53, 53, 3, 50, 51}, {85, 140, 51, 51, 0, 0, 0}, {86, 5, 53, 53, 3, 50, 51}, {87, 150, 51, 51, 0, 0, 0}, {89, 231, 28, 28, 0, 0, 0}, {90, 183, 56, 56, 0, 0, 0}, {91, 63, 42, 42, 0, 0, 0}, {92, 54, 33, 33, 0, 0, 0}, {93, 47, 81, 81, 0, 0, 0}, {100, 175, 26, 34, 0, 0, 0}, {101, 102, 32, 117, 0, 0, 0}, {102, 158, 32, 117, 0, 0, 0}, {103, 208, 20, 57, 0, 0, 0}, {104, 56, 32, 116, 0, 0, 0}, {105, 93, 62, 63, 0, 0, 0}, {106, 138, 44, 44, 0, 0, 0}, {107, 108, 64, 65, 0, 0, 0}, {108, 32, 84, 92, 0, 0, 0}, {109, 185, 9, 9, 0, 0, 0}, {110, 84, 254, 254, 3, 1, 2}, {111, 34, 16, 16, 0, 0, 0}, {112, 174, 12, 12, 0, 0, 0}, {113, 124, 36, 39, 0, 0, 0}, {114, 237, 44, 44, 0, 0, 0}, {115, 4, 64, 64, 0, 0, 0}, {116, 76, 22, 24, 0, 0, 0}, {117, 128, 6, 6, 3, 4, 5}, {118, 56, 14, 14, 0, 0, 0}, {119, 116, 12, 12, 3, 10, 11}, {120, 134, 97, 97, 0, 0, 0}, {121, 237, 2, 2, 3, 0, 1}, {122, 203, 2, 2, 3, 0, 1}, {123, 250, 113, 113, 3, 0, 1}, {124, 87, 35, 57, 0, 0, 0}, {125, 203, 6, 6, 0, 0, 0}, {126, 220, 79, 79, 0, 0, 0}, {127, 25, 35, 35, 0, 0, 0}, {128, 226, 35, 35, 0, 0, 0}, {129, 46, 22, 24, 0, 0, 0}, {130, 29, 13, 13, 0, 0, 0}, {131, 223, 255, 255, 0, 0, 0}, {132, 85, 14, 39, 0, 0, 0}, {133, 6, 18, 18, 0, 0, 0}, {134, 229, 43, 43, 0, 0, 0}, {135, 203, 8, 8, 0, 0, 0}, {136, 1, 22, 22, 0, 0, 0}, {137, 195, 14, 16, 0, 0, 0}, {138, 109, 36, 120, 0, 0, 0}, {139, 168, 43, 43, 3, 41, 42}, {140, 181, 41, 41, 0, 0, 0}, {141, 47, 32, 32, 0, 0, 0}, {142, 72, 243, 243, 0, 0, 0}, {143, 131, 14, 16, 0, 0, 0}, {144, 127, 93, 93, 0, 0, 0}, {146, 103, 100, 100, 0, 0, 0}, {147, 154, 36, 54, 0, 0, 0}, {148, 178, 60, 78, 0, 0, 0}, {149, 200, 30, 60, 0, 0, 0}, {162, 189, 8, 9, 0, 0, 0}, {192, 36, 44, 54, 0, 0, 0}, {225, 208, 65, 73, 0, 0, 0}, {230, 163, 42, 42, 0, 0, 0}, {231, 105, 40, 40, 0, 0, 0}, {232, 151, 63, 65, 0, 0, 0}, {233, 35, 182, 182, 0, 0, 0}, {234, 150, 40, 40, 0, 0, 0}, {235, 179, 42, 42, 0, 0, 0}, {241, 90, 32, 32, 0, 0, 0}, {242, 104, 52, 60, 0, 0, 0}, {243, 85, 53, 61, 1, 52, 0}, {244, 95, 6, 6, 0, 0, 0}, {245, 130, 2, 2, 0, 0, 0}, {246, 184, 38, 38, 0, 0, 0}, {247, 81, 19, 19, 0, 0, 0}, {248, 8, 254, 254, 3, 3, 4}, {249, 204, 36, 36, 0, 0, 0}, {250, 49, 30, 30, 0, 0, 0}, {251, 170, 18, 18, 0, 0, 0}, {252, 44, 18, 18, 0, 0, 0}, {253, 83, 51, 54, 0, 0, 0}, {254, 46, 9, 9, 0, 0, 0}, {256, 71, 42, 42, 3, 8, 9}, {257, 131, 9, 9, 0, 0, 0}, {258, 187, 32, 232, 3, 0, 1}, {259, 92, 235, 237, 0, 0, 0}, {260, 146, 5, 14, 0, 0, 0}, {261, 179, 27, 61, 0, 0, 0}, {262, 12, 18, 23, 0, 0, 0}, {263, 133, 255, 255, 0, 0, 0}, {264, 49, 28, 32, 0, 0, 0}, {265, 26, 16, 20, 0, 0, 0}, {266, 193, 255, 255, 3, 2, 3}, {267, 35, 255, 255, 3, 2, 3}, {268, 14, 4, 4, 3, 2, 3}, {269, 109, 213, 215, 0, 0, 0}, {270, 59, 19, 20, 0, 0, 0}, {271, 22, 52, 53, 0, 0, 0}, {275, 126, 31, 32, 0, 0, 0}, {276, 18, 49, 50, 0, 0, 0}, {277, 62, 30, 30, 0, 0, 0}, {280, 70, 33, 33, 0, 0, 0}, {281, 48, 13, 13, 0, 0, 0}, {282, 123, 35, 35, 3, 32, 33}, {283, 74, 144, 149, 0, 0, 0}, {284, 99, 32, 32, 3, 30, 31}, {285, 137, 40, 49, 3, 38, 39}, {286, 210, 53, 57, 3, 50, 51}, {287, 1, 23, 23, 3, 20, 21}, {288, 20, 23, 23, 3, 20, 21}, {295, 234, 12, 12, 0, 0, 0}, {296, 158, 41, 41, 3, 36, 37}, {299, 19, 96, 96, 0, 0, 0}, {301, 243, 58, 58, 0, 0, 0}, {310, 28, 17, 17, 0, 0, 0}, {311, 95, 116, 116, 0, 0, 0}, {320, 243, 20, 20, 3, 2, 3}, {321, 88, 2, 2, 3, 0, 1}, {322, 243, 149, 149, 0, 0, 0}, {323, 78, 147, 147, 3, 0, 1}, {324, 132, 146, 146, 0, 0, 0}, {330, 23, 158, 167, 0, 0, 0}, {331, 91, 230, 233, 0, 0, 0}, {332, 236, 239, 239, 0, 0, 0}, {333, 231, 109, 109, 0, 0, 0}, {335, 225, 24, 24, 0, 0, 0}, {339, 199, 5, 5, 0, 0, 0}, {340, 99, 70, 70, 0, 0, 0}, {345, 209, 21, 21, 3, 2, 3}, {350, 232, 20, 252, 0, 0, 0}, {360, 11, 25, 25, 0, 0, 0}, {370, 75, 87, 109, 0, 0, 0}, {373, 117, 42, 42, 0, 0, 0}, {375, 251, 140, 140, 0, 0, 0}, {376, 199, 8, 8, 0, 0, 0}, {385, 147, 133, 133, 3, 2, 3}, {386, 132, 16, 16, 3, 4, 5}, {387, 4, 72, 72, 3, 4, 5}, {388, 8, 37, 37, 3, 32, 33}, {390, 156, 238, 240, 0, 0, 0}, {9000, 113, 137, 137, 0, 0, 0}, {9005, 117, 34, 34, 0, 0, 0}, {12900, 114, 44, 44, 3, 0, 1}, {12901, 254, 59, 59, 3, 30, 31}, {12902, 140, 53, 53, 3, 4, 5}, {12903, 249, 46, 46, 3, 0, 1}, {12904, 77, 54, 54, 3, 28, 29}, {12905, 49, 43, 43, 3, 0, 1}, {12915, 94, 249, 249, 3, 0, 1}, {12918, 139, 51, 51, 0, 0, 0}, {12919, 7, 18, 18, 3, 16, 17}, {12920, 20, 5, 5, 0, 0, 0}, {51000, 177, 17, 17, 3, 15, 16}, {51001, 65, 56, 56, 3, 54, 55}, {51002, 114, 29, 29, 3, 27, 28}, {51003, 39, 16, 16, 3, 14, 15}, {51004, 110, 17, 17, 3, 15, 16}, {51010, 39, 57, 57, 3, 55, 56}, {51011, 130, 11, 11, 3, 9, 10}, {51012, 195, 21, 21, 3, 19, 20}, {51020, 28, 135, 135, 0, 0, 0}, {51021, 110, 93, 93, 0, 0, 0}}
+ #endif
+ 
+ #include "../protocol.h"
+@@ -217,14 +217,15 @@ typedef enum DRONE_CTRL_FLAG
+ #include "./mavlink_msg_drone_gain_commit.h"
+ #include "./mavlink_msg_drone_gain_ack.h"
+ #include "./mavlink_msg_drone_ctrl_debug.h"
++#include "./mavlink_msg_drone_nav_debug.h"
+ 
+ // base include
+ #include "../common/common.h"
+ 
+ 
+ #if MAVLINK_DRONE_CONTROLLER_XML_HASH == MAVLINK_PRIMARY_XML_HASH
+-# define MAVLINK_MESSAGE_INFO {MAVLINK_MESSAGE_INFO_HEARTBEAT, MAVLINK_MESSAGE_INFO_SYS_STATUS, MAVLINK_MESSAGE_INFO_SYSTEM_TIME, MAVLINK_MESSAGE_INFO_PING, MAVLINK_MESSAGE_INFO_CHANGE_OPERATOR_CONTROL, MAVLINK_MESSAGE_INFO_CHANGE_OPERATOR_CONTROL_ACK, MAVLINK_MESSAGE_INFO_AUTH_KEY, MAVLINK_MESSAGE_INFO_SET_MODE, MAVLINK_MESSAGE_INFO_PARAM_REQUEST_READ, MAVLINK_MESSAGE_INFO_PARAM_REQUEST_LIST, MAVLINK_MESSAGE_INFO_PARAM_VALUE, MAVLINK_MESSAGE_INFO_PARAM_SET, MAVLINK_MESSAGE_INFO_GPS_RAW_INT, MAVLINK_MESSAGE_INFO_GPS_STATUS, MAVLINK_MESSAGE_INFO_SCALED_IMU, MAVLINK_MESSAGE_INFO_RAW_IMU, MAVLINK_MESSAGE_INFO_RAW_PRESSURE, MAVLINK_MESSAGE_INFO_SCALED_PRESSURE, MAVLINK_MESSAGE_INFO_ATTITUDE, MAVLINK_MESSAGE_INFO_ATTITUDE_QUATERNION, MAVLINK_MESSAGE_INFO_LOCAL_POSITION_NED, MAVLINK_MESSAGE_INFO_GLOBAL_POSITION_INT, MAVLINK_MESSAGE_INFO_RC_CHANNELS_SCALED, MAVLINK_MESSAGE_INFO_RC_CHANNELS_RAW, MAVLINK_MESSAGE_INFO_SERVO_OUTPUT_RAW, MAVLINK_MESSAGE_INFO_MISSION_REQUEST_PARTIAL_LIST, MAVLINK_MESSAGE_INFO_MISSION_WRITE_PARTIAL_LIST, MAVLINK_MESSAGE_INFO_MISSION_ITEM, MAVLINK_MESSAGE_INFO_MISSION_REQUEST, MAVLINK_MESSAGE_INFO_MISSION_SET_CURRENT, MAVLINK_MESSAGE_INFO_MISSION_CURRENT, MAVLINK_MESSAGE_INFO_MISSION_REQUEST_LIST, MAVLINK_MESSAGE_INFO_MISSION_COUNT, MAVLINK_MESSAGE_INFO_MISSION_CLEAR_ALL, MAVLINK_MESSAGE_INFO_MISSION_ITEM_REACHED, MAVLINK_MESSAGE_INFO_MISSION_ACK, MAVLINK_MESSAGE_INFO_SET_GPS_GLOBAL_ORIGIN, MAVLINK_MESSAGE_INFO_GPS_GLOBAL_ORIGIN, MAVLINK_MESSAGE_INFO_PARAM_MAP_RC, MAVLINK_MESSAGE_INFO_MISSION_REQUEST_INT, MAVLINK_MESSAGE_INFO_SAFETY_SET_ALLOWED_AREA, MAVLINK_MESSAGE_INFO_SAFETY_ALLOWED_AREA, MAVLINK_MESSAGE_INFO_ATTITUDE_QUATERNION_COV, MAVLINK_MESSAGE_INFO_NAV_CONTROLLER_OUTPUT, MAVLINK_MESSAGE_INFO_GLOBAL_POSITION_INT_COV, MAVLINK_MESSAGE_INFO_LOCAL_POSITION_NED_COV, MAVLINK_MESSAGE_INFO_RC_CHANNELS, MAVLINK_MESSAGE_INFO_REQUEST_DATA_STREAM, MAVLINK_MESSAGE_INFO_DATA_STREAM, MAVLINK_MESSAGE_INFO_MANUAL_CONTROL, MAVLINK_MESSAGE_INFO_RC_CHANNELS_OVERRIDE, MAVLINK_MESSAGE_INFO_MISSION_ITEM_INT, MAVLINK_MESSAGE_INFO_VFR_HUD, MAVLINK_MESSAGE_INFO_COMMAND_INT, MAVLINK_MESSAGE_INFO_COMMAND_LONG, MAVLINK_MESSAGE_INFO_COMMAND_ACK, MAVLINK_MESSAGE_INFO_MANUAL_SETPOINT, MAVLINK_MESSAGE_INFO_SET_ATTITUDE_TARGET, MAVLINK_MESSAGE_INFO_ATTITUDE_TARGET, MAVLINK_MESSAGE_INFO_SET_POSITION_TARGET_LOCAL_NED, MAVLINK_MESSAGE_INFO_POSITION_TARGET_LOCAL_NED, MAVLINK_MESSAGE_INFO_SET_POSITION_TARGET_GLOBAL_INT, MAVLINK_MESSAGE_INFO_POSITION_TARGET_GLOBAL_INT, MAVLINK_MESSAGE_INFO_LOCAL_POSITION_NED_SYSTEM_GLOBAL_OFFSET, MAVLINK_MESSAGE_INFO_HIL_STATE, MAVLINK_MESSAGE_INFO_HIL_CONTROLS, MAVLINK_MESSAGE_INFO_HIL_RC_INPUTS_RAW, MAVLINK_MESSAGE_INFO_HIL_ACTUATOR_CONTROLS, MAVLINK_MESSAGE_INFO_OPTICAL_FLOW, MAVLINK_MESSAGE_INFO_GLOBAL_VISION_POSITION_ESTIMATE, MAVLINK_MESSAGE_INFO_VISION_POSITION_ESTIMATE, MAVLINK_MESSAGE_INFO_VISION_SPEED_ESTIMATE, MAVLINK_MESSAGE_INFO_VICON_POSITION_ESTIMATE, MAVLINK_MESSAGE_INFO_HIGHRES_IMU, MAVLINK_MESSAGE_INFO_OPTICAL_FLOW_RAD, MAVLINK_MESSAGE_INFO_HIL_SENSOR, MAVLINK_MESSAGE_INFO_SIM_STATE, MAVLINK_MESSAGE_INFO_RADIO_STATUS, MAVLINK_MESSAGE_INFO_FILE_TRANSFER_PROTOCOL, MAVLINK_MESSAGE_INFO_TIMESYNC, MAVLINK_MESSAGE_INFO_CAMERA_TRIGGER, MAVLINK_MESSAGE_INFO_HIL_GPS, MAVLINK_MESSAGE_INFO_HIL_OPTICAL_FLOW, MAVLINK_MESSAGE_INFO_HIL_STATE_QUATERNION, MAVLINK_MESSAGE_INFO_SCALED_IMU2, MAVLINK_MESSAGE_INFO_LOG_REQUEST_LIST, MAVLINK_MESSAGE_INFO_LOG_ENTRY, MAVLINK_MESSAGE_INFO_LOG_REQUEST_DATA, MAVLINK_MESSAGE_INFO_LOG_DATA, MAVLINK_MESSAGE_INFO_LOG_ERASE, MAVLINK_MESSAGE_INFO_LOG_REQUEST_END, MAVLINK_MESSAGE_INFO_GPS_INJECT_DATA, MAVLINK_MESSAGE_INFO_GPS2_RAW, MAVLINK_MESSAGE_INFO_POWER_STATUS, MAVLINK_MESSAGE_INFO_SERIAL_CONTROL, MAVLINK_MESSAGE_INFO_GPS_RTK, MAVLINK_MESSAGE_INFO_GPS2_RTK, MAVLINK_MESSAGE_INFO_SCALED_IMU3, MAVLINK_MESSAGE_INFO_DATA_TRANSMISSION_HANDSHAKE, MAVLINK_MESSAGE_INFO_ENCAPSULATED_DATA, MAVLINK_MESSAGE_INFO_DISTANCE_SENSOR, MAVLINK_MESSAGE_INFO_TERRAIN_REQUEST, MAVLINK_MESSAGE_INFO_TERRAIN_DATA, MAVLINK_MESSAGE_INFO_TERRAIN_CHECK, MAVLINK_MESSAGE_INFO_TERRAIN_REPORT, MAVLINK_MESSAGE_INFO_SCALED_PRESSURE2, MAVLINK_MESSAGE_INFO_ATT_POS_MOCAP, MAVLINK_MESSAGE_INFO_SET_ACTUATOR_CONTROL_TARGET, MAVLINK_MESSAGE_INFO_ACTUATOR_CONTROL_TARGET, MAVLINK_MESSAGE_INFO_ALTITUDE, MAVLINK_MESSAGE_INFO_RESOURCE_REQUEST, MAVLINK_MESSAGE_INFO_SCALED_PRESSURE3, MAVLINK_MESSAGE_INFO_FOLLOW_TARGET, MAVLINK_MESSAGE_INFO_CONTROL_SYSTEM_STATE, MAVLINK_MESSAGE_INFO_BATTERY_STATUS, MAVLINK_MESSAGE_INFO_AUTOPILOT_VERSION, MAVLINK_MESSAGE_INFO_LANDING_TARGET, MAVLINK_MESSAGE_INFO_FENCE_STATUS, MAVLINK_MESSAGE_INFO_MAG_CAL_REPORT, MAVLINK_MESSAGE_INFO_EFI_STATUS, MAVLINK_MESSAGE_INFO_ESTIMATOR_STATUS, MAVLINK_MESSAGE_INFO_WIND_COV, MAVLINK_MESSAGE_INFO_GPS_INPUT, MAVLINK_MESSAGE_INFO_GPS_RTCM_DATA, MAVLINK_MESSAGE_INFO_HIGH_LATENCY, MAVLINK_MESSAGE_INFO_HIGH_LATENCY2, MAVLINK_MESSAGE_INFO_VIBRATION, MAVLINK_MESSAGE_INFO_HOME_POSITION, MAVLINK_MESSAGE_INFO_SET_HOME_POSITION, MAVLINK_MESSAGE_INFO_MESSAGE_INTERVAL, MAVLINK_MESSAGE_INFO_EXTENDED_SYS_STATE, MAVLINK_MESSAGE_INFO_ADSB_VEHICLE, MAVLINK_MESSAGE_INFO_COLLISION, MAVLINK_MESSAGE_INFO_V2_EXTENSION, MAVLINK_MESSAGE_INFO_MEMORY_VECT, MAVLINK_MESSAGE_INFO_DEBUG_VECT, MAVLINK_MESSAGE_INFO_NAMED_VALUE_FLOAT, MAVLINK_MESSAGE_INFO_NAMED_VALUE_INT, MAVLINK_MESSAGE_INFO_STATUSTEXT, MAVLINK_MESSAGE_INFO_DEBUG, MAVLINK_MESSAGE_INFO_SETUP_SIGNING, MAVLINK_MESSAGE_INFO_BUTTON_CHANGE, MAVLINK_MESSAGE_INFO_PLAY_TUNE, MAVLINK_MESSAGE_INFO_CAMERA_INFORMATION, MAVLINK_MESSAGE_INFO_CAMERA_SETTINGS, MAVLINK_MESSAGE_INFO_STORAGE_INFORMATION, MAVLINK_MESSAGE_INFO_CAMERA_CAPTURE_STATUS, MAVLINK_MESSAGE_INFO_CAMERA_IMAGE_CAPTURED, MAVLINK_MESSAGE_INFO_FLIGHT_INFORMATION, MAVLINK_MESSAGE_INFO_MOUNT_ORIENTATION, MAVLINK_MESSAGE_INFO_LOGGING_DATA, MAVLINK_MESSAGE_INFO_LOGGING_DATA_ACKED, MAVLINK_MESSAGE_INFO_LOGGING_ACK, MAVLINK_MESSAGE_INFO_VIDEO_STREAM_INFORMATION, MAVLINK_MESSAGE_INFO_VIDEO_STREAM_STATUS, MAVLINK_MESSAGE_INFO_CAMERA_FOV_STATUS, MAVLINK_MESSAGE_INFO_CAMERA_TRACKING_IMAGE_STATUS, MAVLINK_MESSAGE_INFO_CAMERA_TRACKING_GEO_STATUS, MAVLINK_MESSAGE_INFO_CAMERA_THERMAL_RANGE, MAVLINK_MESSAGE_INFO_GIMBAL_MANAGER_INFORMATION, MAVLINK_MESSAGE_INFO_GIMBAL_MANAGER_STATUS, MAVLINK_MESSAGE_INFO_GIMBAL_MANAGER_SET_ATTITUDE, MAVLINK_MESSAGE_INFO_GIMBAL_DEVICE_INFORMATION, MAVLINK_MESSAGE_INFO_GIMBAL_DEVICE_SET_ATTITUDE, MAVLINK_MESSAGE_INFO_GIMBAL_DEVICE_ATTITUDE_STATUS, MAVLINK_MESSAGE_INFO_AUTOPILOT_STATE_FOR_GIMBAL_DEVICE, MAVLINK_MESSAGE_INFO_GIMBAL_MANAGER_SET_PITCHYAW, MAVLINK_MESSAGE_INFO_GIMBAL_MANAGER_SET_MANUAL_CONTROL, MAVLINK_MESSAGE_INFO_AIRSPEED, MAVLINK_MESSAGE_INFO_GLOBAL_POSITION_SENSOR, MAVLINK_MESSAGE_INFO_WIFI_CONFIG_AP, MAVLINK_MESSAGE_INFO_AIS_VESSEL, MAVLINK_MESSAGE_INFO_UAVCAN_NODE_STATUS, MAVLINK_MESSAGE_INFO_UAVCAN_NODE_INFO, MAVLINK_MESSAGE_INFO_PARAM_EXT_REQUEST_READ, MAVLINK_MESSAGE_INFO_PARAM_EXT_REQUEST_LIST, MAVLINK_MESSAGE_INFO_PARAM_EXT_VALUE, MAVLINK_MESSAGE_INFO_PARAM_EXT_SET, MAVLINK_MESSAGE_INFO_PARAM_EXT_ACK, MAVLINK_MESSAGE_INFO_OBSTACLE_DISTANCE, MAVLINK_MESSAGE_INFO_ODOMETRY, MAVLINK_MESSAGE_INFO_TRAJECTORY_REPRESENTATION_WAYPOINTS, MAVLINK_MESSAGE_INFO_TRAJECTORY_REPRESENTATION_BEZIER, MAVLINK_MESSAGE_INFO_ISBD_LINK_STATUS, MAVLINK_MESSAGE_INFO_RAW_RPM, MAVLINK_MESSAGE_INFO_UTM_GLOBAL_POSITION, MAVLINK_MESSAGE_INFO_PARAM_ERROR, MAVLINK_MESSAGE_INFO_DEBUG_FLOAT_ARRAY, MAVLINK_MESSAGE_INFO_ORBIT_EXECUTION_STATUS, MAVLINK_MESSAGE_INFO_SMART_BATTERY_INFO, MAVLINK_MESSAGE_INFO_GENERATOR_STATUS, MAVLINK_MESSAGE_INFO_ACTUATOR_OUTPUT_STATUS, MAVLINK_MESSAGE_INFO_RELAY_STATUS, MAVLINK_MESSAGE_INFO_TUNNEL, MAVLINK_MESSAGE_INFO_CAN_FRAME, MAVLINK_MESSAGE_INFO_CANFD_FRAME, MAVLINK_MESSAGE_INFO_CAN_FILTER_MODIFY, MAVLINK_MESSAGE_INFO_ONBOARD_COMPUTER_STATUS, MAVLINK_MESSAGE_INFO_WHEEL_DISTANCE, MAVLINK_MESSAGE_INFO_WINCH_STATUS, MAVLINK_MESSAGE_INFO_OPEN_DRONE_ID_BASIC_ID, MAVLINK_MESSAGE_INFO_OPEN_DRONE_ID_LOCATION, MAVLINK_MESSAGE_INFO_OPEN_DRONE_ID_AUTHENTICATION, MAVLINK_MESSAGE_INFO_OPEN_DRONE_ID_SELF_ID, MAVLINK_MESSAGE_INFO_OPEN_DRONE_ID_SYSTEM, MAVLINK_MESSAGE_INFO_OPEN_DRONE_ID_OPERATOR_ID, MAVLINK_MESSAGE_INFO_OPEN_DRONE_ID_MESSAGE_PACK, MAVLINK_MESSAGE_INFO_OPEN_DRONE_ID_ARM_STATUS, MAVLINK_MESSAGE_INFO_OPEN_DRONE_ID_SYSTEM_UPDATE, MAVLINK_MESSAGE_INFO_HYGROMETER_SENSOR, MAVLINK_MESSAGE_INFO_DRONE_PROTOCOL_INFO, MAVLINK_MESSAGE_INFO_DRONE_LEG_COMMAND, MAVLINK_MESSAGE_INFO_DRONE_LEG_ACK, MAVLINK_MESSAGE_INFO_DRONE_LEG_CANCEL, MAVLINK_MESSAGE_INFO_DRONE_CONTROL_LEASE, MAVLINK_MESSAGE_INFO_DRONE_GAIN_ROW, MAVLINK_MESSAGE_INFO_DRONE_GAIN_COMMIT, MAVLINK_MESSAGE_INFO_DRONE_GAIN_ACK, MAVLINK_MESSAGE_INFO_DRONE_CTRL_DEBUG}
+-# define MAVLINK_MESSAGE_NAMES {{ "ACTUATOR_CONTROL_TARGET", 140 }, { "ACTUATOR_OUTPUT_STATUS", 375 }, { "ADSB_VEHICLE", 246 }, { "AIRSPEED", 295 }, { "AIS_VESSEL", 301 }, { "ALTITUDE", 141 }, { "ATTITUDE", 30 }, { "ATTITUDE_QUATERNION", 31 }, { "ATTITUDE_QUATERNION_COV", 61 }, { "ATTITUDE_TARGET", 83 }, { "ATT_POS_MOCAP", 138 }, { "AUTH_KEY", 7 }, { "AUTOPILOT_STATE_FOR_GIMBAL_DEVICE", 286 }, { "AUTOPILOT_VERSION", 148 }, { "BATTERY_STATUS", 147 }, { "BUTTON_CHANGE", 257 }, { "CAMERA_CAPTURE_STATUS", 262 }, { "CAMERA_FOV_STATUS", 271 }, { "CAMERA_IMAGE_CAPTURED", 263 }, { "CAMERA_INFORMATION", 259 }, { "CAMERA_SETTINGS", 260 }, { "CAMERA_THERMAL_RANGE", 277 }, { "CAMERA_TRACKING_GEO_STATUS", 276 }, { "CAMERA_TRACKING_IMAGE_STATUS", 275 }, { "CAMERA_TRIGGER", 112 }, { "CANFD_FRAME", 387 }, { "CAN_FILTER_MODIFY", 388 }, { "CAN_FRAME", 386 }, { "CHANGE_OPERATOR_CONTROL", 5 }, { "CHANGE_OPERATOR_CONTROL_ACK", 6 }, { "COLLISION", 247 }, { "COMMAND_ACK", 77 }, { "COMMAND_INT", 75 }, { "COMMAND_LONG", 76 }, { "CONTROL_SYSTEM_STATE", 146 }, { "DATA_STREAM", 67 }, { "DATA_TRANSMISSION_HANDSHAKE", 130 }, { "DEBUG", 254 }, { "DEBUG_FLOAT_ARRAY", 350 }, { "DEBUG_VECT", 250 }, { "DISTANCE_SENSOR", 132 }, { "DRONE_CONTROL_LEASE", 51004 }, { "DRONE_CTRL_DEBUG", 51020 }, { "DRONE_GAIN_ACK", 51012 }, { "DRONE_GAIN_COMMIT", 51011 }, { "DRONE_GAIN_ROW", 51010 }, { "DRONE_LEG_ACK", 51002 }, { "DRONE_LEG_CANCEL", 51003 }, { "DRONE_LEG_COMMAND", 51001 }, { "DRONE_PROTOCOL_INFO", 51000 }, { "EFI_STATUS", 225 }, { "ENCAPSULATED_DATA", 131 }, { "ESTIMATOR_STATUS", 230 }, { "EXTENDED_SYS_STATE", 245 }, { "FENCE_STATUS", 162 }, { "FILE_TRANSFER_PROTOCOL", 110 }, { "FLIGHT_INFORMATION", 264 }, { "FOLLOW_TARGET", 144 }, { "GENERATOR_STATUS", 373 }, { "GIMBAL_DEVICE_ATTITUDE_STATUS", 285 }, { "GIMBAL_DEVICE_INFORMATION", 283 }, { "GIMBAL_DEVICE_SET_ATTITUDE", 284 }, { "GIMBAL_MANAGER_INFORMATION", 280 }, { "GIMBAL_MANAGER_SET_ATTITUDE", 282 }, { "GIMBAL_MANAGER_SET_MANUAL_CONTROL", 288 }, { "GIMBAL_MANAGER_SET_PITCHYAW", 287 }, { "GIMBAL_MANAGER_STATUS", 281 }, { "GLOBAL_POSITION_INT", 33 }, { "GLOBAL_POSITION_INT_COV", 63 }, { "GLOBAL_POSITION_SENSOR", 296 }, { "GLOBAL_VISION_POSITION_ESTIMATE", 101 }, { "GPS2_RAW", 124 }, { "GPS2_RTK", 128 }, { "GPS_GLOBAL_ORIGIN", 49 }, { "GPS_INJECT_DATA", 123 }, { "GPS_INPUT", 232 }, { "GPS_RAW_INT", 24 }, { "GPS_RTCM_DATA", 233 }, { "GPS_RTK", 127 }, { "GPS_STATUS", 25 }, { "HEARTBEAT", 0 }, { "HIGHRES_IMU", 105 }, { "HIGH_LATENCY", 234 }, { "HIGH_LATENCY2", 235 }, { "HIL_ACTUATOR_CONTROLS", 93 }, { "HIL_CONTROLS", 91 }, { "HIL_GPS", 113 }, { "HIL_OPTICAL_FLOW", 114 }, { "HIL_RC_INPUTS_RAW", 92 }, { "HIL_SENSOR", 107 }, { "HIL_STATE", 90 }, { "HIL_STATE_QUATERNION", 115 }, { "HOME_POSITION", 242 }, { "HYGROMETER_SENSOR", 12920 }, { "ISBD_LINK_STATUS", 335 }, { "LANDING_TARGET", 149 }, { "LOCAL_POSITION_NED", 32 }, { "LOCAL_POSITION_NED_COV", 64 }, { "LOCAL_POSITION_NED_SYSTEM_GLOBAL_OFFSET", 89 }, { "LOGGING_ACK", 268 }, { "LOGGING_DATA", 266 }, { "LOGGING_DATA_ACKED", 267 }, { "LOG_DATA", 120 }, { "LOG_ENTRY", 118 }, { "LOG_ERASE", 121 }, { "LOG_REQUEST_DATA", 119 }, { "LOG_REQUEST_END", 122 }, { "LOG_REQUEST_LIST", 117 }, { "MAG_CAL_REPORT", 192 }, { "MANUAL_CONTROL", 69 }, { "MANUAL_SETPOINT", 81 }, { "MEMORY_VECT", 249 }, { "MESSAGE_INTERVAL", 244 }, { "MISSION_ACK", 47 }, { "MISSION_CLEAR_ALL", 45 }, { "MISSION_COUNT", 44 }, { "MISSION_CURRENT", 42 }, { "MISSION_ITEM", 39 }, { "MISSION_ITEM_INT", 73 }, { "MISSION_ITEM_REACHED", 46 }, { "MISSION_REQUEST", 40 }, { "MISSION_REQUEST_INT", 51 }, { "MISSION_REQUEST_LIST", 43 }, { "MISSION_REQUEST_PARTIAL_LIST", 37 }, { "MISSION_SET_CURRENT", 41 }, { "MISSION_WRITE_PARTIAL_LIST", 38 }, { "MOUNT_ORIENTATION", 265 }, { "NAMED_VALUE_FLOAT", 251 }, { "NAMED_VALUE_INT", 252 }, { "NAV_CONTROLLER_OUTPUT", 62 }, { "OBSTACLE_DISTANCE", 330 }, { "ODOMETRY", 331 }, { "ONBOARD_COMPUTER_STATUS", 390 }, { "OPEN_DRONE_ID_ARM_STATUS", 12918 }, { "OPEN_DRONE_ID_AUTHENTICATION", 12902 }, { "OPEN_DRONE_ID_BASIC_ID", 12900 }, { "OPEN_DRONE_ID_LOCATION", 12901 }, { "OPEN_DRONE_ID_MESSAGE_PACK", 12915 }, { "OPEN_DRONE_ID_OPERATOR_ID", 12905 }, { "OPEN_DRONE_ID_SELF_ID", 12903 }, { "OPEN_DRONE_ID_SYSTEM", 12904 }, { "OPEN_DRONE_ID_SYSTEM_UPDATE", 12919 }, { "OPTICAL_FLOW", 100 }, { "OPTICAL_FLOW_RAD", 106 }, { "ORBIT_EXECUTION_STATUS", 360 }, { "PARAM_ERROR", 345 }, { "PARAM_EXT_ACK", 324 }, { "PARAM_EXT_REQUEST_LIST", 321 }, { "PARAM_EXT_REQUEST_READ", 320 }, { "PARAM_EXT_SET", 323 }, { "PARAM_EXT_VALUE", 322 }, { "PARAM_MAP_RC", 50 }, { "PARAM_REQUEST_LIST", 21 }, { "PARAM_REQUEST_READ", 20 }, { "PARAM_SET", 23 }, { "PARAM_VALUE", 22 }, { "PING", 4 }, { "PLAY_TUNE", 258 }, { "POSITION_TARGET_GLOBAL_INT", 87 }, { "POSITION_TARGET_LOCAL_NED", 85 }, { "POWER_STATUS", 125 }, { "RADIO_STATUS", 109 }, { "RAW_IMU", 27 }, { "RAW_PRESSURE", 28 }, { "RAW_RPM", 339 }, { "RC_CHANNELS", 65 }, { "RC_CHANNELS_OVERRIDE", 70 }, { "RC_CHANNELS_RAW", 35 }, { "RC_CHANNELS_SCALED", 34 }, { "RELAY_STATUS", 376 }, { "REQUEST_DATA_STREAM", 66 }, { "RESOURCE_REQUEST", 142 }, { "SAFETY_ALLOWED_AREA", 55 }, { "SAFETY_SET_ALLOWED_AREA", 54 }, { "SCALED_IMU", 26 }, { "SCALED_IMU2", 116 }, { "SCALED_IMU3", 129 }, { "SCALED_PRESSURE", 29 }, { "SCALED_PRESSURE2", 137 }, { "SCALED_PRESSURE3", 143 }, { "SERIAL_CONTROL", 126 }, { "SERVO_OUTPUT_RAW", 36 }, { "SETUP_SIGNING", 256 }, { "SET_ACTUATOR_CONTROL_TARGET", 139 }, { "SET_ATTITUDE_TARGET", 82 }, { "SET_GPS_GLOBAL_ORIGIN", 48 }, { "SET_HOME_POSITION", 243 }, { "SET_MODE", 11 }, { "SET_POSITION_TARGET_GLOBAL_INT", 86 }, { "SET_POSITION_TARGET_LOCAL_NED", 84 }, { "SIM_STATE", 108 }, { "SMART_BATTERY_INFO", 370 }, { "STATUSTEXT", 253 }, { "STORAGE_INFORMATION", 261 }, { "SYSTEM_TIME", 2 }, { "SYS_STATUS", 1 }, { "TERRAIN_CHECK", 135 }, { "TERRAIN_DATA", 134 }, { "TERRAIN_REPORT", 136 }, { "TERRAIN_REQUEST", 133 }, { "TIMESYNC", 111 }, { "TRAJECTORY_REPRESENTATION_BEZIER", 333 }, { "TRAJECTORY_REPRESENTATION_WAYPOINTS", 332 }, { "TUNNEL", 385 }, { "UAVCAN_NODE_INFO", 311 }, { "UAVCAN_NODE_STATUS", 310 }, { "UTM_GLOBAL_POSITION", 340 }, { "V2_EXTENSION", 248 }, { "VFR_HUD", 74 }, { "VIBRATION", 241 }, { "VICON_POSITION_ESTIMATE", 104 }, { "VIDEO_STREAM_INFORMATION", 269 }, { "VIDEO_STREAM_STATUS", 270 }, { "VISION_POSITION_ESTIMATE", 102 }, { "VISION_SPEED_ESTIMATE", 103 }, { "WHEEL_DISTANCE", 9000 }, { "WIFI_CONFIG_AP", 299 }, { "WINCH_STATUS", 9005 }, { "WIND_COV", 231 }}
++# define MAVLINK_MESSAGE_INFO {MAVLINK_MESSAGE_INFO_HEARTBEAT, MAVLINK_MESSAGE_INFO_SYS_STATUS, MAVLINK_MESSAGE_INFO_SYSTEM_TIME, MAVLINK_MESSAGE_INFO_PING, MAVLINK_MESSAGE_INFO_CHANGE_OPERATOR_CONTROL, MAVLINK_MESSAGE_INFO_CHANGE_OPERATOR_CONTROL_ACK, MAVLINK_MESSAGE_INFO_AUTH_KEY, MAVLINK_MESSAGE_INFO_SET_MODE, MAVLINK_MESSAGE_INFO_PARAM_REQUEST_READ, MAVLINK_MESSAGE_INFO_PARAM_REQUEST_LIST, MAVLINK_MESSAGE_INFO_PARAM_VALUE, MAVLINK_MESSAGE_INFO_PARAM_SET, MAVLINK_MESSAGE_INFO_GPS_RAW_INT, MAVLINK_MESSAGE_INFO_GPS_STATUS, MAVLINK_MESSAGE_INFO_SCALED_IMU, MAVLINK_MESSAGE_INFO_RAW_IMU, MAVLINK_MESSAGE_INFO_RAW_PRESSURE, MAVLINK_MESSAGE_INFO_SCALED_PRESSURE, MAVLINK_MESSAGE_INFO_ATTITUDE, MAVLINK_MESSAGE_INFO_ATTITUDE_QUATERNION, MAVLINK_MESSAGE_INFO_LOCAL_POSITION_NED, MAVLINK_MESSAGE_INFO_GLOBAL_POSITION_INT, MAVLINK_MESSAGE_INFO_RC_CHANNELS_SCALED, MAVLINK_MESSAGE_INFO_RC_CHANNELS_RAW, MAVLINK_MESSAGE_INFO_SERVO_OUTPUT_RAW, MAVLINK_MESSAGE_INFO_MISSION_REQUEST_PARTIAL_LIST, MAVLINK_MESSAGE_INFO_MISSION_WRITE_PARTIAL_LIST, MAVLINK_MESSAGE_INFO_MISSION_ITEM, MAVLINK_MESSAGE_INFO_MISSION_REQUEST, MAVLINK_MESSAGE_INFO_MISSION_SET_CURRENT, MAVLINK_MESSAGE_INFO_MISSION_CURRENT, MAVLINK_MESSAGE_INFO_MISSION_REQUEST_LIST, MAVLINK_MESSAGE_INFO_MISSION_COUNT, MAVLINK_MESSAGE_INFO_MISSION_CLEAR_ALL, MAVLINK_MESSAGE_INFO_MISSION_ITEM_REACHED, MAVLINK_MESSAGE_INFO_MISSION_ACK, MAVLINK_MESSAGE_INFO_SET_GPS_GLOBAL_ORIGIN, MAVLINK_MESSAGE_INFO_GPS_GLOBAL_ORIGIN, MAVLINK_MESSAGE_INFO_PARAM_MAP_RC, MAVLINK_MESSAGE_INFO_MISSION_REQUEST_INT, MAVLINK_MESSAGE_INFO_SAFETY_SET_ALLOWED_AREA, MAVLINK_MESSAGE_INFO_SAFETY_ALLOWED_AREA, MAVLINK_MESSAGE_INFO_ATTITUDE_QUATERNION_COV, MAVLINK_MESSAGE_INFO_NAV_CONTROLLER_OUTPUT, MAVLINK_MESSAGE_INFO_GLOBAL_POSITION_INT_COV, MAVLINK_MESSAGE_INFO_LOCAL_POSITION_NED_COV, MAVLINK_MESSAGE_INFO_RC_CHANNELS, MAVLINK_MESSAGE_INFO_REQUEST_DATA_STREAM, MAVLINK_MESSAGE_INFO_DATA_STREAM, MAVLINK_MESSAGE_INFO_MANUAL_CONTROL, MAVLINK_MESSAGE_INFO_RC_CHANNELS_OVERRIDE, MAVLINK_MESSAGE_INFO_MISSION_ITEM_INT, MAVLINK_MESSAGE_INFO_VFR_HUD, MAVLINK_MESSAGE_INFO_COMMAND_INT, MAVLINK_MESSAGE_INFO_COMMAND_LONG, MAVLINK_MESSAGE_INFO_COMMAND_ACK, MAVLINK_MESSAGE_INFO_MANUAL_SETPOINT, MAVLINK_MESSAGE_INFO_SET_ATTITUDE_TARGET, MAVLINK_MESSAGE_INFO_ATTITUDE_TARGET, MAVLINK_MESSAGE_INFO_SET_POSITION_TARGET_LOCAL_NED, MAVLINK_MESSAGE_INFO_POSITION_TARGET_LOCAL_NED, MAVLINK_MESSAGE_INFO_SET_POSITION_TARGET_GLOBAL_INT, MAVLINK_MESSAGE_INFO_POSITION_TARGET_GLOBAL_INT, MAVLINK_MESSAGE_INFO_LOCAL_POSITION_NED_SYSTEM_GLOBAL_OFFSET, MAVLINK_MESSAGE_INFO_HIL_STATE, MAVLINK_MESSAGE_INFO_HIL_CONTROLS, MAVLINK_MESSAGE_INFO_HIL_RC_INPUTS_RAW, MAVLINK_MESSAGE_INFO_HIL_ACTUATOR_CONTROLS, MAVLINK_MESSAGE_INFO_OPTICAL_FLOW, MAVLINK_MESSAGE_INFO_GLOBAL_VISION_POSITION_ESTIMATE, MAVLINK_MESSAGE_INFO_VISION_POSITION_ESTIMATE, MAVLINK_MESSAGE_INFO_VISION_SPEED_ESTIMATE, MAVLINK_MESSAGE_INFO_VICON_POSITION_ESTIMATE, MAVLINK_MESSAGE_INFO_HIGHRES_IMU, MAVLINK_MESSAGE_INFO_OPTICAL_FLOW_RAD, MAVLINK_MESSAGE_INFO_HIL_SENSOR, MAVLINK_MESSAGE_INFO_SIM_STATE, MAVLINK_MESSAGE_INFO_RADIO_STATUS, MAVLINK_MESSAGE_INFO_FILE_TRANSFER_PROTOCOL, MAVLINK_MESSAGE_INFO_TIMESYNC, MAVLINK_MESSAGE_INFO_CAMERA_TRIGGER, MAVLINK_MESSAGE_INFO_HIL_GPS, MAVLINK_MESSAGE_INFO_HIL_OPTICAL_FLOW, MAVLINK_MESSAGE_INFO_HIL_STATE_QUATERNION, MAVLINK_MESSAGE_INFO_SCALED_IMU2, MAVLINK_MESSAGE_INFO_LOG_REQUEST_LIST, MAVLINK_MESSAGE_INFO_LOG_ENTRY, MAVLINK_MESSAGE_INFO_LOG_REQUEST_DATA, MAVLINK_MESSAGE_INFO_LOG_DATA, MAVLINK_MESSAGE_INFO_LOG_ERASE, MAVLINK_MESSAGE_INFO_LOG_REQUEST_END, MAVLINK_MESSAGE_INFO_GPS_INJECT_DATA, MAVLINK_MESSAGE_INFO_GPS2_RAW, MAVLINK_MESSAGE_INFO_POWER_STATUS, MAVLINK_MESSAGE_INFO_SERIAL_CONTROL, MAVLINK_MESSAGE_INFO_GPS_RTK, MAVLINK_MESSAGE_INFO_GPS2_RTK, MAVLINK_MESSAGE_INFO_SCALED_IMU3, MAVLINK_MESSAGE_INFO_DATA_TRANSMISSION_HANDSHAKE, MAVLINK_MESSAGE_INFO_ENCAPSULATED_DATA, MAVLINK_MESSAGE_INFO_DISTANCE_SENSOR, MAVLINK_MESSAGE_INFO_TERRAIN_REQUEST, MAVLINK_MESSAGE_INFO_TERRAIN_DATA, MAVLINK_MESSAGE_INFO_TERRAIN_CHECK, MAVLINK_MESSAGE_INFO_TERRAIN_REPORT, MAVLINK_MESSAGE_INFO_SCALED_PRESSURE2, MAVLINK_MESSAGE_INFO_ATT_POS_MOCAP, MAVLINK_MESSAGE_INFO_SET_ACTUATOR_CONTROL_TARGET, MAVLINK_MESSAGE_INFO_ACTUATOR_CONTROL_TARGET, MAVLINK_MESSAGE_INFO_ALTITUDE, MAVLINK_MESSAGE_INFO_RESOURCE_REQUEST, MAVLINK_MESSAGE_INFO_SCALED_PRESSURE3, MAVLINK_MESSAGE_INFO_FOLLOW_TARGET, MAVLINK_MESSAGE_INFO_CONTROL_SYSTEM_STATE, MAVLINK_MESSAGE_INFO_BATTERY_STATUS, MAVLINK_MESSAGE_INFO_AUTOPILOT_VERSION, MAVLINK_MESSAGE_INFO_LANDING_TARGET, MAVLINK_MESSAGE_INFO_FENCE_STATUS, MAVLINK_MESSAGE_INFO_MAG_CAL_REPORT, MAVLINK_MESSAGE_INFO_EFI_STATUS, MAVLINK_MESSAGE_INFO_ESTIMATOR_STATUS, MAVLINK_MESSAGE_INFO_WIND_COV, MAVLINK_MESSAGE_INFO_GPS_INPUT, MAVLINK_MESSAGE_INFO_GPS_RTCM_DATA, MAVLINK_MESSAGE_INFO_HIGH_LATENCY, MAVLINK_MESSAGE_INFO_HIGH_LATENCY2, MAVLINK_MESSAGE_INFO_VIBRATION, MAVLINK_MESSAGE_INFO_HOME_POSITION, MAVLINK_MESSAGE_INFO_SET_HOME_POSITION, MAVLINK_MESSAGE_INFO_MESSAGE_INTERVAL, MAVLINK_MESSAGE_INFO_EXTENDED_SYS_STATE, MAVLINK_MESSAGE_INFO_ADSB_VEHICLE, MAVLINK_MESSAGE_INFO_COLLISION, MAVLINK_MESSAGE_INFO_V2_EXTENSION, MAVLINK_MESSAGE_INFO_MEMORY_VECT, MAVLINK_MESSAGE_INFO_DEBUG_VECT, MAVLINK_MESSAGE_INFO_NAMED_VALUE_FLOAT, MAVLINK_MESSAGE_INFO_NAMED_VALUE_INT, MAVLINK_MESSAGE_INFO_STATUSTEXT, MAVLINK_MESSAGE_INFO_DEBUG, MAVLINK_MESSAGE_INFO_SETUP_SIGNING, MAVLINK_MESSAGE_INFO_BUTTON_CHANGE, MAVLINK_MESSAGE_INFO_PLAY_TUNE, MAVLINK_MESSAGE_INFO_CAMERA_INFORMATION, MAVLINK_MESSAGE_INFO_CAMERA_SETTINGS, MAVLINK_MESSAGE_INFO_STORAGE_INFORMATION, MAVLINK_MESSAGE_INFO_CAMERA_CAPTURE_STATUS, MAVLINK_MESSAGE_INFO_CAMERA_IMAGE_CAPTURED, MAVLINK_MESSAGE_INFO_FLIGHT_INFORMATION, MAVLINK_MESSAGE_INFO_MOUNT_ORIENTATION, MAVLINK_MESSAGE_INFO_LOGGING_DATA, MAVLINK_MESSAGE_INFO_LOGGING_DATA_ACKED, MAVLINK_MESSAGE_INFO_LOGGING_ACK, MAVLINK_MESSAGE_INFO_VIDEO_STREAM_INFORMATION, MAVLINK_MESSAGE_INFO_VIDEO_STREAM_STATUS, MAVLINK_MESSAGE_INFO_CAMERA_FOV_STATUS, MAVLINK_MESSAGE_INFO_CAMERA_TRACKING_IMAGE_STATUS, MAVLINK_MESSAGE_INFO_CAMERA_TRACKING_GEO_STATUS, MAVLINK_MESSAGE_INFO_CAMERA_THERMAL_RANGE, MAVLINK_MESSAGE_INFO_GIMBAL_MANAGER_INFORMATION, MAVLINK_MESSAGE_INFO_GIMBAL_MANAGER_STATUS, MAVLINK_MESSAGE_INFO_GIMBAL_MANAGER_SET_ATTITUDE, MAVLINK_MESSAGE_INFO_GIMBAL_DEVICE_INFORMATION, MAVLINK_MESSAGE_INFO_GIMBAL_DEVICE_SET_ATTITUDE, MAVLINK_MESSAGE_INFO_GIMBAL_DEVICE_ATTITUDE_STATUS, MAVLINK_MESSAGE_INFO_AUTOPILOT_STATE_FOR_GIMBAL_DEVICE, MAVLINK_MESSAGE_INFO_GIMBAL_MANAGER_SET_PITCHYAW, MAVLINK_MESSAGE_INFO_GIMBAL_MANAGER_SET_MANUAL_CONTROL, MAVLINK_MESSAGE_INFO_AIRSPEED, MAVLINK_MESSAGE_INFO_GLOBAL_POSITION_SENSOR, MAVLINK_MESSAGE_INFO_WIFI_CONFIG_AP, MAVLINK_MESSAGE_INFO_AIS_VESSEL, MAVLINK_MESSAGE_INFO_UAVCAN_NODE_STATUS, MAVLINK_MESSAGE_INFO_UAVCAN_NODE_INFO, MAVLINK_MESSAGE_INFO_PARAM_EXT_REQUEST_READ, MAVLINK_MESSAGE_INFO_PARAM_EXT_REQUEST_LIST, MAVLINK_MESSAGE_INFO_PARAM_EXT_VALUE, MAVLINK_MESSAGE_INFO_PARAM_EXT_SET, MAVLINK_MESSAGE_INFO_PARAM_EXT_ACK, MAVLINK_MESSAGE_INFO_OBSTACLE_DISTANCE, MAVLINK_MESSAGE_INFO_ODOMETRY, MAVLINK_MESSAGE_INFO_TRAJECTORY_REPRESENTATION_WAYPOINTS, MAVLINK_MESSAGE_INFO_TRAJECTORY_REPRESENTATION_BEZIER, MAVLINK_MESSAGE_INFO_ISBD_LINK_STATUS, MAVLINK_MESSAGE_INFO_RAW_RPM, MAVLINK_MESSAGE_INFO_UTM_GLOBAL_POSITION, MAVLINK_MESSAGE_INFO_PARAM_ERROR, MAVLINK_MESSAGE_INFO_DEBUG_FLOAT_ARRAY, MAVLINK_MESSAGE_INFO_ORBIT_EXECUTION_STATUS, MAVLINK_MESSAGE_INFO_SMART_BATTERY_INFO, MAVLINK_MESSAGE_INFO_GENERATOR_STATUS, MAVLINK_MESSAGE_INFO_ACTUATOR_OUTPUT_STATUS, MAVLINK_MESSAGE_INFO_RELAY_STATUS, MAVLINK_MESSAGE_INFO_TUNNEL, MAVLINK_MESSAGE_INFO_CAN_FRAME, MAVLINK_MESSAGE_INFO_CANFD_FRAME, MAVLINK_MESSAGE_INFO_CAN_FILTER_MODIFY, MAVLINK_MESSAGE_INFO_ONBOARD_COMPUTER_STATUS, MAVLINK_MESSAGE_INFO_WHEEL_DISTANCE, MAVLINK_MESSAGE_INFO_WINCH_STATUS, MAVLINK_MESSAGE_INFO_OPEN_DRONE_ID_BASIC_ID, MAVLINK_MESSAGE_INFO_OPEN_DRONE_ID_LOCATION, MAVLINK_MESSAGE_INFO_OPEN_DRONE_ID_AUTHENTICATION, MAVLINK_MESSAGE_INFO_OPEN_DRONE_ID_SELF_ID, MAVLINK_MESSAGE_INFO_OPEN_DRONE_ID_SYSTEM, MAVLINK_MESSAGE_INFO_OPEN_DRONE_ID_OPERATOR_ID, MAVLINK_MESSAGE_INFO_OPEN_DRONE_ID_MESSAGE_PACK, MAVLINK_MESSAGE_INFO_OPEN_DRONE_ID_ARM_STATUS, MAVLINK_MESSAGE_INFO_OPEN_DRONE_ID_SYSTEM_UPDATE, MAVLINK_MESSAGE_INFO_HYGROMETER_SENSOR, MAVLINK_MESSAGE_INFO_DRONE_PROTOCOL_INFO, MAVLINK_MESSAGE_INFO_DRONE_LEG_COMMAND, MAVLINK_MESSAGE_INFO_DRONE_LEG_ACK, MAVLINK_MESSAGE_INFO_DRONE_LEG_CANCEL, MAVLINK_MESSAGE_INFO_DRONE_CONTROL_LEASE, MAVLINK_MESSAGE_INFO_DRONE_GAIN_ROW, MAVLINK_MESSAGE_INFO_DRONE_GAIN_COMMIT, MAVLINK_MESSAGE_INFO_DRONE_GAIN_ACK, MAVLINK_MESSAGE_INFO_DRONE_CTRL_DEBUG, MAVLINK_MESSAGE_INFO_DRONE_NAV_DEBUG}
++# define MAVLINK_MESSAGE_NAMES {{ "ACTUATOR_CONTROL_TARGET", 140 }, { "ACTUATOR_OUTPUT_STATUS", 375 }, { "ADSB_VEHICLE", 246 }, { "AIRSPEED", 295 }, { "AIS_VESSEL", 301 }, { "ALTITUDE", 141 }, { "ATTITUDE", 30 }, { "ATTITUDE_QUATERNION", 31 }, { "ATTITUDE_QUATERNION_COV", 61 }, { "ATTITUDE_TARGET", 83 }, { "ATT_POS_MOCAP", 138 }, { "AUTH_KEY", 7 }, { "AUTOPILOT_STATE_FOR_GIMBAL_DEVICE", 286 }, { "AUTOPILOT_VERSION", 148 }, { "BATTERY_STATUS", 147 }, { "BUTTON_CHANGE", 257 }, { "CAMERA_CAPTURE_STATUS", 262 }, { "CAMERA_FOV_STATUS", 271 }, { "CAMERA_IMAGE_CAPTURED", 263 }, { "CAMERA_INFORMATION", 259 }, { "CAMERA_SETTINGS", 260 }, { "CAMERA_THERMAL_RANGE", 277 }, { "CAMERA_TRACKING_GEO_STATUS", 276 }, { "CAMERA_TRACKING_IMAGE_STATUS", 275 }, { "CAMERA_TRIGGER", 112 }, { "CANFD_FRAME", 387 }, { "CAN_FILTER_MODIFY", 388 }, { "CAN_FRAME", 386 }, { "CHANGE_OPERATOR_CONTROL", 5 }, { "CHANGE_OPERATOR_CONTROL_ACK", 6 }, { "COLLISION", 247 }, { "COMMAND_ACK", 77 }, { "COMMAND_INT", 75 }, { "COMMAND_LONG", 76 }, { "CONTROL_SYSTEM_STATE", 146 }, { "DATA_STREAM", 67 }, { "DATA_TRANSMISSION_HANDSHAKE", 130 }, { "DEBUG", 254 }, { "DEBUG_FLOAT_ARRAY", 350 }, { "DEBUG_VECT", 250 }, { "DISTANCE_SENSOR", 132 }, { "DRONE_CONTROL_LEASE", 51004 }, { "DRONE_CTRL_DEBUG", 51020 }, { "DRONE_GAIN_ACK", 51012 }, { "DRONE_GAIN_COMMIT", 51011 }, { "DRONE_GAIN_ROW", 51010 }, { "DRONE_LEG_ACK", 51002 }, { "DRONE_LEG_CANCEL", 51003 }, { "DRONE_LEG_COMMAND", 51001 }, { "DRONE_NAV_DEBUG", 51021 }, { "DRONE_PROTOCOL_INFO", 51000 }, { "EFI_STATUS", 225 }, { "ENCAPSULATED_DATA", 131 }, { "ESTIMATOR_STATUS", 230 }, { "EXTENDED_SYS_STATE", 245 }, { "FENCE_STATUS", 162 }, { "FILE_TRANSFER_PROTOCOL", 110 }, { "FLIGHT_INFORMATION", 264 }, { "FOLLOW_TARGET", 144 }, { "GENERATOR_STATUS", 373 }, { "GIMBAL_DEVICE_ATTITUDE_STATUS", 285 }, { "GIMBAL_DEVICE_INFORMATION", 283 }, { "GIMBAL_DEVICE_SET_ATTITUDE", 284 }, { "GIMBAL_MANAGER_INFORMATION", 280 }, { "GIMBAL_MANAGER_SET_ATTITUDE", 282 }, { "GIMBAL_MANAGER_SET_MANUAL_CONTROL", 288 }, { "GIMBAL_MANAGER_SET_PITCHYAW", 287 }, { "GIMBAL_MANAGER_STATUS", 281 }, { "GLOBAL_POSITION_INT", 33 }, { "GLOBAL_POSITION_INT_COV", 63 }, { "GLOBAL_POSITION_SENSOR", 296 }, { "GLOBAL_VISION_POSITION_ESTIMATE", 101 }, { "GPS2_RAW", 124 }, { "GPS2_RTK", 128 }, { "GPS_GLOBAL_ORIGIN", 49 }, { "GPS_INJECT_DATA", 123 }, { "GPS_INPUT", 232 }, { "GPS_RAW_INT", 24 }, { "GPS_RTCM_DATA", 233 }, { "GPS_RTK", 127 }, { "GPS_STATUS", 25 }, { "HEARTBEAT", 0 }, { "HIGHRES_IMU", 105 }, { "HIGH_LATENCY", 234 }, { "HIGH_LATENCY2", 235 }, { "HIL_ACTUATOR_CONTROLS", 93 }, { "HIL_CONTROLS", 91 }, { "HIL_GPS", 113 }, { "HIL_OPTICAL_FLOW", 114 }, { "HIL_RC_INPUTS_RAW", 92 }, { "HIL_SENSOR", 107 }, { "HIL_STATE", 90 }, { "HIL_STATE_QUATERNION", 115 }, { "HOME_POSITION", 242 }, { "HYGROMETER_SENSOR", 12920 }, { "ISBD_LINK_STATUS", 335 }, { "LANDING_TARGET", 149 }, { "LOCAL_POSITION_NED", 32 }, { "LOCAL_POSITION_NED_COV", 64 }, { "LOCAL_POSITION_NED_SYSTEM_GLOBAL_OFFSET", 89 }, { "LOGGING_ACK", 268 }, { "LOGGING_DATA", 266 }, { "LOGGING_DATA_ACKED", 267 }, { "LOG_DATA", 120 }, { "LOG_ENTRY", 118 }, { "LOG_ERASE", 121 }, { "LOG_REQUEST_DATA", 119 }, { "LOG_REQUEST_END", 122 }, { "LOG_REQUEST_LIST", 117 }, { "MAG_CAL_REPORT", 192 }, { "MANUAL_CONTROL", 69 }, { "MANUAL_SETPOINT", 81 }, { "MEMORY_VECT", 249 }, { "MESSAGE_INTERVAL", 244 }, { "MISSION_ACK", 47 }, { "MISSION_CLEAR_ALL", 45 }, { "MISSION_COUNT", 44 }, { "MISSION_CURRENT", 42 }, { "MISSION_ITEM", 39 }, { "MISSION_ITEM_INT", 73 }, { "MISSION_ITEM_REACHED", 46 }, { "MISSION_REQUEST", 40 }, { "MISSION_REQUEST_INT", 51 }, { "MISSION_REQUEST_LIST", 43 }, { "MISSION_REQUEST_PARTIAL_LIST", 37 }, { "MISSION_SET_CURRENT", 41 }, { "MISSION_WRITE_PARTIAL_LIST", 38 }, { "MOUNT_ORIENTATION", 265 }, { "NAMED_VALUE_FLOAT", 251 }, { "NAMED_VALUE_INT", 252 }, { "NAV_CONTROLLER_OUTPUT", 62 }, { "OBSTACLE_DISTANCE", 330 }, { "ODOMETRY", 331 }, { "ONBOARD_COMPUTER_STATUS", 390 }, { "OPEN_DRONE_ID_ARM_STATUS", 12918 }, { "OPEN_DRONE_ID_AUTHENTICATION", 12902 }, { "OPEN_DRONE_ID_BASIC_ID", 12900 }, { "OPEN_DRONE_ID_LOCATION", 12901 }, { "OPEN_DRONE_ID_MESSAGE_PACK", 12915 }, { "OPEN_DRONE_ID_OPERATOR_ID", 12905 }, { "OPEN_DRONE_ID_SELF_ID", 12903 }, { "OPEN_DRONE_ID_SYSTEM", 12904 }, { "OPEN_DRONE_ID_SYSTEM_UPDATE", 12919 }, { "OPTICAL_FLOW", 100 }, { "OPTICAL_FLOW_RAD", 106 }, { "ORBIT_EXECUTION_STATUS", 360 }, { "PARAM_ERROR", 345 }, { "PARAM_EXT_ACK", 324 }, { "PARAM_EXT_REQUEST_LIST", 321 }, { "PARAM_EXT_REQUEST_READ", 320 }, { "PARAM_EXT_SET", 323 }, { "PARAM_EXT_VALUE", 322 }, { "PARAM_MAP_RC", 50 }, { "PARAM_REQUEST_LIST", 21 }, { "PARAM_REQUEST_READ", 20 }, { "PARAM_SET", 23 }, { "PARAM_VALUE", 22 }, { "PING", 4 }, { "PLAY_TUNE", 258 }, { "POSITION_TARGET_GLOBAL_INT", 87 }, { "POSITION_TARGET_LOCAL_NED", 85 }, { "POWER_STATUS", 125 }, { "RADIO_STATUS", 109 }, { "RAW_IMU", 27 }, { "RAW_PRESSURE", 28 }, { "RAW_RPM", 339 }, { "RC_CHANNELS", 65 }, { "RC_CHANNELS_OVERRIDE", 70 }, { "RC_CHANNELS_RAW", 35 }, { "RC_CHANNELS_SCALED", 34 }, { "RELAY_STATUS", 376 }, { "REQUEST_DATA_STREAM", 66 }, { "RESOURCE_REQUEST", 142 }, { "SAFETY_ALLOWED_AREA", 55 }, { "SAFETY_SET_ALLOWED_AREA", 54 }, { "SCALED_IMU", 26 }, { "SCALED_IMU2", 116 }, { "SCALED_IMU3", 129 }, { "SCALED_PRESSURE", 29 }, { "SCALED_PRESSURE2", 137 }, { "SCALED_PRESSURE3", 143 }, { "SERIAL_CONTROL", 126 }, { "SERVO_OUTPUT_RAW", 36 }, { "SETUP_SIGNING", 256 }, { "SET_ACTUATOR_CONTROL_TARGET", 139 }, { "SET_ATTITUDE_TARGET", 82 }, { "SET_GPS_GLOBAL_ORIGIN", 48 }, { "SET_HOME_POSITION", 243 }, { "SET_MODE", 11 }, { "SET_POSITION_TARGET_GLOBAL_INT", 86 }, { "SET_POSITION_TARGET_LOCAL_NED", 84 }, { "SIM_STATE", 108 }, { "SMART_BATTERY_INFO", 370 }, { "STATUSTEXT", 253 }, { "STORAGE_INFORMATION", 261 }, { "SYSTEM_TIME", 2 }, { "SYS_STATUS", 1 }, { "TERRAIN_CHECK", 135 }, { "TERRAIN_DATA", 134 }, { "TERRAIN_REPORT", 136 }, { "TERRAIN_REQUEST", 133 }, { "TIMESYNC", 111 }, { "TRAJECTORY_REPRESENTATION_BEZIER", 333 }, { "TRAJECTORY_REPRESENTATION_WAYPOINTS", 332 }, { "TUNNEL", 385 }, { "UAVCAN_NODE_INFO", 311 }, { "UAVCAN_NODE_STATUS", 310 }, { "UTM_GLOBAL_POSITION", 340 }, { "V2_EXTENSION", 248 }, { "VFR_HUD", 74 }, { "VIBRATION", 241 }, { "VICON_POSITION_ESTIMATE", 104 }, { "VIDEO_STREAM_INFORMATION", 269 }, { "VIDEO_STREAM_STATUS", 270 }, { "VISION_POSITION_ESTIMATE", 102 }, { "VISION_SPEED_ESTIMATE", 103 }, { "WHEEL_DISTANCE", 9000 }, { "WIFI_CONFIG_AP", 299 }, { "WINCH_STATUS", 9005 }, { "WIND_COV", 231 }}
+ # if MAVLINK_COMMAND_24BIT
+ #  include "../mavlink_get_info.h"
+ # endif
+diff --git a/docs/controle_lqg.md b/docs/controle_lqg.md
+index f3b0ab1..004688e 100644
+--- a/docs/controle_lqg.md
++++ b/docs/controle_lqg.md
+@@ -497,3 +497,46 @@ As linhas z e vz do B do ajustado agora usam o ω0 real (`LQG_AJ_Z_SCALE`,
+ 0,70), também na predição do Kalman (`lqg_dist_kalman_input`, coletivo) e no
+ estimador de altura. Em simulação, num empurrão coletivo de 40 rad/s, o erro do
+ vz estimado cai de 4,2 para 0,8 cm/s; Kz fica em ~110 e Kvz vai de 89,6 a 106,8.
++
++## 14. Fusão do fluxo com o acelerômetro (branch `hover-lqg-pi-better`, 08/11)
++
++**Por quê.** O gráfico X/Y do log não batia com o vídeo dos voos. Nas capturas
++pela USB (MTF, BNO e motores crus) o fluxo em voo tem desvio de ~7 cm/s de uma
++amostra para a próxima, e a compensação do giro estava no pareamento errado
++(corrigida com `FLOW_GYRO_XY/YX`). O acelerômetro do BNO é limpo em alta
++frequência, mas tem viés.
++
++**O que faz (`control/flow_fusion.h`, `FLOW_EKF = 1`).** Por eixo do corpo
++(frente, direita), um Kalman de dois estados, velocidade e viés do
++acelerômetro: a aceleração linear do BNO prediz a velocidade a cada 10 ms
++(com o termo de rotação da guinada), e a velocidade do fluxo a corrige, com
++gate de inovação de 3σ (recusa e, depois de 0,5 s de recusas, adota a medida).
++A saída substitui a velocidade do fluxo que vai para o LQG.
++
++- A aceleração usa o mesmo mapa dos giros: frente = `SNS_SGN_P` × eixo y do
++  BNO, direita = `SNS_SGN_Q` × eixo x. Conferido com o voo capturado: a
++  direita casa com +x do BNO (r = +0,42); a frente com −y, com o sinal certo,
++  mas fraco (o drone estava seguro pela frente).
++- No mesmo voo, rodado em Python sobre a captura, o ruído amostra a amostra
++  caiu de 7,0 para ~0,6 cm/s; o desvio total, de ~12 para ~9,5 cm/s (o resto
++  é movimento lento); o viés convergiu para < 0,05 m/s²; 2% a 3% das medidas
++  foram recusadas.
++- **Não corrige** erro de escala nem viés lento do fluxo, e a posição continua
++  sendo a integral da velocidade.
++
++**Kalman do LQG para a velocidade fundida.** Com `FLOW_EKF = 1`, o voo troca o
++M, L do LQG ajustado pelos de `RN_FUNDIDO` (`tools/lqg_ajustado.py`): vx e vy
++com desvio de 3 cm/s em vez de 11 cm/s. O ganho de correção de vx sobe de
++0,243 para 0,636. O raio espectral da malha planta + Kalman + LQR (modelo
++corrigido) é o mesmo de antes (~1, a posição x, y não medida). O
++`hover-test` com `--q` envia o Kalman do mesmo modo que o firmware usa.
++
++| Parâmetro | Padrão | Significado |
++|---|---|---|
++| `FLOW_EKF` | 0 | 1 = liga a fusão e o Kalman fundido (só desarmado) |
++| `FEKF_ACC_N` | 1,0 | Ruído da aceleração, m/s² |
++| `FEKF_BIAS_N` | 0,02 | Passeio do viés, m/s² por raiz de s |
++| `FEKF_FLOW_N` | 0,10 | Ruído da velocidade do fluxo, m/s |
++| `FEKF_GATE` | 3 | Gate de inovação, em desvios (0 desliga) |
++
++Não combinar com `FLOW_CENS` (os dois tratam a mesma medida).
+diff --git a/protocol/drone_controller.xml b/protocol/drone_controller.xml
+index 5255cab..ecc739b 100644
+--- a/protocol/drone_controller.xml
++++ b/protocol/drone_controller.xml
+@@ -263,5 +263,24 @@
+       <field type="uint8_t" name="meas_flags" enum="DRONE_MEAS_FLAG">Measurements refreshed in this step.</field>
+       <field type="uint8_t" name="ctrl_flags" enum="DRONE_CTRL_FLAG">Controller condition.</field>
+     </message>
++    <message id="51021" name="DRONE_NAV_DEBUG">
++      <description>Navigation EKF step (control/nav_ekf.h): optical flow, range finder and BNO08x linear acceleration fused into position, velocity and accelerometer bias in x, y (local frame) and z (NED). Sent at NAV_DBG_HZ (0 = off) so the Pi can validate the horizontal estimate and the quality of z.</description>
++      <field type="uint32_t" name="time_boot_ms" units="ms">STM32 tick of the step.</field>
++      <field type="float[2]" name="flow_raw" units="rad/s">MTF-01 flow, sensor x and y.</field>
++      <field type="float[2]" name="flow_body" units="m/s">Flow velocity in body axes (forward, right), after scale and gyro compensation, before fusion.</field>
++      <field type="float" name="range_raw" units="m">Range finder reading.</field>
++      <field type="float" name="range_filt" units="m">Range after the jump gate and low-pass filter.</field>
++      <field type="float[3]" name="pos" units="m">EKF position x, y (local) and z (NED, negative above ground).</field>
++      <field type="float[3]" name="vel" units="m/s">EKF velocity vx, vy (local) and vz (NED, negative = climbing).</field>
++      <field type="float[3]" name="bias" units="m/s/s">EKF accelerometer bias x, y, z.</field>
++      <field type="float[3]" name="accel" units="m/s/s">Linear acceleration used in the prediction: x, y (local) and down.</field>
++      <field type="float" name="flow_ratio">Last innovation test ratio of the x/y pair (above 1 = rejected).</field>
++      <field type="float" name="z_ratio">Last innovation test ratio of z (above 1 = rejected).</field>
++      <field type="uint16_t" name="flow_rejected">Flow corrections rejected by the gate (wraps).</field>
++      <field type="uint16_t" name="z_rejected">Range corrections rejected by the EKF gate (wraps).</field>
++      <field type="uint16_t" name="range_rejected">Readings rejected by the range filter (wraps).</field>
++      <field type="uint16_t" name="flags">Bits: 1 new MTF frame, 2 flow fused, 4 flow rejected, 8 xy usable, 16 xy sent to the LQG, 32 range rejected, 64 z rejected, 128 z usable, 256 z sent to the LQG.</field>
++      <field type="uint8_t" name="quality">MTF-01 flow quality, 0 to 255.</field>
++    </message>
+   </messages>
+ </mavlink>
+diff --git a/tests/run.sh b/tests/run.sh
+index 9f98efd..1de26df 100644
+--- a/tests/run.sh
++++ b/tests/run.sh
+@@ -24,7 +24,7 @@ PURE="App/Src/attitude.c App/Src/mtf_parser.c
+       App/Src/control/ctrl_gains.c App/Src/control/ctrl_params.c App/Src/control/meas.c
+       App/Src/control/mixer.c App/Src/control/attitude_mode.c App/Src/control/trim.c App/Src/control/throttle.c
+       App/Src/control/lqg_tuning.c App/Src/control/lqg_dist.c App/Src/control/lqg_ajustado_gains.c
+-      App/Src/control/sim_plant.c"
++      App/Src/control/sim_plant.c App/Src/control/nav_ekf.c App/Src/control/range_filter.c"
+ REFERENCE="reference/STM32_ert_rtw/STM32.c reference/STM32_ert_rtw/STM32_data.c"
+ 
+ CFLAGS="-std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined
+diff --git a/tests/test_lqg_dist.c b/tests/test_lqg_dist.c
+index 8934338..fa6593f 100644
+--- a/tests/test_lqg_dist.c
++++ b/tests/test_lqg_dist.c
+@@ -120,7 +120,7 @@ static result_t simulate(bool adjusted, bool estimator, double dh, double dth, d
+   lqg_gains_t eff = LQG_ERT_DEFAULT_GAINS;
+   if (adjusted) {
+     lqg_dist_apply_gains(&eff);
+-    lqg_dist_apply_kalman(&eff);
++    lqg_dist_apply_kalman(&eff, false);
+   }
+   attitude_mode_mask_gains(&eff);
+   lqg_ert_t f;
+@@ -270,7 +270,7 @@ static void test_tuning(void) {
+ static double simulate_xy(float psi, bool rotate) {
+   lqg_gains_t eff = LQG_ERT_DEFAULT_GAINS;
+   lqg_dist_apply_gains(&eff);
+-  lqg_dist_apply_kalman(&eff);
++  lqg_dist_apply_kalman(&eff, false);
+   lqg_ert_t f;
+   lqg_ert_init(&f);
+   static const unsigned idx[LQG_NY] = {LQG_X_Z, LQG_X_PHI, LQG_X_THETA, LQG_X_PSI, LQG_X_VX,
+@@ -358,7 +358,7 @@ static double simulate_yaw(double authority, double torque, double tau) {
+   srand(5);
+   lqg_gains_t eff = LQG_ERT_DEFAULT_GAINS;
+   lqg_dist_apply_gains(&eff);
+-  lqg_dist_apply_kalman(&eff);
++  lqg_dist_apply_kalman(&eff, false);
+   lqg_ert_t f;
+   lqg_ert_init(&f);
+   lqg_dist_t e;
+@@ -427,7 +427,41 @@ static void test_yaw_disturbance(void) {
+   }
+ }
+ 
++/** @brief O limite de guinada encurta só a parcela de guinada do du. */
++static void test_limit_yaw(void) {
++  const float *pat = LQG_DIST_CHANNELS[LQG_DIST_PSI].pattern;
++  lqg_real_t du[LQG_NU], out[LQG_NU];
++  for (unsigned j = 0U; j < LQG_NU; ++j) du[j] = (lqg_real_t)(50.0F + 200.0F * pat[j]);
++  assert(!lqg_dist_limit_yaw(du, out, 0.0F) && out[0] == du[0]);
++  assert(!lqg_dist_limit_yaw(du, out, 300.0F) && out[1] == du[1]);
++  assert(lqg_dist_limit_yaw(du, out, 60.0F));
++  lqg_real_t yaw = 0.0, col = 0.0;
++  for (unsigned j = 0U; j < LQG_NU; ++j) {
++    yaw += (lqg_real_t)pat[j] * out[j];
++    col += out[j];
++  }
++  assert(fabs(yaw / LQG_NU - 60.0) < 1e-9);
++  assert(fabs(col / LQG_NU - 50.0) < 1e-9);  /* o coletivo não muda */
++  for (unsigned j = 0U; j < LQG_NU; ++j) du[j] = (lqg_real_t)(-200.0F * pat[j]);
++  assert(lqg_dist_limit_yaw(du, out, 60.0F));
++  yaw = 0.0;
++  for (unsigned j = 0U; j < LQG_NU; ++j) yaw += (lqg_real_t)pat[j] * out[j];
++  assert(fabs(yaw / LQG_NU + 60.0) < 1e-9);
++  /* FF/estimador podem ultrapassar o limite mesmo com LQG abaixo dele.
++     Preserva coletivo, pitch e roll ao limitar o pedido completo. */
++  const float *th = LQG_DIST_CHANNELS[LQG_DIST_THETA].pattern;
++  const float *ph = LQG_DIST_CHANNELS[LQG_DIST_PHI].pattern;
++  for (unsigned j = 0U; j < LQG_NU; ++j) {
++    du[j] = 100.0 + 30.0 * th[j] - 15.0 * ph[j] + (20.0 + 50.0 + 100.0) * pat[j];
++  }
++  assert(lqg_dist_limit_yaw(du, out, 60.0F));
++  for (unsigned j = 0U; j < LQG_NU; ++j) {
++    assert(fabs(out[j] - (100.0 + 30.0 * th[j] - 15.0 * ph[j] + 60.0 * pat[j])) < 1e-9);
++  }
++}
++
+ int main(void) {
++  test_limit_yaw();
+   test_tuning();
+   test_yaw_disturbance();
+   test_adjusted_kalman();
+diff --git a/tests/test_meas.c b/tests/test_meas.c
+index 8178b05..be207d3 100644
+--- a/tests/test_meas.c
++++ b/tests/test_meas.c
+@@ -20,6 +20,7 @@ static meas_input_t level(float range) {
+   in.q[0] = 1.0F;
+   in.attitude_valid = in.gyro_valid = in.range_valid = in.flow_valid = true;
+   in.range_m = range;
++  in.pred_vx = in.pred_vy = NAN;
+   return in;
+ }
+ 
+@@ -159,11 +160,221 @@ static void test_attitude_signs_and_yaw_unwrap(void) {
+   assert(NEAR(y[LQG_Y_PSI], 0.0, 1e-7));
+ }
+ 
++/** @brief FLOW_GATE: qualidade com histerese, inclinação e fluxo absurdo. */
++static void test_flow_gate(void) {
++  ctrl_params_t p = defaults();
++  p.flow_scale_x = p.flow_scale_y = 1.0F;
++  p.flow_gate = 1.0F;
++  meas_state_t s;
++  meas_reset(&s);
++  lqg_real_t y[LQG_NY];
++  meas_input_t in = level(1.0F);
++  in.flow_x = 0.2F;
++  in.flow_quality = 20U;  /* abaixo do limiar de ligar (30): ainda recusado */
++  assert((meas_update(&s, &in, &p, y) & MEAS_FLOW) == 0U);
++  in.flow_quality = 40U;
++  assert((meas_update(&s, &in, &p, y) & MEAS_FLOW) != 0U);
++  in.flow_quality = 20U;  /* histerese: acima de 15 continua ligado */
++  assert((meas_update(&s, &in, &p, y) & MEAS_FLOW) != 0U);
++  in.flow_quality = 10U;  /* abaixo de 15 desliga */
++  assert((meas_update(&s, &in, &p, y) & MEAS_FLOW) == 0U);
++  in.flow_quality = 50U;
++  in.flow_x = 5.0F;       /* acima de 4,2 rad/s: corrompido */
++  assert((meas_update(&s, &in, &p, y) & MEAS_FLOW) == 0U);
++  in.flow_x = 0.2F;
++  in.roll = 0.7F;         /* inclinado ~40°: a distância não é a altura */
++  assert((meas_update(&s, &in, &p, y) & MEAS_FLOW) == 0U);
++  p.flow_gate = 0.0F;     /* desligado: aceita tudo, como antes */
++  assert((meas_update(&s, &in, &p, y) & MEAS_FLOW) != 0U);
++}
++
++/**
++ * @brief Pareamento cruzado: rotação pura (sem translação) não gera velocidade.
++ *
++ * Como no voo de 08/11: flow_x responde ao giro y do BNO (-1,45), flow_y ao giro
++ * x (+1,65). Com o pareamento direto antigo sobra velocidade falsa; com o
++ * cruzado, ela some, nas duas orientações do sensor.
++ */
++static void test_flow_gyro_cross(void) {
++  ctrl_params_t p = defaults();
++  p.flow_scale_x = p.flow_scale_y = 1.0F;
++  p.flow_yaw_x = p.flow_yaw_y = 0.0F;
++  p.sgn_vx = p.sgn_vy = p.sgn_yaw = 1.0F;
++  meas_state_t s;
++  meas_reset(&s);
++  lqg_real_t y[LQG_NY];
++  const float gx = 0.3F, gy = -0.4F, range = 0.12F;
++  meas_input_t in = level(range);
++  in.gyro[0] = gx;
++  in.gyro[1] = gy;
++  in.flow_x = -1.45F * gy;
++  in.flow_y = +1.65F * gx;
++  /* Pareamento direto de antes: sobra velocidade falsa. */
++  p.flow_gyro_x = 1.0F;
++  p.flow_gyro_y = -1.0F;
++  p.flow_gyro_xy = p.flow_gyro_yx = 0.0F;
++  p.flow_swap = 1.0F;
++  (void)meas_update(&s, &in, &p, y);
++  assert(fabs((double)y[LQG_Y_VX]) > 0.05 || fabs((double)y[LQG_Y_VY]) > 0.05);
++  /* Cruzado: rotação pura vira velocidade nula, com ou sem FLOW_SWAP. */
++  p.flow_gyro_x = p.flow_gyro_y = 0.0F;
++  p.flow_gyro_xy = 1.45F;
++  p.flow_gyro_yx = -1.65F;
++  for (int swap = 0; swap < 2; ++swap) {
++    p.flow_swap = (float)swap;
++    (void)meas_update(&s, &in, &p, y);
++    assert(NEAR(y[LQG_Y_VX], 0.0, 1e-5) && NEAR(y[LQG_Y_VY], 0.0, 1e-5));
++  }
++  /* Translação continua passando: 0,1 rad/s a mais no canal Y (frente com swap). */
++  p.flow_swap = 1.0F;
++  in.flow_y += 0.1F;
++  (void)meas_update(&s, &in, &p, y);
++  assert(NEAR(y[LQG_Y_VX], 0.1 * range, 1e-5) && NEAR(y[LQG_Y_VY], 0.0, 1e-5));
++}
++
++/**
++ * @brief EKF de navegação: com FLOW_EKF o vx do LQG sai bem menos ruidoso que o
++ *        fluxo cru; desligado, nada muda. Só quadro novo do MTF corrige.
++ */
++static void test_flow_ekf(void) {
++  ctrl_params_t p = defaults();
++  p.flow_scale_x = p.flow_scale_y = 1.0F;
++  p.flow_yaw_x = p.flow_yaw_y = 0.0F;
++  p.flow_gyro_x = p.flow_gyro_y = p.flow_gyro_xy = p.flow_gyro_yx = 0.0F;
++  p.sgn_vx = p.sgn_vy = p.sgn_yaw = 1.0F;
++  p.flow_swap = 0.0F;
++  lqg_real_t y[LQG_NY];
++  double var[2] = {0.0, 0.0};
++  for (int fuse = 0; fuse < 2; ++fuse) {
++    p.flow_ekf = (float)fuse;
++    meas_state_t s;
++    meas_reset(&s);
++    unsigned long seed = 7UL;
++    double acc = 0.0;
++    int n = 0;
++    for (int k = 0; k < 1500; ++k) {
++      meas_input_t in = level(0.15F);
++      in.accel_valid = true;
++      in.mtf_frame = (uint32_t)k + 1U;
++      in.mtf_time_ms = 10U * (uint32_t)k;
++      seed = seed * 1103515245UL + 12345UL;
++      const float jitter = ((float)((seed >> 8) & 0xFFFFU) / 65535.0F - 0.5F) * 2.0F;
++      in.flow_x = 0.6F + jitter;  /* 0,6 rad/s a 15 cm = 9 cm/s, com ±1 rad/s de ruído */
++      (void)meas_update(&s, &in, &p, y);
++      if (k > 500) {
++        acc += ((double)y[LQG_Y_VX] - 0.09) * ((double)y[LQG_Y_VX] - 0.09);
++        ++n;
++      }
++    }
++    var[fuse] = acc / n;
++    assert(fuse == 0 || (s.diag.flags & MEAS_DIAG_XY_TO_LQG) != 0U);
++  }
++  assert(var[1] < var[0] / 9.0);  /* desvio pelo menos 3 vezes menor */
++
++  /* O mesmo quadro repetido não corrige o EKF de novo. */
++  meas_state_t s;
++  meas_reset(&s);
++  meas_input_t in = level(0.15F);
++  in.accel_valid = true;
++  in.mtf_frame = 5U;
++  (void)meas_update(&s, &in, &p, y);
++  const uint32_t updates = s.nav.flow_updates + (s.nav.h_started ? 1U : 0U);
++  (void)meas_update(&s, &in, &p, y);
++  assert(s.nav.flow_updates + (s.nav.h_started ? 1U : 0U) == updates);
++  assert((s.diag.flags & MEAS_DIAG_NEW_FRAME) == 0U);
++
++  /* Aceleração para a frente (eixo y do BNO com o sinal de p) faz a
++     velocidade x do EKF crescer sem fluxo. */
++  in.flow_valid = false;
++  in.lin_accel[1] = p.sgn_p * 1.0F;
++  for (int k = 0; k < 20; ++k) (void)meas_update(&s, &in, &p, y);
++  assert(s.nav.h[0].x[1] > 0.15F && fabsf(s.nav.h[1].x[1]) < 1e-4F);
++}
++
++/** @brief Z_EKF: com a distância filtrada, um salto isolado do telêmetro não chega ao LQG. */
++static void test_z_ekf(void) {
++  ctrl_params_t p = defaults();
++  lqg_real_t y[LQG_NY];
++  for (int use = 0; use < 2; ++use) {
++    p.z_ekf = (float)use;
++    meas_state_t s;
++    meas_reset(&s);
++    for (int k = 0; k < 200; ++k) {
++      meas_input_t in = level(0.15F);
++      in.accel_valid = true;
++      in.mtf_frame = (uint32_t)k + 1U;
++      in.mtf_time_ms = 10U * (uint32_t)k;
++      if (k == 150) in.range_m = 0.60F;  /* reflexo isolado */
++      (void)meas_update(&s, &in, &p, y);
++      if (k == 150) {
++        if (use) {
++          assert(NEAR(y[LQG_Y_Z], -0.15, 0.01));
++          assert((s.diag.flags & MEAS_DIAG_RANGE_REJECTED) != 0U);
++        } else {
++          assert(NEAR(y[LQG_Y_Z], -0.60, 1e-6));
++        }
++      }
++    }
++    assert(use == 0 || (s.diag.flags & MEAS_DIAG_Z_TO_LQG) != 0U);
++  }
++}
++
++/** @brief FLOW_BIAS e FLOW_CENS: viés subtraído e zero tratado como faixa. */
++static void test_flow_bias_and_censoring(void) {
++  ctrl_params_t p = defaults();
++  p.flow_scale_x = p.flow_scale_y = 1.0F;
++  p.flow_yaw_x = p.flow_yaw_y = 0.0F;
++  p.flow_gyro_x = p.flow_gyro_y = 0.0F;
++  p.sgn_vx = p.sgn_vy = p.sgn_yaw = 1.0F;
++  p.flow_swap = 0.0F;
++  meas_state_t s;
++  meas_reset(&s);
++  lqg_real_t y[LQG_NY];
++  meas_input_t in = level(1.0F);
++  in.flow_x = 0.4F;
++  p.flow_bias_x = 0.1F;
++  (void)meas_update(&s, &in, &p, y);
++  assert(NEAR(y[LQG_Y_VX], 0.3, 1e-6));  /* viés de 0,1 rad/s a 1 m = 0,1 m/s tirado */
++  p.flow_bias_x = 0.0F;
++
++  /* Censura: contagem zero. A predição dentro de ±0,1 m/s (a 1 m) é aceita. */
++  p.flow_cens = 1.0F;
++  in.flow_x = 0.0F;
++  in.flow_y = 0.0F;
++  in.pred_vx = 0.06F;
++  in.pred_vy = -0.04F;
++  (void)meas_update(&s, &in, &p, y);
++  assert(NEAR(y[LQG_Y_VX], 0.06, 1e-5) && NEAR(y[LQG_Y_VY], -0.04, 1e-5));
++  /* Fora da faixa, é limitada à borda (meio degrau = 0,1 m/s a 1 m). */
++  in.pred_vx = 0.5F;
++  in.pred_vy = -0.5F;
++  (void)meas_update(&s, &in, &p, y);
++  assert(NEAR(y[LQG_Y_VX], 0.1, 1e-5) && NEAR(y[LQG_Y_VY], -0.1, 1e-5));
++  /* Leitura não zero: a medida vale, a predição é ignorada. */
++  in.flow_x = 0.4F;
++  (void)meas_update(&s, &in, &p, y);
++  assert(NEAR(y[LQG_Y_VX], 0.4, 1e-6));
++  /* Sem predição (NaN) ou com FLOW_CENS desligado: zero é zero, como antes. */
++  in.flow_x = 0.0F;
++  in.pred_vx = NAN;
++  (void)meas_update(&s, &in, &p, y);
++  assert(NEAR(y[LQG_Y_VX], 0.0, 1e-6));
++  in.pred_vx = 0.05F;
++  p.flow_cens = 0.0F;
++  (void)meas_update(&s, &in, &p, y);
++  assert(NEAR(y[LQG_Y_VX], 0.0, 1e-6));
++}
++
+ /** @brief Fluxo -> velocidade, com escala, compensação do giro e guinada. */
+ static void test_flow_velocity(void) {
+   ctrl_params_t p = defaults();
+   p.flow_scale_x = p.flow_scale_y = 1.0F;
+   p.flow_yaw_x = p.flow_yaw_y = 0.0F;
++  /* Mapeamento original e pareamento direto (os padrões mudaram em 08/11). */
++  p.flow_swap = 0.0F;
++  p.flow_gyro_x = 1.0F;
++  p.flow_gyro_y = -1.0F;
++  p.flow_gyro_xy = p.flow_gyro_yx = 0.0F;
+   meas_state_t s;
+   meas_reset(&s);
+   lqg_real_t y[LQG_NY];
+@@ -176,6 +387,16 @@ static void test_flow_velocity(void) {
+   assert(NEAR(y[LQG_Y_VX], p.sgn_vx * 0.2, 1e-6));
+   assert(NEAR(y[LQG_Y_VY], p.sgn_vy * -0.1, 1e-6));
+ 
++  /* FLOW_SWAP: o canal Y vira a frente e o X a esquerda (direita = -X). */
++  p.flow_swap = 1.0F;
++  in.flow_x = 0.2F;
++  in.flow_y = -0.1F;
++  in.gyro[0] = in.gyro[1] = 0.0F;
++  (void)meas_update(&s, &in, &p, y);
++  assert(NEAR(y[LQG_Y_VX], p.sgn_vx * -0.1, 1e-6));
++  assert(NEAR(y[LQG_Y_VY], p.sgn_vy * -0.2, 1e-6));
++  p.flow_swap = 0.0F;
++
+   /* Rotação pura: o fluxo que o giro explica é removido (X com sinal oposto
+      e Y com o mesmo sinal, como medido na bancada). */
+   in.flow_x = -0.5F;
+@@ -272,6 +493,11 @@ int main(void) {
+   test_rearm_keeps_yaw_origin();
+   test_attitude_signs_and_yaw_unwrap();
+   test_flow_velocity();
++  test_flow_gate();
++  test_flow_bias_and_censoring();
++  test_flow_gyro_cross();
++  test_flow_ekf();
++  test_z_ekf();
+   test_invalid_readings_hold_last_value();
+   test_level_trim();
+   printf("test_meas: ok\n");
+diff --git a/tests/test_throttle.c b/tests/test_throttle.c
+index 9dbc88c..a67ae2c 100644
+--- a/tests/test_throttle.c
++++ b/tests/test_throttle.c
+@@ -26,6 +26,23 @@ static void test_ramp_down(void) {
+ }
+ 
+ /** @brief Rampa de partida: da marcha lenta até o hover, sem degrau. */
++/** @brief A rampa na média preserva a diferença entre os motores. */
++static void test_blend_common(void) {
++  float t[4] = {0.62F, 0.58F, 0.62F, 0.58F};
++  throttle_blend_common(t, 4U, 0.05F, 0.5F);
++  assert(fabsf((t[0] + t[1] + t[2] + t[3]) / 4.0F - 0.325F) < 1e-6F);
++  assert(fabsf((t[0] - t[1]) - 0.04F) < 1e-6F);
++  float u[4] = {0.62F, 0.58F, 0.62F, 0.58F};
++  throttle_blend_common(u, 4U, 0.05F, 1.0F);
++  assert(u[0] == 0.62F && u[1] == 0.58F);
++  float z[4] = {0.62F, 0.58F, 0.62F, 0.58F};
++  throttle_blend_common(z, 4U, 0.05F, 0.0F);
++  assert(fabsf((z[0] + z[1] + z[2] + z[3]) / 4.0F - 0.05F) < 1e-6F);
++  float lo[4] = {0.03F, 0.04F, 0.03F, 0.04F};  /* média abaixo da marcha lenta: não muda */
++  throttle_blend_common(lo, 4U, 0.05F, 0.5F);
++  assert(lo[0] == 0.03F);
++}
++
+ static void test_ramp_up(void) {
+   assert(throttle_ramp_up(0U, 2000U) == 0.0F);
+   assert(throttle_ramp_up(2000U, 2000U) == 1.0F);
+@@ -66,6 +83,7 @@ static void test_desaturate(void) {
+ int main(void) {
+   test_ramp_down();
+   test_ramp_up();
++  test_blend_common();
+   test_desaturate();
+   printf("test_throttle: ok\n");
+   return 0;
+diff --git a/tools/lqg_ajustado.py b/tools/lqg_ajustado.py
+index 653192e..42d75be 100644
+--- a/tools/lqg_ajustado.py
++++ b/tools/lqg_ajustado.py
+@@ -60,6 +60,14 @@ RN = [1.15e-4, 5.0e-8, 1.94e-7, 6.04e-8, 1.28e-2, 2.2e-3, 2.06e-6, 3.24e-7, 2.38
+ #: o Kalman seguia o ruído em vy e a posição y andava com ele. Só as linhas de
+ #: y e vy do Kalman mudam (M de vy por vy: 0,48 -> 0,24, igual ao de vx).
+ RN_AJUSTADO = RN[:5] + [RN[4]] + RN[6:]
++#: Desvio da velocidade do fluxo depois da fusão com o acelerômetro (FLOW_EKF),
++#: em m/s. No voo de 08/11 o filtro deixou ~0,6 cm/s de ruído amostra a
++#: amostra; 3 cm/s deixa margem para o que sobra em baixa frequência e para a
++#: correlação entre amostras (a saída do filtro não é ruído branco).
++SIGMA_V_FUNDIDO = 0.03
++#: Variância das medidas do Kalman com a velocidade fundida: a do ajustado com
++#: vx e vy em SIGMA_V_FUNDIDO² (o LQG passa a confiar mais na velocidade).
++RN_FUNDIDO = RN_AJUSTADO[:4] + [SIGMA_V_FUNDIDO ** 2] * 2 + RN_AJUSTADO[6:]
+ #: Variância (por passo) da perturbação de altura, em (rad/s)²: rápida o
+ #: bastante para achar um hover 30 rad/s errado em poucos segundos.
+ QD_ALTURA = 1.0
+@@ -276,6 +284,12 @@ def gerar() -> str:
+     out += [f"  {_linha(l)},  /* {n} */" for l, n in zip(M, lp.ESTADOS)]
+     out += ["};", "", "const lqg_real_t LQG_AJ_L[LQG_NX][LQG_NY] = {"]
+     out += [f"  {_linha(l)},  /* {n} */" for l, n in zip(L, lp.ESTADOS)]
++    Mf, Lf = kalman_lqg(RN_FUNDIDO)
++    out += ["};", "", f"/* Kalman com a velocidade fundida (FLOW_EKF): vx, vy com desvio de {SIGMA_V_FUNDIDO:g} m/s. */"]
++    out += ["const lqg_real_t LQG_AJ_M_FUSED[LQG_NX][LQG_NY] = {"]
++    out += [f"  {_linha(l)},  /* {n} */" for l, n in zip(Mf, lp.ESTADOS)]
++    out += ["};", "", "const lqg_real_t LQG_AJ_L_FUSED[LQG_NX][LQG_NY] = {"]
++    out += [f"  {_linha(l)},  /* {n} */" for l, n in zip(Lf, lp.ESTADOS)]
+     out += ["};", "", "const lqg_dist_channel_t LQG_DIST_CHANNELS[LQG_DIST_NC] = {"]
+     for nome, pos, vel, medidas, padrao in CANAIS:
+         qd = {"z": QD_ALTURA, "psi": QD_GUINADA}.get(pos, QD_ATITUDE)
+diff --git a/tools/pi/README.md b/tools/pi/README.md
+index 6d77e80..a95ea87 100644
+--- a/tools/pi/README.md
++++ b/tools/pi/README.md
+@@ -124,14 +124,19 @@ FLT_DRY_RUN = 1, FLT_SIM = 0 e a telemetria rápida desligada.
+ | Mais de 80 cm do ponto de decolagem por 250 ms (`--geofence`) | pousa |
+ | Telemetria parada por 1 s | pousa |
+ | Não chegou à altura no tempo da rampa + 23 s | pousa |
+-| Ctrl+C, SIGTERM ou a sessão SSH caindo (SIGHUP) | pousa |
++| Ctrl+C durante a decolagem, com altura medida < 10 cm e estimada < 12 cm | corta os motores |
++| Ctrl+C acima disso, SIGTERM ou a sessão SSH caindo (SIGHUP) | pousa |
+ | **Ctrl+C de novo** durante o pouso | **corta os motores** (desarma) |
+ | Erro de comunicação | pousa (no ar) ou desarma (no chão) |
+ 
+ Se a Pi morrer de vez, vale a supervisão do STM32: sem autorização ele segura
+ e pousa sozinho em 5 s.
+ 
+-**O que fica gravado** em `~/drone/ensaios/hover_<data>/`: `telemetria.csv`
++**O que fica gravado** em `~/real_log_kit/hover_<data>/`: `real_log.csv`
++(separado por `;`, uma linha por amostra, com M1..M4 físicos, medidas,
++estimativas, referências, saídas LQG, flags, todos os parâmetros, CRC/Q/R dos
++ganhos repetidos), `gains.json` (Kd, Kfd, L e M completos), `telemetria.csv`
++(formato compacto usado pelo relatório),
+ (cada passo do LQG: y, x̂, du, referência, motores, estado), `textos.txt`
+ (mensagens do STM32, como os relatos `dist`), `meta.json` (parâmetros em uso,
+ ganhos, chão, motivo do fim), `resumo.json` (métricas e sugestão) e
+@@ -153,7 +158,9 @@ saturação, oscilação dominante e o relato `dist` de antes do pouso. E sugere
+ A sugestão fica no perfil, mas **só entra quando alguém aplica**
+ (`hover-profile --apply-suggestion [NOMES]`).
+ 
+-**No PC:** `sh tools/pi/buscar_ensaios.sh` traz os ensaios para
++**No PC:** `sh tools/pi/buscar_real_log_kit.sh` traz os kits para
++`real_log_kit/` na raiz do repositório, sem apagar os já copiados. O comando
++antigo `sh tools/pi/buscar_ensaios.sh` traz os ensaios legados para
+ `tools/pi/logs/hover/` (fora do Git) e, com matplotlib, desenha `grafico.png`
+ de cada um (altura, XY, inclinação, guinada e motores com as fases do voo);
+ `python3 -m dronectl hover-report <pasta> --plot` faz o mesmo para uma pasta.
+diff --git a/tools/pi/deploy.sh b/tools/pi/deploy.sh
+index c42869d..86888e1 100644
+--- a/tools/pi/deploy.sh
++++ b/tools/pi/deploy.sh
+@@ -26,7 +26,7 @@ rsync -aR --delete --exclude '__pycache__' --exclude '.venv' \
+   reference/STM32_ert_rtw/STM32_data.c \
+   App/Src/control/lqg_ert_model.c App/Src/control/lqg_ajustado_gains.c \
+   tools/ert_import.py tools/lqg_ajustado.py tools/lqg_modelo.py \
+-  tools/pi/dronectl tools/pi/missoes tools/pi/tests tools/pi/ensaios/ensaio_dronelink.py tools/pi/ensaios/assinatura_ag.py \
++  tools/pi/dronectl tools/pi/missoes tools/pi/tests tools/pi/ensaios/ensaio_dronelink.py tools/pi/ensaios/assinatura_ag.py tools/pi/buscar_real_log_kit.sh \
+   tools/pi/requirements.txt tools/pi/README.md \
+   "$HOST:$DEST/"
+ 
+diff --git a/tools/pi/dronectl/cli.py b/tools/pi/dronectl/cli.py
+index 2229126..b204e0f 100644
+--- a/tools/pi/dronectl/cli.py
++++ b/tools/pi/dronectl/cli.py
+@@ -504,11 +504,11 @@ def main(argv=None) -> int:
+                    help='pousa a esta distância do ponto de decolagem, em cm')
+     p.add_argument('--countdown', type=float, default=3.0, help='contagem antes de armar, em s')
+     p.add_argument('--profile', help='perfil (padrão ~/drone/perfil_hover.json)')
+-    p.add_argument('--out', help='pasta dos ensaios (padrão ~/drone/ensaios)')
++    p.add_argument('--out', help='pasta dos ensaios (padrão ~/real_log_kit)')
+     p.set_defaults(func=cmd_hover_test)
+     p = sub.add_parser('hover-report', help='reanalisa um ensaio de hover gravado')
+     p.add_argument('folder', nargs='?', default='latest', help='pasta do ensaio (padrão: o último)')
+-    p.add_argument('--dir', help='onde procurar o último (padrão ~/drone/ensaios)')
++    p.add_argument('--dir', help='onde procurar o último (padrão ~/real_log_kit)')
+     p.add_argument('--timeline', action='store_true', help='mostra a linha do tempo (1 linha/s)')
+     p.add_argument('--plot', action='store_true', help='grava grafico.png na pasta (matplotlib)')
+     p.set_defaults(func=cmd_hover_report)
+diff --git a/tools/pi/dronectl/hover_report.py b/tools/pi/dronectl/hover_report.py
+index f3a1caa..8b15910 100644
+--- a/tools/pi/dronectl/hover_report.py
++++ b/tools/pi/dronectl/hover_report.py
+@@ -427,6 +427,11 @@ def format_report(rep: Report) -> str:
+                      f"({xy['final_cm'][0]:+}, {xy['final_cm'][1]:+}) cm, deriva "
+                      f"({xy['drift_cm_s'][0]:+}, {xy['drift_cm_s'][1]:+}) cm/s, "
+                      f"fluxo válido {xy['flow_valid_pct']}%")
++    if m.get('nav'):
++        from .nav_report import nav_line
++        line = nav_line(m['nav'])
++        if line:
++            lines.append(line)
+     if 'attitude' in m:
+         a = m['attitude']
+         lines.append(f"atitude: φ {a['phi_mean_deg']:+}° ± {a['phi_std_deg']}, "
+diff --git a/tools/pi/dronectl/hover_test.py b/tools/pi/dronectl/hover_test.py
+index 927826c..d52c67b 100644
+--- a/tools/pi/dronectl/hover_test.py
++++ b/tools/pi/dronectl/hover_test.py
+@@ -24,8 +24,8 @@ O que ele faz, em ordem:
+    saída da cerca (80 cm do ponto de decolagem), telemetria parada por 1 s,
+    Ctrl+C ou a sessão SSH caindo (SIGHUP) → pouso; **Ctrl+C de novo corta os
+    motores** (desarma onde estiver);
+-4. grava tudo em ``~/drone/ensaios/hover_<data>/`` (telemetria.csv, textos.txt,
+-   meta.json, resumo.json, linha_do_tempo.txt) e imprime a análise
++4. grava tudo em ``~/real_log_kit/hover_<data>/`` (incluindo o CSV completo
++   ``real_log.csv`` para planilhas), e imprime a análise
+    (``hover_report``) com a sugestão para o próximo voo, que fica guardada no
+    perfil.
+ 
+@@ -50,11 +50,12 @@ from .gains import REPO_ROOT, Gains
+ from .hover_report import (ARMED, FAILSAFE, HOLD, LEG, MOTOR_OF_INPUT, STANDBY, TAKEOFF,
+                            CSV_HEADER, Report, Sample, analyze, format_report, sample_row)
+ from .link import DroneLink, LinkError, state_name
++from .nav_report import analyze_nav, nav_notes, save_nav_log
+ 
+ #: Perfil padrão (fora de tools/: o deploy não apaga).
+ PROFILE_PATH = Path.home() / 'drone' / 'perfil_hover.json'
+-#: Pasta padrão dos ensaios.
+-RESULTS_DIR = Path.home() / 'drone' / 'ensaios'
++#: Kit autocontido de cada ensaio. Fica fora do deploy para não ser apagado.
++RESULTS_DIR = Path.home() / 'real_log_kit'
+ #: Altura e tempo de hover de um perfil novo.
+ DEFAULT_HEIGHT_CM = 30.0
+ DEFAULT_TIME_S = 20.0
+@@ -85,6 +86,11 @@ LAND_WAIT_S = 30.0
+ REACHED_M = 0.03
+ #: Altura abaixo da qual o drone conta como no chão, em m.
+ ON_GROUND_M = 0.05
++# Durante a decolagem, Ctrl+C a poucos centímetros do chão precisa cortar
++# antes que o pouso normal mantenha o hover por mais de meio segundo.
++# O ensaio de 08/11 abortado a 8,4 cm ainda terminou em failsafe no pouso.
++LOW_ABORT_MEAS_M = 0.10
++LOW_ABORT_EST_M = 0.12
+ #: Ensaio a seco: tempo depois do tempo de hover até pousar, em s.
+ DRY_EXTRA_S = 3.0
+ #: Ensaios guardados no histórico do perfil.
+@@ -210,14 +216,15 @@ def check_q_names(q: Dict[str, float]) -> None:
+                          f'(use {", ".join(names)})')
+ 
+ 
+-def adjusted_gains(q_override: Dict[str, float],
+-                   r: Optional[float]) -> Tuple[Gains, List[float], float]:
++def adjusted_gains(q_override: Dict[str, float], r: Optional[float],
++                   fused: bool = False) -> Tuple[Gains, List[float], float]:
+     """Kd/Kfd do dlqr do ajustado com os pesos Q pedidos e o Kalman do ajustado.
+ 
+     ``q_override`` usa os nomes dos estados (x, y, z, phi, theta, psi, vx, vy,
+     vz, p, q, r); o que faltar fica com o Q do LQG ajustado do firmware. L e
+     M são os do ajustado (``kalman_lqg(RN_AJUSTADO)``), os mesmos que o
+-    firmware usa com os ganhos de fábrica.
++    firmware usa com os ganhos de fábrica; com ``fused`` (FLOW_EKF = 1), os do
++    Kalman da velocidade fundida (``kalman_lqg(RN_FUNDIDO)``), como o firmware.
+ 
+     Returns:
+         Os ganhos, o Q completo usado e o R usado.
+@@ -229,7 +236,7 @@ def adjusted_gains(q_override: Dict[str, float],
+     if rr <= 0 or any(v < 0 for v in q):
+         raise ValueError('Q não pode ser negativo e R precisa ser positivo')
+     Kd, Kfd = aj.ganhos_lqg(q, rr)
+-    M, L = aj.kalman_lqg(aj.RN_AJUSTADO)
++    M, L = aj.kalman_lqg(aj.RN_FUNDIDO if fused else aj.RN_AJUSTADO)
+     return Gains(Kd=Kd, Kfd=Kfd, L=L, M=M), q, rr
+ 
+ 
+@@ -290,10 +297,14 @@ class HoverTest:
+         self.say = say
+         #: (time.monotonic da chegada, DebugSample).
+         self.samples: List[Tuple[float, object]] = []
++        #: (time.monotonic da chegada, NavSample) do DRONE_NAV_DEBUG.
++        self.nav_samples: List[Tuple[float, object]] = []
+         self.texts: List[Tuple[float, str]] = []
+         self.stop_reason: Optional[str] = None
+         self.kill = False
+         self.applied: Dict[str, float] = {}
++        #: Fotografia de todos os parâmetros do STM32 imediatamente antes de armar.
++        self.params_snapshot: Dict[str, float] = {}
+         self.gains_info: Dict = {}
+         self.ground: Optional[float] = None
+         self.armed_by_us = False
+@@ -304,12 +315,16 @@ class HoverTest:
+         self.report: Optional[Report] = None
+         link.on_text = self._on_text
+         link.subscribe(self._on_sample)
++        link.subscribe_nav(self._on_nav)
+ 
+     # -- recepção (thread do enlace) --
+ 
+     def _on_sample(self, s) -> None:
+         self.samples.append((time.monotonic(), s))
+ 
++    def _on_nav(self, n) -> None:
++        self.nav_samples.append((time.monotonic(), n))
++
+     def _on_text(self, text: str) -> None:
+         self.texts.append((time.monotonic(), text))
+         self.say(f'  [STM32] {text}')
+@@ -391,6 +406,15 @@ class HoverTest:
+                  (', '.join(f'{k}={v:g}' for k, v in sorted(changed.items())) or 'nada'))
+         self.profile.save()  # guarda os valores de fábrica lidos
+ 
++    def _flow_ekf_on(self) -> bool:
++        """FLOW_EKF em uso no STM32: o Kalman enviado com --q precisa ser o mesmo modo."""
++        if 'FLOW_EKF' in self.applied:
++            return self.applied['FLOW_EKF'] >= 0.5
++        try:
++            return self.link.param_get('FLOW_EKF') >= 0.5
++        except LinkError:
++            return False  # firmware sem fusão
++
+     def _apply_gains(self) -> None:
+         q = dict(self.profile.q)
+         q.update(self.opts.q)
+@@ -402,16 +426,28 @@ class HoverTest:
+             return
+         if self.applied.get('CTL_LQG_AJ', 1.0) < 0.5:
+             raise LinkError('os pesos Q são do LQG ajustado: precisa de CTL_LQG_AJ = 1')
++        fused = self._flow_ekf_on()
+         try:
+-            gains, q_used, r_used = adjusted_gains(q, r)
++            gains, q_used, r_used = adjusted_gains(q, r, fused)
+         except ValueError as exc:
+             raise LinkError(str(exc)) from exc
+         crc = self.link.upload_gains(gains)
+         self.gains_info = {'custom': True, 'q_changed': q, 'q': q_used, 'r': r_used,
+-                           'crc': f'{crc:08X}'}
++                           'fused': fused, 'crc': f'{crc:08X}'}
+         self.say(f'ganhos do ajustado com Q {q or "de fábrica"} e R={r_used:g} em uso '
+                  f'(crc {crc:08X})')
+ 
++    def _snapshot_for_log(self) -> None:
++        """Lê a configuração completa que ficará repetida no CSV do ensaio.
++
++        A leitura acontece desarmado, depois de aplicar perfil, ``--set`` e
++        ganhos, para que o arquivo prove exatamente com que configuração o
++        voo começou. ``param_list`` também pega parâmetros que o hover-test
++        normalmente não altera (sinais, limites, curva de motor etc.).
++        """
++        self.params_snapshot = self.link.param_list()
++        self.applied = dict(self.params_snapshot)
++
+     def prepare(self) -> None:
+         o = self.opts
+         state = self._fresh_state()
+@@ -434,6 +470,7 @@ class HoverTest:
+                                 'firmware?)')
+ 
+         self._set('DBG_RATE_HZ', o.rate_hz)
++        self._snapshot_for_log()
+         self._wait_samples(int(o.rate_hz), 3.0)
+         s = self._last()
+         if s is None:
+@@ -458,7 +495,8 @@ class HoverTest:
+         o = self.opts
+         if o.mode == 'motors' and o.countdown_s > 0:
+             self.say(f'MOTORES VÃO GIRAR: decolando em {o.countdown_s:.0f} s (Ctrl+C cancela; '
+-                     'no ar, Ctrl+C pousa e Ctrl+C de novo corta os motores)')
++                     'perto do chão na decolagem corta; acima disso pousa; '
++                     'Ctrl+C de novo corta os motores)')
+             end = time.monotonic() + o.countdown_s
+             while time.monotonic() < end and not self.stop_reason:
+                 time.sleep(0.05)
+@@ -546,6 +584,24 @@ class HoverTest:
+ 
+     def land(self) -> None:
+         """Pede pouso e espera o desarme (Ctrl+C de novo corta os motores)."""
++        # Durante a decolagem, um cancelamento a poucos centímetros do chão
++        # não deve manter o empuxo de hover enquanto o firmware aguarda a
++        # referência de pouso e mais 500 ms de contato. No ensaio de 08/11 o
++        # Ctrl+C veio a 2,6 cm e o failsafe ocorreu nesse intervalo. Exige
++        # amostra recente, altura medida e estimada baixas; em voo mais alto,
++        # o primeiro Ctrl+C continua pedindo pouso.
++        s = self._last()
++        if (self.stop_reason == 'Ctrl+C' and self.opts.mode == 'motors' and
++                self._state() == TAKEOFF and self.ground is not None and s is not None and
++                self.samples and time.monotonic() - self.samples[-1][0] < 0.2 and
++                s.meas_flags & 4):
++            h_meas, h_est = self._height(s)
++            if h_meas < LOW_ABORT_MEAS_M and h_est < LOW_ABORT_EST_M:
++                self._disarm_now('Ctrl+C durante a decolagem, perto do chão')
++                end = time.monotonic() + 2.0
++                while time.monotonic() < end and self._state() not in (STANDBY, FAILSAFE):
++                    time.sleep(0.05)
++                return
+         try:
+             self.link.land()
+         except LinkError as exc:
+@@ -606,7 +662,8 @@ class HoverTest:
+         o = self.opts
+         return {'date': datetime.now().isoformat(timespec='seconds'), 'label': o.label,
+                 'mode': o.mode, 'height_m': o.height_m, 'time_s': o.time_s,
+-                'params': self.applied, 'set_this_test': o.params, 'gains': self.gains_info,
++                'params': self.params_snapshot or self.applied, 'set_this_test': o.params,
++                'gains': self.gains_info,
+                 'boot_id': self.link.boot_id, 'ground_y_z': self.ground,
+                 'land_reason': self.land_reason, 'stop_reason': self.stop_reason,
+                 'error': self.error}
+@@ -620,6 +677,8 @@ class HoverTest:
+             w.writerow(CSV_HEADER)
+             for t_pi, s in samples:
+                 w.writerow(sample_row(t_pi, s))
++        self._save_real_log(folder, samples)
++        self._save_gains(folder)
+         (folder / 'textos.txt').write_text(''.join(f'{t:.3f}\t{txt}\n' for t, txt in texts),
+                                            encoding='utf-8')
+         meta = self.meta()
+@@ -633,6 +692,11 @@ class HoverTest:
+             report.notes.insert(0, f'fim do voo: {self.land_reason}')
+         if self.error:
+             report.notes.insert(0, f'ensaio interrompido: {self.error}')
++        nav = list(self.nav_samples)
++        if nav:
++            save_nav_log(folder / 'nav_log.csv', nav)
++            report.metrics['nav'] = analyze_nav([n for _, n in nav], [s for _, s in samples])
++            report.notes.extend(nav_notes(report.metrics['nav']))
+         (folder / 'resumo.json').write_text(
+             json.dumps({'metrics': report.metrics, 'suggestion': report.suggestion,
+                         'notes': report.notes}, indent=1, ensure_ascii=False), encoding='utf-8')
+@@ -640,6 +704,66 @@ class HoverTest:
+                                                    encoding='utf-8')
+         return report
+ 
++    def _gain_snapshot(self) -> Dict:
++        """Descrição auditável dos ganhos esperados para o CRC que foi usado."""
++        q_changed = self.gains_info.get('q_changed', {})
++        r = self.gains_info.get('r')
++        fused = bool(self.gains_info.get('fused', self.applied.get('FLOW_EKF', 0.0) >= 0.5))
++        gains, q, r_used = adjusted_gains(q_changed, r, fused)
++        return {'custom': bool(self.gains_info.get('custom')), 'crc': self.gains_info.get('crc'),
++                'kalman': 'fundido (FLOW_EKF)' if fused else 'ajustado',
++                'q': q, 'r': r_used, 'state_names': _ajustado().lp.ESTADOS,
++                'Kd': gains.Kd, 'Kfd': gains.Kfd, 'L': gains.L, 'M': gains.M}
++
++    def _save_gains(self, folder: Path) -> None:
++        """Salva as matrizes uma vez; o CSV guarda CRC, Q e R em cada linha."""
++        (folder / 'gains.json').write_text(
++            json.dumps(self._gain_snapshot(), indent=1, ensure_ascii=False), encoding='utf-8')
++
++    def _save_real_log(self, folder: Path, samples: List[Tuple[float, object]]) -> None:
++        """CSV de planilha, com cabeçalhos físicos e contexto repetido em cada amostra.
++
++        ``telemetria.csv`` continua sendo o formato compacto interno do
++        hover-report. Este arquivo é deliberadamente largo: pode ser aberto
++        isoladamente no LibreOffice/Excel e não exige juntar meta ou ganhos.
++        """
++        state_names = _ajustado().lp.ESTADOS
++        gain = self._gain_snapshot()
++        params = self.params_snapshot or self.applied
++        header = (
++            ['t_pi_s', 't_stm32_ms', 'step', 'state', 'meas_flags', 'ctrl_flags',
++             'mode', 'boot_id', 'target_height_m', 'ground_y_z_m',
++             'm1_pct', 'm2_pct', 'm3_pct', 'm4_pct'] +
++            ['y_z_m', 'y_phi_rad', 'y_theta_rad', 'y_psi_rad', 'y_vx_m_s', 'y_vy_m_s',
++             'y_p_rad_s', 'y_q_rad_s', 'y_r_rad_s'] +
++            ['x_m', 'y_m', 'z_m', 'phi_rad', 'theta_rad', 'psi_rad', 'vx_m_s', 'vy_m_s',
++             'vz_m_s', 'p_rad_s', 'q_rad_s', 'r_rad_s'] +
++            ['du_u1_rad_s', 'du_u2_rad_s', 'du_u3_rad_s', 'du_u4_rad_s',
++             'ref_x_m', 'ref_y_m', 'ref_z_m', 'ref_psi_rad',
++             'thr_u1_pct', 'thr_u2_pct', 'thr_u3_pct', 'thr_u4_pct',
++             'gain_custom', 'gain_crc'] +
++            [f'q_{name}' for name in state_names] + ['r_lqr'] +
++            [f'param_{name}' for name in sorted(params)]
++        )
++        with open(folder / 'real_log.csv', 'w', newline='', encoding='utf-8') as f:
++            writer = csv.writer(f, delimiter=';')
++            writer.writerow(header)
++            for t_pi, s in samples:
++                motors = [0.0] * 4
++                for input_index, motor in enumerate(MOTOR_OF_INPUT):
++                    motors[motor - 1] = s.throttle[input_index] * 100.0
++                row = ([f'{t_pi:.6f}', s.time_ms, s.step, s.state, s.meas_flags, s.ctrl_flags,
++                        self.opts.mode, self.link.boot_id, f'{self.opts.height_m:.6g}',
++                        '' if self.ground is None else f'{self.ground:.6g}'] +
++                       [f'{v:.6f}' for v in motors] +
++                       [f'{v:.8g}' for v in s.y] + [f'{v:.8g}' for v in s.x_hat] +
++                       [f'{v:.8g}' for v in s.du] + [f'{v:.8g}' for v in s.ref] +
++                       [f'{v * 100.0:.6f}' for v in s.throttle] +
++                       [int(gain['custom']), gain['crc'] or ''] +
++                       [f'{v:.12g}' for v in gain['q']] + [f'{gain["r"]:.12g}'] +
++                       [f'{params[name]:.9g}' for name in sorted(params)])
++                writer.writerow(row)
++
+     # -- tudo --
+ 
+     def run(self) -> Tuple[Path, Report]:
+diff --git a/tools/pi/dronectl/link.py b/tools/pi/dronectl/link.py
+index 4573739..82e8cd6 100644
+--- a/tools/pi/dronectl/link.py
++++ b/tools/pi/dronectl/link.py
+@@ -105,6 +105,7 @@ class DroneLink:
+         self._inbox: Deque[Tuple[int, object]] = deque(maxlen=400)
+         self._seq = 0
+         self._subscribers: List[Callable[[DebugSample], None]] = []
++        self._nav_subscribers: List[Callable[[object], None]] = []
+ 
+         self.boot_id = 0
+         self.capabilities = 0
+@@ -171,6 +172,10 @@ class DroneLink:
+         """Chama @p callback (na thread de recepção) a cada DRONE_CTRL_DEBUG."""
+         self._subscribers.append(callback)
+ 
++    def subscribe_nav(self, callback: Callable[[object], None]) -> None:
++        """Chama @p callback (na thread de recepção) a cada DRONE_NAV_DEBUG (NavSample)."""
++        self._nav_subscribers.append(callback)
++
+     # ---- threads -------------------------------------------------------
+ 
+     def _rx_loop(self) -> None:
+@@ -243,6 +248,15 @@ class DroneLink:
+                 except Exception as exc:  # um assinante com erro não derruba o enlace
+                     self.on_text(f'erro no assinante da telemetria: {exc}')
+             notify = False
++        elif kind == 'DRONE_NAV_DEBUG':
++            from .nav_report import NavSample
++            sample = NavSample.from_msg(msg)
++            for callback in list(self._nav_subscribers):
++                try:
++                    callback(sample)
++                except Exception as exc:  # um assinante com erro não derruba o enlace
++                    self.on_text(f'erro no assinante do EKF: {exc}')
++            notify = False
+         elif kind == 'ATTITUDE':
+             self.attitude = msg
+             self.attitude_time = time.monotonic()
+diff --git a/tools/pi/tests/test_hover.py b/tools/pi/tests/test_hover.py
+index a0cf5ba..878103d 100644
+--- a/tools/pi/tests/test_hover.py
++++ b/tools/pi/tests/test_hover.py
+@@ -3,6 +3,7 @@ contra o STM32 simulado (tests/fake_fc.py com o modelo de voo).
+ 
+ Rodar a partir de tools/pi:  python3 -m unittest discover -s tests
+ """
++import csv
+ import json
+ import math
+ import os
+@@ -12,6 +13,7 @@ import threading
+ import time
+ import unittest
+ from pathlib import Path
++from types import SimpleNamespace
+ 
+ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+ 
+@@ -80,6 +82,47 @@ def flight_texts(t_mid, t_end):
+ class HoverReportTest(unittest.TestCase):
+     """A análise mede o voo e sugere o próximo a partir dos números certos."""
+ 
++    def test_ctrl_c_near_ground_cuts_without_waiting_for_land(self):
++        from dronectl.hover_test import HoverTest
++
++        commands = []
++        test = object.__new__(HoverTest)
++        sample = SimpleNamespace(state=TAKEOFF, meas_flags=4, y=[-0.164],
++                                 x_hat=[0.0, 0.0, -0.165])
++        def arm(armed):
++            commands.append(('arm', armed))
++            sample.state = STANDBY
++
++        test.link = SimpleNamespace(arm=arm, land=lambda: commands.append(('land',)))
++        test.opts = SimpleNamespace(mode='motors')
++        test.say = lambda message: None
++        test.stop_reason = 'Ctrl+C'
++        test.ground = -0.08
++        test.samples = [(time.monotonic(), sample)]
++        test.land()
++        self.assertEqual(commands, [('arm', False)])
++
++    def test_ctrl_c_above_ground_still_lands(self):
++        from dronectl.hover_test import HoverTest
++
++        commands = []
++        sample = SimpleNamespace(state=TAKEOFF, meas_flags=4, y=[-0.28],
++                                 x_hat=[0.0, 0.0, -0.28])
++        def land():
++            commands.append(('land',))
++            sample.state = STANDBY
++
++        test = object.__new__(HoverTest)
++        test.link = SimpleNamespace(arm=lambda armed: commands.append(('arm', armed)),
++                                    land=land)
++        test.opts = SimpleNamespace(mode='motors')
++        test.say = lambda message: None
++        test.stop_reason = 'Ctrl+C'
++        test.ground = -0.08
++        test.samples = [(time.monotonic(), sample)]
++        test.land()
++        self.assertEqual(commands, [('land',)])
++
+     def test_metrics_and_suggestion(self):
+         samples, t_mid, t_end = synthetic_flight()
+         rep = analyze(samples, flight_texts(t_mid, t_end),
+@@ -266,9 +309,20 @@ class HoverTestRunTest(unittest.TestCase):
+         test = self._run(label='primeiro')
+         self.assertIsNone(test.error, self.lines)
+         self.assertEqual(test.land_reason, 'fim do tempo de hover')
+-        for name in ('telemetria.csv', 'textos.txt', 'meta.json', 'resumo.json',
+-                     'linha_do_tempo.txt'):
++        for name in ('real_log.csv', 'gains.json', 'telemetria.csv', 'textos.txt', 'meta.json',
++                     'resumo.json', 'linha_do_tempo.txt'):
+             self.assertTrue((test.folder / name).exists(), name)
++        with open(test.folder / 'real_log.csv', newline='', encoding='utf-8') as f:
++            rows = list(csv.DictReader(f, delimiter=';'))
++        self.assertGreater(len(rows), 10)
++        self.assertEqual(rows[0]['mode'], 'sim')
++        self.assertIn('m1_pct', rows[0])
++        self.assertIn('x_m', rows[0])
++        self.assertIn('param_CTL_W0', rows[0])
++        self.assertEqual(float(rows[0]['param_CTL_W0']), 1050.0)
++        gains = json.loads((test.folder / 'gains.json').read_text(encoding='utf-8'))
++        self.assertEqual(gains['crc'], '21F15F2A')
++        self.assertEqual(len(gains['Kd']), 4)
+         self.assertEqual(self.fc.state, 2)
+         # Volta ao estado seguro: sem telemetria rápida, a seco, sem simulado.
+         self.assertEqual(self.fc.params['DBG_RATE_HZ'][0], 0.0)

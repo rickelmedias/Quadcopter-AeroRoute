@@ -1,0 +1,37 @@
+{
+ "date": "2026-11-08T11:58:15",
+ "label": "validacao a seco",
+ "mode": "dry",
+ "height_m": 0.3,
+ "time_s": 5.0,
+ "params": {
+  "FLT_SIM": 0.0,
+  "FLT_DRY_RUN": 1.0,
+  "CTL_DIST": 1.0,
+  "CTL_DIST_MAX": 400.0,
+  "CTL_FF_PHI": -40.0,
+  "CTL_FF_PSI": 50.0,
+  "CTL_FF_TH": -50.0,
+  "CTL_LQG_AJ": 1.0,
+  "CTL_W0": 1050.0,
+  "CTL_XY": 1.0,
+  "FLT_TILT_MAX": 0.3499999940395355,
+  "FLT_Z_RATE": 0.05000000074505806,
+  "MOT_MAX": 0.949999988079071,
+  "MOT_W_AT_0": 0.0,
+  "MOT_W_AT_100": 1755.0,
+  "SNS_LVL_PHI": 0.0,
+  "SNS_LVL_TH": 0.0,
+  "DBG_RATE_HZ": 50.0
+ },
+ "set_this_test": {},
+ "gains": {
+  "custom": false,
+  "crc": "21F15F2A"
+ },
+ "boot_id": 207,
+ "ground_y_z": -0.0830310994386673,
+ "land_reason": "fim do ensaio a seco",
+ "stop_reason": null,
+ "error": null
+}

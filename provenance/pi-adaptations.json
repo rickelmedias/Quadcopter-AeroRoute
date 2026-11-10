@@ -1,0 +1,14 @@
+{
+  "README.md": {
+    "deployed_sha256": "4ca1d46caa0113d04c90aaa2e4831e812ba866685e081b795a90158bafaf0576",
+    "repository_sha256": "56cd518f23917f5c32ac245d42aead1c6a388710eadaffe5bfd2b5a17af4df8c"
+  },
+  "dronectl": {
+    "deployed_sha256": "a58fad06a6386f7b131466935d30fa70f11306d358069dc9f0d5218d713e980d",
+    "repository_sha256": "14916bd9ab836d99adbac54297a42b6923a55d9ce508355f08d634d01c6335e9"
+  },
+  "tools/pi/dronectl/cli.py": {
+    "deployed_sha256": "b75b1cc6c0be91e9777d32732f57331a933f3d43c0abd777a78b1a0eddeae0dd",
+    "repository_sha256": "2ac2447cbf52364057f83894dda5b3f61cada8b54fee09cd4e13e2bbdbe113d1"
+  }
+}

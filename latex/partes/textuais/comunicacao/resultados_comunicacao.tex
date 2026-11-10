@@ -1,0 +1,247 @@
+% ============================================================================
+% RESULTADOS — comunicação entre o Raspberry Pi e o STM32 (DroneLink)
+% Chamado em partes/textuais/resultados.tex.
+% Registro do ensaio: DroneSTM32/docs/resultados_comunicacao/
+%   dronelink_20261107_225922.json (tools/pi/ensaios/ensaio_dronelink.py).
+% ============================================================================
+
+\section{COMUNICAÇÃO ENTRE O COMPUTADOR DE MISSÃO E O CONTROLADOR DE VOO}\label{sec:res_comunicacao}
+
+Esta seção apresenta os resultados dos três níveis de ensaio descritos na Seção~\ref{subsubsec:com_ensaios}. O ensaio integrado foi realizado com o Raspberry Pi Zero W ligado ao STM32 pela UART, com o VANT simulado no STM32 (\texttt{FLT\_SIM = 1}) e os motores parados. Também são relatados os problemas encontrados e corrigidos durante a integração.
+
+% ----------------------------------------------------------------
+\subsection{Testes automatizados}\label{subsec:res_com_testes}
+% ----------------------------------------------------------------
+
+A Tabela~\ref{tab:com_testes} apresenta as verificações automatizadas do \texttt{dronectl}, realizadas com um STM32 simulado em Python. Os testes compararam as respostas e os estados obtidos com os resultados esperados. Os casos apresentados foram executados com sucesso no computador pessoal e no Raspberry Pi.
+
+\begin{table}[H]
+    \centering
+    \caption{Testes do programa \texttt{dronectl} simulado.}
+    \label{tab:com_testes}
+    \small
+    \renewcommand{\arraystretch}{1.25}
+    \begin{tabular}{p{4.5cm}p{9.3cm}}
+        \hline
+        \textbf{Teste} & \textbf{O que verifica} \\
+        \hline
+        Sequência de voo &
+        Armamento, decolagem, recebimento de telemetria e dados de depuração, pouso e retorno ao estado desarmado. \\
+        Parâmetros &
+        Leitura e alteração de parâmetros e recebimento do valor adotado pelo simulador. \\
+        Envio de ganhos &
+        Envio dos ganhos do LQG, retransmissão de uma linha perdida e confirmação do CRC-32. \\
+        Interpretação dos comandos &
+        Aceitação de comandos válidos e recusa de comandos, números e pontos inválidos. \\
+        Cálculo do trecho &
+        Cálculo da distância e do menor giro até um ponto. \\
+        Movimento antes da decolagem &
+        A ferramenta não envia um comando de movimento enquanto o veículo simulado está no chão. \\
+        Trecho fora de \texttt{HOLD} &
+        Um trecho enviado diretamente ao simulador fora de \texttt{HOLD} é recusado. \\
+        Missão com comandos manuais &
+        Execução de comandos de decolagem, giro, deslocamento, visita a pontos e pouso. \\
+        Rotas em 2D e 3D &
+        Execução de \texttt{route} com retorno ao ponto de partida. \\
+        Missão por arquivo &
+        Leitura e execução da missão de um quadrado de 40~cm. \\
+        Resposta antiga &
+        Uma resposta de outra missão não encerra o trecho atual. \\
+        Erro durante a missão &
+        Um comando inválido interrompe a missão e a ferramenta solicita o pouso. \\
+        \hline
+    \end{tabular}
+    \par\vspace{0.2cm}
+    \footnotesize Fonte: elaborado pelos autores (2026).
+\end{table}
+
+Foram executadas nove suítes de teste de módulos do \textit{firmware} no computador, compiladas com o GCC e os recursos AddressSanitizer e UndefinedBehaviorSanitizer, para detectar determinados erros de memória e comportamentos indefinidos. Na versão avaliada, o \textit{firmware} ocupou 106~kB dos 512~kB de \textit{Flash} (21\%) e 80~kB dos 128~kB de RAM (63\%) do STM32F411.
+
+% ----------------------------------------------------------------
+\subsection{Enlace UART entre o Raspberry Pi e o STM32}\label{subsec:res_com_enlace}
+% ----------------------------------------------------------------
+
+A Tabela~\ref{tab:com_enlace} apresenta o tráfego recebido pelo Raspberry Pi durante 60~s, com o VANT simulado e os motores parados. As taxas medidas ficaram próximas das configuradas. No período, não foram registradas perdas de mensagens nem erros de \textit{checksum}. Quatro mensagens foram recebidas fora de ordem, sem serem contabilizadas como perdas.
+
+\begin{table}[H]
+    \centering
+    \caption{Tráfego do STM32 recebido pelo Raspberry Pi em 60~s, com o VANT parado.}
+    \label{tab:com_enlace}
+    \small
+    \renewcommand{\arraystretch}{1.2}
+    \begin{tabular}{lcc}
+        \hline
+        \textbf{Mensagem} & \textbf{Taxa nominal} & \textbf{Taxa medida} \\
+        \hline
+        \texttt{HEARTBEAT} & 2~Hz & 1,98~Hz \\
+        \texttt{SYS\_STATUS} & 2~Hz & 2,00~Hz \\
+        \texttt{DRONE\_PROTOCOL\_INFO} & 1~Hz & 1,00~Hz \\
+        \texttt{ATTITUDE} & 5~Hz & 4,97~Hz \\
+        \texttt{LOCAL\_POSITION\_NED} & 5~Hz & 4,97~Hz \\
+        \hline
+        \multicolumn{3}{l}{895 mensagens; 552~B/s; 0 perdidas; 0 erros de \textit{checksum}; 4 fora de ordem} \\
+        \hline
+    \end{tabular}
+    \par\vspace{0.2cm}
+    \footnotesize Fonte: elaborado pelos autores (2026).
+\end{table}
+
+O tráfego médio de 552~bytes/s correspondeu a aproximadamente 4,8\% da capacidade do enlace no sentido do STM32 para o Raspberry Pi. Em 100 leituras de parâmetro, a latência de ida e volta apresentou mediana de 10,2~ms e máximo de 21,2~ms. Esses resultados foram compatíveis com a coordenação da missão nas condições avaliadas. Como o ensaio durou 60~s e foi realizado com os motores parados, não caracteriza o comportamento do enlace sob vibração, interferência elétrica ou carga máxima.
+
+\subsection{Validação dos pedidos e tratamento de repetições}\label{subsec:res_com_recusas}
+
+A Tabela~\ref{tab:com_recusas} apresenta as respostas do STM32 aos pedidos enviados pelo Raspberry Pi. Nos casos avaliados, os pedidos inválidos foram recusados e os movimentos válidos foram executados pelo VANT simulado.
+
+Para verificar a repetição, um pedido de deslocamento de 30~cm foi enviado novamente com os mesmos identificadores. O VANT simulado deslocou-se 0,294~m, indicando uma única execução. Quando os mesmos identificadores foram usados com outro conteúdo, o pedido foi recusado.
+
+\begin{table}[H]
+    \centering
+    \caption{Respostas do STM32 aos pedidos enviados pela UART.}
+    \label{tab:com_recusas}
+    \small
+    \renewcommand{\arraystretch}{1.15}
+    \begin{tabular}{p{6.4cm}p{6.9cm}}
+        \hline
+        \textbf{Pedido} & \textbf{Resposta ou resultado} \\
+        \hline
+        Trecho sem autorização do operador &
+        \texttt{DENIED}: \texttt{OPERATOR\_LEASE\_LOST} \\
+        Trecho com o VANT no chão &
+        \texttt{DENIED}: \texttt{BAD\_STATE} \\
+        Identidade de \textit{boot} incorreta &
+        \texttt{DENIED}: \texttt{STALE\_BOOT} \\
+        Destino incorreto &
+        \texttt{DENIED}: \texttt{WRONG\_TARGET} \\
+        Índice de trecho fora de ordem &
+        \texttt{DENIED}: \texttt{SEQUENCE\_ERROR} \\
+        Número inválido (NaN) &
+        \texttt{DENIED}: \texttt{INVALID\_NUMBER} \\
+        Decolar até 30~cm &
+        \texttt{IN\_PROGRESS} $\rightarrow$ \texttt{ACCEPTED} \\
+        Girar 90° &
+        \texttt{IN\_PROGRESS} $\rightarrow$ \texttt{ACCEPTED} \\
+        Novo trecho durante o giro &
+        \texttt{TEMPORARILY\_REJECTED}: \texttt{BUSY} \\
+        Descer 2~m, abaixo do chão &
+        \texttt{DENIED}: \texttt{OUT\_OF\_BOUNDS} \\
+        Transladar 25~m &
+        \texttt{DENIED}: \texttt{OUT\_OF\_BOUNDS} \\
+        Andar 30~cm &
+        \texttt{IN\_PROGRESS} $\rightarrow$ \texttt{ACCEPTED} \\
+        Repetir o pedido de 30~cm &
+        Mesma resposta; uma execução de 0,294~m \\
+        Reutilizar identificadores com outro conteúdo &
+        \texttt{DENIED}: \texttt{ID\_COLLISION} \\
+        Cancelar trecho em andamento &
+        Trecho cancelado; VANT simulado em \texttt{HOLD} \\
+        Pousar &
+        Pouso concluído; VANT simulado desarmado \\
+        \hline
+    \end{tabular}
+    \par\vspace{0.2cm}
+    \footnotesize Fonte: elaborado pelos autores (2026).
+\end{table}
+
+% ----------------------------------------------------------------
+\subsection{Missão completa pela UART}\label{subsec:res_com_missao}
+% ----------------------------------------------------------------
+
+No ensaio integrado, o Raspberry Pi coordenou uma missão com decolagem, visita aos vértices de um quadrado de 40~cm de lado, retorno à partida e pouso. O veículo foi simulado no STM32, com os motores parados, conforme a Seção~\ref{subsubsec:com_ensaios}.
+
+O algoritmo genético definiu a ordem de visita aos três pontos, e o Raspberry Pi enviou os oito trechos da rota sequencialmente, aguardando a confirmação do STM32 após cada um. A rota durou 41~s, e a missão completa, incluindo decolagem, cálculo da rota e pouso, 62~s.
+
+
+\begin{table}[H]
+    \centering
+    \caption{Execução do quadrado de 40~cm pela UART, com o VANT simulado.}
+    \label{tab:com_quadrado}
+    \small
+    \renewcommand{\arraystretch}{1.2}
+    \begin{tabular}{cccc}
+        \hline
+        \textbf{Ponto} & \textbf{Alvo (cm)} & \textbf{Posição ao concluir (cm)} & \textbf{Erro} \\
+        \hline
+        1 & $(0, 40, 31)$ & $(0, 39, 31)$ & 1,0~cm \\
+        2 & $(40, 40, 31)$ & $(39, 41, 31)$ & 1,4~cm \\
+        3 & $(40, 0, 31)$ & $(41, 1, 31)$ & 1,4~cm \\
+        Partida & $(0, 0, 31)$ & $(1, -1, 31)$ & 1,4~cm \\
+        \hline
+    \end{tabular}
+    \par\vspace{0.2cm}
+    \footnotesize Fonte: elaborado pelos autores (2026).
+\end{table}
+
+
+A Tabela~\ref{tab:com_quadrado} apresenta as posições informadas pelo STM32. O maior erro calculado foi de 1,4~cm, considerando posições registradas com resolução de 1~cm. Esses valores descrevem o veículo simulado e não representam a precisão do drone em voo físico.
+
+% ----------------------------------------------------------------
+\subsection{Perda do enlace e da autorização do operador}\label{subsec:res_com_failsafe}
+% ----------------------------------------------------------------
+
+Para avaliar a supervisão, o Raspberry Pi iniciou um deslocamento de 1~m e interrompeu a autorização do operador, mantendo o \textit{HEARTBEAT}. Em outro ensaio, o processo responsável pelo voo foi encerrado durante o deslocamento. Nesse caso, um segundo processo apenas recebeu dados pela UART para registrar a resposta do STM32.
+
+A Tabela~\ref{tab:com_failsafe} apresenta os tempos observados a partir de cada interrupção.
+
+\begin{table}[H]
+    \centering
+    \caption{Resposta do STM32 à perda da autorização e do enlace.}
+    \label{tab:com_failsafe}
+    \small
+    \renewcommand{\arraystretch}{1.2}
+    \begin{tabular}{lccc}
+        \hline
+        \textbf{Falha} & \textbf{HOLD} & \textbf{Início do pouso} & \textbf{Desarmado} \\
+        \hline
+        Autorização interrompida & 0,88~s & 5,98~s & 8,99~s \\
+        Processo do Raspberry Pi encerrado & 1,30~s & 5,29~s & 8,31~s \\
+        \hline
+    \end{tabular}
+    \par\vspace{0.15cm}
+    \footnotesize Os tempos foram medidos a partir da interrupção, com base nos estados recebidos pela telemetria.\\
+    Fonte: elaborado pelos autores (2026).
+\end{table}
+
+Nos dois ensaios, o STM32 interrompeu o trecho, entrou em \texttt{HOLD} e iniciou o pouso sem receber um novo comando de missão. Os resultados demonstram a atuação da supervisão nos cenários testados com o VANT simulado. Os tempos observados incluem o intervalo entre o envio das mensagens e a atualização dos estados pela telemetria.
+
+% ----------------------------------------------------------------
+\subsection{Discussão dos resultados}\label{subsec:res_com_discussao}
+% ----------------------------------------------------------------
+
+Os ensaios identificaram problemas na integração entre o Raspberry Pi e o STM32. O Quadro~\ref{qua:com_correcoes} apresenta os problemas e as correções realizadas.
+
+\begin{quadro}[H]
+    \centering
+    \caption{Problemas identificados na integração e respectivas correções.}
+    \label{qua:com_correcoes}
+    \small
+    \renewcommand{\arraystretch}{1.2}
+    \begin{tabular}{|>{\raggedright\arraybackslash}p{6.5cm}|>{\raggedright\arraybackslash}p{7cm}|}
+        \hline
+        \textbf{Problema} & \textbf{Correção} \\
+        \hline
+        Voos pelo console USB eram interrompidos pela ausência de \textit{HEARTBEAT}. &
+        A supervisão da comunicação passou a atuar apenas em voos comandados pelo Raspberry Pi. \\
+        \hline
+        Alvos de altura fora dos limites eram aceitos antes de falharem. &
+        A altura passou a ser verificada antes da resposta ao pedido. \\
+        \hline
+        A conclusão de um trecho podia chegar antes da atualização do estado de voo. &
+        O Raspberry Pi passou a atualizar o estado pela resposta e a usar uma posição posterior à conclusão. \\
+        \hline
+        Telemetria e protocolo usavam contadores de sequência independentes. &
+        Os módulos passaram a compartilhar um único contador. \\
+        \hline
+        A altura publicada incluía a distância entre o sensor e o chão. &
+        A altura passou a usar como referência o chão registrado no armamento. \\
+        \hline
+        Uma resposta antiga de outra missão podia encerrar o trecho atual. &
+        A resposta passou a ser verificada pela missão e pelo instante de recebimento. \\
+        \hline
+    \end{tabular}
+    \par\vspace{0.2cm}
+    \footnotesize Fonte: elaborado pelos autores (2026).
+\end{quadro}
+
+Após as correções, a comunicação permitiu coordenar as missões avaliadas, com envio sequencial dos trechos e confirmação pelo STM32. Nos casos testados, pedidos inválidos ou repetidos foram tratados conforme previsto, e a supervisão iniciou o pouso simulado quando a autorização ou a comunicação foi perdida.
+
+Os testes verificaram a lógica do software, enquanto o ensaio integrado acrescentou a comunicação física entre as placas e a execução pelo controlador real. Como os motores permaneceram parados e o veículo foi simulado, esses resultados não demonstram o desempenho em voo físico; serviram como etapa de verificação anterior aos testes reais, conduzidos inicialmente com o protótipo em uma gaiola de proteção e, após comportamento satisfatório, sem ela (Seção~\ref{sec:resultados_voo}).

@@ -1,0 +1,38 @@
+\begin{simbolos}
+    \item[$m$, $M$] Massa total do quadricóptero, em quilogramas (kg)
+    \item[$g$] Aceleração da gravidade, em metros por segundo ao quadrado (m/s$^2$)
+    \item[$l$] Distância radial entre o centro do veículo e o motor, em metros (m)
+    \item[$d$] Braço projetado do motor em relação ao eixo de rotação, em metros (m)
+    \item[$K_t$] Coeficiente de empuxo do conjunto motor--hélice
+    \item[$K_q$] Coeficiente de torque do conjunto motor--hélice
+    \item[$T$] Empuxo total gerado pelos quatro rotores, em newtons (N)
+    \item[$F_i$] Empuxo gerado pelo motor $i$, em newtons (N)
+    \item[$\omega_i$] Velocidade angular do motor $i$, em radianos por segundo (rad/s)
+    \item[$\omega_0$] Velocidade angular de equilíbrio dos motores em voo estacionário (rad/s)
+    \item[$\tau_\phi,\tau_\theta,\tau_\psi$] Momentos de rolamento, arfagem e guinada
+    \item[$\phi,\theta,\psi$] Ângulos de Euler de rolamento, arfagem e guinada
+    \item[$p,q,r$] Velocidades angulares do corpo em torno dos eixos $x_B$, $y_B$ e $z_B$
+    \item[$I_{xx},I_{yy},I_{zz}$] Momentos principais de inércia do veículo
+    \item[$\mathbf{R}$] Matriz de rotação entre o referencial do corpo e o referencial inercial
+    \item[$\mathbf{A},\mathbf{B},\mathbf{C},\mathbf{D}$] Matrizes de estados, de entrada, de saída e de transmissão direta do modelo linearizado
+    \item[$\mathbf{A}_d,\mathbf{B}_d$] Matrizes de estados e de entrada do modelo discretizado
+    \item[$T_s$] Período de amostragem, em segundos (s)
+    \item[$\mathbf{Q}$] Matriz de ponderação dos estados no LQR
+    \item[$\mathbf{R}_{\mathrm{lqr}}$] Matriz de ponderação do esforço de controle no LQR
+    \item[$\mathbf{K}$] Matriz de ganhos de realimentação de estados
+    \item[$\mathbf{S}$] Solução da equação algébrica de Riccati do LQR
+    \item[$J$] Funcional de custo quadrático
+    \item[$\mathbf{L}$] Matriz de ganhos do filtro de Kalman
+    \item[$\mathbf{P}$] Matriz de covariância do erro de estimação
+    \item[$\mathbf{Q}_w$] Matriz de covariância do ruído de processo
+    \item[$\mathbf{R}_v$] Matriz de covariância do ruído de medição
+    \item[$\mathbf{w},\mathbf{v}$] Ruídos de processo e de medição
+    \item[$\mathbf{x}$] Vetor de estados do modelo
+    \item[$\hat{\mathbf{x}}$] Vetor de estados estimado
+    \item[$\mathbf{u}$] Vetor de entradas de controle
+    \item[$\mathbf{y}$] Vetor de saídas medidas pelos sensores
+    \item[$N$] Número de pontos a visitar na rota
+    \item[$P_0$] Ponto de partida e de retorno da rota
+    \item[$C(\pi)$] Custo (comprimento) do circuito associado à ordem de visita $\pi$
+    \item[$d(a,b)$] Distância euclidiana entre os pontos $a$ e $b$
+\end{simbolos}

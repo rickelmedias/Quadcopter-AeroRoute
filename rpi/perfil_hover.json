@@ -1,0 +1,1332 @@
+{
+ "params": {},
+ "q": {},
+ "r": null,
+ "height_cm": 30.0,
+ "time_s": 20.0,
+ "suggestion": {},
+ "history": [
+  {
+   "folder": "hover_20261108_163547",
+   "mode": "dry",
+   "label": "trenó-12cm",
+   "height_cm": 15.0,
+   "set": {
+    "CTL_XY": 1.0,
+    "FLOW_SWAP": 1.0,
+    "CTL_FF_TH": -45.0,
+    "CTL_FF_PSI": 25.0
+   },
+   "q": {},
+   "summary": "máx 3.6 cm, janela 22.7 s, h RMS 12.2 cm, XY médio [-16.7, 2.0] RMS 18.7 cm",
+   "suggestion": {
+    "SNS_LVL_PHI": -1.05,
+    "SNS_LVL_TH": 1.1,
+    "CTL_W0": 1050,
+    "CTL_FF_TH": -45,
+    "CTL_FF_PHI": -40,
+    "CTL_FF_PSI": 25
+   }
+  },
+  {
+   "folder": "hover_20261108_170849",
+   "mode": "motors",
+   "label": "ff45-psi25",
+   "height_cm": 15.0,
+   "set": {
+    "CTL_W0": 950.0,
+    "CTL_XY": 1.0,
+    "FLOW_SWAP": 1.0,
+    "CTL_FF_TH": -45.0,
+    "CTL_FF_PHI": 0.0,
+    "CTL_FF_PSI": 25.0
+   },
+   "q": {},
+   "summary": "máx 5.6 cm, janela 0.0 s",
+   "suggestion": {}
+  },
+  {
+   "folder": "hover_20261108_172028",
+   "mode": "motors",
+   "label": "ff45-psi25-luz",
+   "height_cm": 15.0,
+   "set": {
+    "CTL_W0": 950.0,
+    "CTL_XY": 1.0,
+    "FLOW_SWAP": 1.0,
+    "CTL_FF_TH": -45.0,
+    "CTL_FF_PHI": 0.0,
+    "CTL_FF_PSI": 25.0
+   },
+   "q": {},
+   "summary": "máx 8.3 cm, janela 0.0 s",
+   "suggestion": {}
+  },
+  {
+   "folder": "hover_20261108_172102",
+   "mode": "motors",
+   "label": "ff45-psi25-luz",
+   "height_cm": 15.0,
+   "set": {
+    "CTL_W0": 950.0,
+    "CTL_XY": 1.0,
+    "FLOW_SWAP": 1.0,
+    "CTL_FF_TH": -45.0,
+    "CTL_FF_PHI": 0.0,
+    "CTL_FF_PSI": 25.0
+   },
+   "q": {},
+   "summary": "máx 0.7 cm, janela 0.0 s",
+   "suggestion": {}
+  },
+  {
+   "folder": "hover_20261108_172447",
+   "mode": "motors",
+   "label": "ff45-psi25-luz",
+   "height_cm": 15.0,
+   "set": {
+    "CTL_W0": 850.0,
+    "CTL_XY": 1.0,
+    "FLOW_SWAP": 1.0,
+    "CTL_FF_TH": -45.0,
+    "CTL_FF_PHI": 0.0,
+    "CTL_FF_PSI": 25.0
+   },
+   "q": {},
+   "summary": "máx 11.1 cm, janela 19.8 s, h RMS 9.1 cm, XY médio [12.7, 12.8] RMS 19.2 cm",
+   "suggestion": {
+    "CTL_W0": 941,
+    "CTL_FF_TH": -35,
+    "CTL_FF_PHI": -26,
+    "CTL_FF_PSI": 36
+   }
+  },
+  {
+   "folder": "hover_20261108_172704",
+   "mode": "motors",
+   "label": "ff45-psi2-em-aberto824",
+   "height_cm": 15.0,
+   "set": {
+    "CTL_W0": 825.0,
+    "CTL_XY": 1.0,
+    "FLOW_SWAP": 1.0,
+    "CTL_FF_TH": -45.0,
+    "CTL_FF_PHI": 0.0,
+    "CTL_FF_PSI": 25.0
+   },
+   "q": {},
+   "summary": "máx 5.7 cm, janela 19.7 s, h RMS 11.3 cm, XY médio [14.6, 14.8] RMS 24.1 cm",
+   "suggestion": {
+    "CTL_W0": 937,
+    "CTL_FF_TH": -16,
+    "CTL_FF_PHI": -31,
+    "CTL_FF_PSI": 98
+   }
+  },
+  {
+   "folder": "hover_20261108_172833",
+   "mode": "motors",
+   "label": "ff45-psi2-em-aberto805",
+   "height_cm": 15.0,
+   "set": {
+    "CTL_W0": 805.0,
+    "CTL_XY": 1.0,
+    "FLOW_SWAP": 1.0,
+    "CTL_FF_TH": -45.0,
+    "CTL_FF_PHI": 0.0,
+    "CTL_FF_PSI": 25.0
+   },
+   "q": {},
+   "summary": "máx 4.3 cm, janela 3.3 s, h RMS 11.3 cm, XY médio [3.3, -6.4] RMS 9.3 cm",
+   "suggestion": {}
+  },
+  {
+   "folder": "hover_20261108_173119",
+   "mode": "motors",
+   "label": "ff45-psi2-em-aberto900",
+   "height_cm": 15.0,
+   "set": {
+    "CTL_W0": 900.0,
+    "CTL_XY": 1.0,
+    "FLOW_SWAP": 1.0,
+    "CTL_FF_TH": -35.0,
+    "CTL_FF_PHI": 0.0,
+    "CTL_FF_PSI": 25.0
+   },
+   "q": {},
+   "summary": "máx 43.6 cm, janela 15.7 s, h RMS 11.8 cm, XY médio [8.7, 10.0] RMS 26.1 cm",
+   "suggestion": {
+    "CTL_W0": 995,
+    "CTL_FF_TH": -46,
+    "CTL_FF_PHI": -12,
+    "CTL_FF_PSI": 74
+   }
+  },
+  {
+   "folder": "hover_20261108_175115",
+   "mode": "motors",
+   "label": "ruido-motores-sem-helice",
+   "height_cm": 5.0,
+   "set": {
+    "CTL_W0": 950.0,
+    "CTL_XY": 0.0
+   },
+   "q": {},
+   "summary": "máx 5.2 cm, janela 13.0 s, h RMS 1.4 cm, XY médio [0.0, -0.0] RMS 0.0 cm",
+   "suggestion": {
+    "CTL_W0": 956,
+    "CTL_FF_TH": -30,
+    "CTL_FF_PHI": -35,
+    "CTL_FF_PSI": 80
+   }
+  },
+  {
+   "folder": "hover_20261108_175406",
+   "mode": "motors",
+   "label": "ruido-usb",
+   "height_cm": 5.0,
+   "set": {
+    "CTL_W0": 950.0,
+    "CTL_XY": 0.0,
+    "CTL_FF_PSI": 60.0
+   },
+   "q": {},
+   "summary": "máx 6.1 cm, janela 2.5 s, h RMS 0.9 cm, XY médio [-0.0, 0.0] RMS 0.0 cm",
+   "suggestion": {}
+  },
+  {
+   "folder": "hover_20261108_175546",
+   "mode": "motors",
+   "label": "ruido-usb",
+   "height_cm": 5.0,
+   "set": {
+    "CTL_W0": 950.0,
+    "CTL_XY": 0.0,
+    "CTL_FF_PSI": 60.0
+   },
+   "q": {},
+   "summary": "máx 4.6 cm, janela 17.9 s, h RMS 2.4 cm, XY médio [0.0, -0.0] RMS 0.0 cm",
+   "suggestion": {
+    "CTL_W0": 973,
+    "CTL_FF_TH": -12,
+    "CTL_FF_PHI": -40,
+    "CTL_FF_PSI": -4
+   }
+  },
+  {
+   "folder": "hover_20261108_180436",
+   "mode": "motors",
+   "label": "giro-cruzado",
+   "height_cm": 15.0,
+   "set": {
+    "CTL_W0": 900.0,
+    "CTL_XY": 1.0,
+    "FLOW_SWAP": 1.0,
+    "CTL_FF_TH": -35.0,
+    "CTL_FF_PHI": 0.0,
+    "CTL_FF_PSI": 50.0,
+    "FLOW_GYRO_X": 0.0,
+    "FLOW_GYRO_Y": 0.0,
+    "FLOW_GYRO_XY": 1.45,
+    "FLOW_GYRO_YX": -1.65
+   },
+   "q": {},
+   "summary": "máx 6.3 cm, janela 19.9 s, h RMS 11.5 cm, XY médio [-11.8, -8.7] RMS 22.2 cm",
+   "suggestion": {
+    "CTL_W0": 1017,
+    "CTL_FF_TH": -46,
+    "CTL_FF_PHI": -10,
+    "CTL_FF_PSI": 168
+   }
+  },
+  {
+   "folder": "hover_20261108_180724",
+   "mode": "motors",
+   "label": "giro-cruzado-ff",
+   "height_cm": 15.0,
+   "set": {
+    "CTL_W0": 1000.0,
+    "CTL_XY": 1.0,
+    "FLOW_SWAP": 1.0,
+    "CTL_FF_TH": -45.0,
+    "CTL_FF_PHI": -10.0,
+    "CTL_FF_PSI": 150.0,
+    "FLOW_GYRO_X": 0.0,
+    "FLOW_GYRO_Y": 0.0,
+    "FLOW_GYRO_XY": 1.45,
+    "FLOW_GYRO_YX": -1.65
+   },
+   "q": {},
+   "summary": "máx 7.6 cm, janela 20.0 s, h RMS 11.0 cm, XY médio [-17.7, 7.2] RMS 25.3 cm",
+   "suggestion": {
+    "CTL_W0": 1091,
+    "CTL_FF_TH": -62,
+    "CTL_FF_PHI": -14,
+    "CTL_FF_PSI": 272
+   }
+  },
+  {
+   "folder": "hover_20261108_181108",
+   "mode": "motors",
+   "label": "giro-cruzado",
+   "height_cm": 15.0,
+   "set": {
+    "CTL_W0": 900.0,
+    "CTL_XY": 1.0,
+    "FLOW_SWAP": 1.0,
+    "CTL_FF_TH": -35.0,
+    "CTL_FF_PHI": 0.0,
+    "CTL_FF_PSI": 50.0,
+    "FLOW_GYRO_X": 0.0,
+    "FLOW_GYRO_Y": 0.0,
+    "FLOW_GYRO_XY": 1.45,
+    "FLOW_GYRO_YX": -1.65
+   },
+   "q": {},
+   "summary": "máx 5.5 cm, janela 18.6 s, h RMS 11.5 cm, XY médio [-16.9, 0.0] RMS 35.4 cm",
+   "suggestion": {
+    "CTL_W0": 1018,
+    "CTL_FF_TH": -26,
+    "CTL_FF_PHI": -26,
+    "CTL_FF_PSI": 19
+   }
+  },
+  {
+   "folder": "hover_20261108_181717",
+   "mode": "motors",
+   "label": "giro-cruzado-ff",
+   "height_cm": 30.0,
+   "set": {
+    "CTL_W0": 1130.0,
+    "CTL_XY": 1.0,
+    "FLOW_SWAP": 1.0,
+    "CTL_FF_TH": -45.0,
+    "CTL_FF_PHI": -10.0,
+    "CTL_FF_PSI": 150.0,
+    "FLOW_GYRO_X": 0.0,
+    "FLOW_GYRO_Y": 0.0,
+    "FLOW_GYRO_XY": 1.45,
+    "FLOW_GYRO_YX": -1.65
+   },
+   "q": {},
+   "summary": "máx 26.5 cm, janela 0.0 s",
+   "suggestion": {}
+  },
+  {
+   "folder": "hover_20261108_203854",
+   "mode": "dry",
+   "label": "better-coleta-seco",
+   "height_cm": 15.0,
+   "set": {
+    "CTL_XY": 1.0,
+    "FLOW_SWAP": 1.0,
+    "CTL_FF_TH": -35.0,
+    "CTL_FF_PSI": 50.0,
+    "FLOW_GYRO_X": 0.0,
+    "FLOW_GYRO_Y": 0.0,
+    "FLOW_GYRO_XY": 1.45,
+    "FLOW_GYRO_YX": -1.65
+   },
+   "q": {},
+   "summary": "máx 23.4 cm, janela 18.1 s, h RMS 2.0 cm, XY médio [6.7, 7.4] RMS 10.4 cm",
+   "suggestion": {
+    "SNS_LVL_PHI": -1.5,
+    "SNS_LVL_TH": -1.37,
+    "CTL_W0": 1050,
+    "CTL_FF_TH": -35,
+    "CTL_FF_PHI": -40,
+    "CTL_FF_PSI": 50
+   }
+  },
+  {
+   "folder": "hover_20261108_203957",
+   "mode": "dry",
+   "label": "better-ekf-seco",
+   "height_cm": 15.0,
+   "set": {
+    "CTL_XY": 1.0,
+    "FLOW_SWAP": 1.0,
+    "FLOW_EKF": 1.0,
+    "Z_EKF": 1.0,
+    "CTL_FF_TH": -35.0,
+    "CTL_FF_PSI": 50.0,
+    "FLOW_GYRO_X": 0.0,
+    "FLOW_GYRO_Y": 0.0,
+    "FLOW_GYRO_XY": 1.45,
+    "FLOW_GYRO_YX": -1.65
+   },
+   "q": {},
+   "summary": "máx 27.1 cm, janela 18.0 s, h RMS 6.8 cm, XY médio [12.3, 0.8] RMS 15.0 cm",
+   "suggestion": {
+    "SNS_LVL_PHI": -1.18,
+    "SNS_LVL_TH": 1.3,
+    "CTL_W0": 1050,
+    "CTL_FF_TH": -35,
+    "CTL_FF_PHI": -40,
+    "CTL_FF_PSI": 50
+   }
+  },
+  {
+   "folder": "hover_20261108_204605",
+   "mode": "dry",
+   "label": "better-ekf-seco2",
+   "height_cm": 15.0,
+   "set": {
+    "CTL_XY": 1.0,
+    "FLOW_SWAP": 1.0,
+    "FLOW_EKF": 1.0,
+    "Z_EKF": 1.0,
+    "CTL_FF_TH": -35.0,
+    "CTL_FF_PSI": 50.0,
+    "FLOW_GYRO_X": 0.0,
+    "FLOW_GYRO_Y": 0.0,
+    "FLOW_GYRO_XY": 1.45,
+    "FLOW_GYRO_YX": -1.65
+   },
+   "q": {},
+   "summary": "máx 21.8 cm, janela 18.1 s, h RMS 5.1 cm, XY médio [-15.1, 2.3] RMS 19.3 cm",
+   "suggestion": {
+    "CTL_W0": 1050,
+    "CTL_FF_TH": -35,
+    "CTL_FF_PHI": -40,
+    "CTL_FF_PSI": 50
+   }
+  },
+  {
+   "folder": "hover_20261108_204932",
+   "mode": "motors",
+   "label": "better-ekf-voo",
+   "height_cm": 15.0,
+   "set": {
+    "CTL_W0": 900.0,
+    "CTL_XY": 1.0,
+    "FLOW_SWAP": 1.0,
+    "FLOW_EKF": 1.0,
+    "Z_EKF": 1.0,
+    "CTL_FF_TH": -35.0,
+    "CTL_FF_PHI": 0.0,
+    "CTL_FF_PSI": 50.0,
+    "FLOW_GYRO_X": 0.0,
+    "FLOW_GYRO_Y": 0.0,
+    "FLOW_GYRO_XY": 1.45,
+    "FLOW_GYRO_YX": -1.65
+   },
+   "q": {},
+   "summary": "máx 6.5 cm, janela 19.8 s, h RMS 10.6 cm, XY médio [0.1, 12.3] RMS 16.1 cm",
+   "suggestion": {
+    "CTL_W0": 1005,
+    "CTL_FF_TH": -28,
+    "CTL_FF_PHI": -39,
+    "CTL_FF_PSI": 52
+   }
+  },
+  {
+   "folder": "hover_20261108_205222",
+   "mode": "motors",
+   "label": "better-ekf-voo",
+   "height_cm": 15.0,
+   "set": {
+    "CTL_W0": 900.0,
+    "CTL_XY": 1.0,
+    "FLOW_SWAP": 1.0,
+    "FLOW_EKF": 1.0,
+    "Z_EKF": 1.0,
+    "CTL_FF_TH": -35.0,
+    "CTL_FF_PHI": 0.0,
+    "CTL_FF_PSI": 50.0,
+    "FLOW_GYRO_X": 0.0,
+    "FLOW_GYRO_Y": 0.0,
+    "FLOW_GYRO_XY": 1.45,
+    "FLOW_GYRO_YX": -1.65
+   },
+   "q": {},
+   "summary": "máx 18.8 cm, janela 0.0 s",
+   "suggestion": {}
+  },
+  {
+   "folder": "hover_20261108_205811",
+   "mode": "motors",
+   "label": "better-w0-1000-q5000",
+   "height_cm": 15.0,
+   "set": {
+    "CTL_W0": 1000.0,
+    "CTL_XY": 1.0,
+    "FLOW_SWAP": 1.0,
+    "FLOW_EKF": 1.0,
+    "Z_EKF": 1.0,
+    "CTL_FF_TH": -50.0,
+    "CTL_FF_PHI": -15.0,
+    "CTL_FF_PSI": 70.0,
+    "FLOW_GYRO_X": 0.0,
+    "FLOW_GYRO_Y": 0.0,
+    "FLOW_GYRO_XY": 1.45,
+    "FLOW_GYRO_YX": -1.65
+   },
+   "q": {
+    "phi": 5000.0,
+    "theta": 5000.0
+   },
+   "summary": "máx 6.6 cm, janela 1.5 s, h RMS 15.9 cm, XY médio [-2.9, -17.0] RMS 27.7 cm",
+   "suggestion": {}
+  },
+  {
+   "folder": "hover_20261108_205857",
+   "mode": "motors",
+   "label": "better-w0-1000-q5000",
+   "height_cm": 15.0,
+   "set": {
+    "CTL_W0": 1000.0,
+    "CTL_XY": 1.0,
+    "FLOW_SWAP": 1.0,
+    "FLOW_EKF": 1.0,
+    "Z_EKF": 1.0,
+    "CTL_FF_TH": -50.0,
+    "CTL_FF_PHI": -15.0,
+    "CTL_FF_PSI": 70.0,
+    "FLOW_GYRO_X": 0.0,
+    "FLOW_GYRO_Y": 0.0,
+    "FLOW_GYRO_XY": 1.45,
+    "FLOW_GYRO_YX": -1.65
+   },
+   "q": {
+    "phi": 5000.0,
+    "theta": 5000.0
+   },
+   "summary": "máx 153.2 cm, janela 0.0 s",
+   "suggestion": {}
+  },
+  {
+   "folder": "hover_20261108_205957",
+   "mode": "motors",
+   "label": "better-w0-1000-q5000",
+   "height_cm": 15.0,
+   "set": {
+    "CTL_W0": 1000.0,
+    "CTL_XY": 1.0,
+    "FLOW_SWAP": 1.0,
+    "FLOW_EKF": 1.0,
+    "Z_EKF": 1.0,
+    "CTL_FF_TH": -50.0,
+    "CTL_FF_PHI": -15.0,
+    "CTL_FF_PSI": 70.0,
+    "FLOW_GYRO_X": 0.0,
+    "FLOW_GYRO_Y": 0.0,
+    "FLOW_GYRO_XY": 1.45,
+    "FLOW_GYRO_YX": -1.65
+   },
+   "q": {
+    "phi": 5000.0,
+    "theta": 5000.0
+   },
+   "summary": "máx 264.2 cm, janela 0.0 s",
+   "suggestion": {}
+  },
+  {
+   "folder": "hover_20261108_210855",
+   "mode": "motors",
+   "label": "zupt-seco",
+   "height_cm": 15.0,
+   "set": {
+    "CTL_W0": 900.0,
+    "CTL_FF_TH": -35.0,
+    "CTL_FF_PHI": 0.0,
+    "CTL_FF_PSI": 50.0,
+    "CTL_XY": 1.0,
+    "FLOW_SWAP": 1.0,
+    "FLOW_EKF": 1.0,
+    "Z_EKF": 1.0
+   },
+   "q": {},
+   "summary": "máx 18.0 cm, janela 2.9 s, h RMS 13.7 cm, XY médio [-0.9, -0.4] RMS 1.1 cm",
+   "suggestion": {}
+  },
+  {
+   "folder": "hover_20261108_210929",
+   "mode": "motors",
+   "label": "zupt-voo-w900",
+   "height_cm": 15.0,
+   "set": {
+    "CTL_W0": 900.0,
+    "CTL_FF_TH": -35.0,
+    "CTL_FF_PHI": 0.0,
+    "CTL_FF_PSI": 50.0,
+    "CTL_XY": 1.0,
+    "FLOW_SWAP": 1.0,
+    "FLOW_EKF": 1.0,
+    "Z_EKF": 1.0
+   },
+   "q": {},
+   "summary": "máx 6.6 cm, janela 8.8 s, h RMS 11.5 cm, XY médio [0.8, -2.7] RMS 6.1 cm",
+   "suggestion": {
+    "CTL_W0": 960,
+    "CTL_FF_TH": -12,
+    "CTL_FF_PHI": -45,
+    "CTL_FF_PSI": -12
+   }
+  },
+  {
+   "folder": "hover_20261108_211048",
+   "mode": "motors",
+   "label": "zupt-voo-w900",
+   "height_cm": 15.0,
+   "set": {
+    "CTL_W0": 900.0,
+    "CTL_FF_TH": -35.0,
+    "CTL_FF_PHI": 0.0,
+    "CTL_FF_PSI": 50.0,
+    "CTL_XY": 1.0,
+    "FLOW_SWAP": 1.0,
+    "FLOW_EKF": 1.0,
+    "Z_EKF": 1.0
+   },
+   "q": {},
+   "summary": "máx 3.8 cm, janela 0.0 s",
+   "suggestion": {}
+  },
+  {
+   "folder": "hover_20261108_211635",
+   "mode": "motors",
+   "label": "zupt-voo-w900-b",
+   "height_cm": 15.0,
+   "set": {
+    "CTL_W0": 900.0,
+    "CTL_FF_TH": -35.0,
+    "CTL_FF_PHI": 0.0,
+    "CTL_FF_PSI": 50.0,
+    "CTL_XY": 1.0,
+    "FLOW_SWAP": 1.0,
+    "FLOW_EKF": 1.0,
+    "Z_EKF": 1.0
+   },
+   "q": {},
+   "summary": "máx 7.5 cm, janela 4.9 s, h RMS 10.1 cm, XY médio [-8.2, -10.7] RMS 19.0 cm",
+   "suggestion": {}
+  },
+  {
+   "folder": "hover_20261108_211824",
+   "mode": "motors",
+   "label": "zupt-w950-h30",
+   "height_cm": 30.0,
+   "set": {
+    "CTL_W0": 950.0,
+    "CTL_FF_TH": -42.0,
+    "CTL_FF_PHI": 0.0,
+    "CTL_FF_PSI": 50.0,
+    "CTL_XY": 1.0,
+    "FLOW_SWAP": 1.0,
+    "FLOW_EKF": 1.0,
+    "Z_EKF": 1.0
+   },
+   "q": {},
+   "summary": "máx 43.5 cm, janela 13.7 s, h RMS 23.0 cm, XY médio [16.1, 28.4] RMS 34.7 cm",
+   "suggestion": {
+    "CTL_W0": 1103,
+    "CTL_FF_TH": -52,
+    "CTL_FF_PHI": -28,
+    "CTL_FF_PSI": 41
+   }
+  },
+  {
+   "folder": "hover_20261108_212013",
+   "mode": "motors",
+   "label": "livre-w1000-h30",
+   "height_cm": 30.0,
+   "set": {
+    "CTL_W0": 1000.0,
+    "CTL_FF_TH": -48.0,
+    "CTL_FF_PHI": 0.0,
+    "CTL_FF_PSI": 50.0,
+    "CTL_XY": 1.0,
+    "FLOW_SWAP": 1.0,
+    "FLOW_EKF": 1.0,
+    "Z_EKF": 1.0
+   },
+   "q": {},
+   "summary": "máx 21.1 cm, janela 4.6 s, h RMS 18.6 cm, XY médio [-2.1, 4.4] RMS 6.9 cm",
+   "suggestion": {}
+  },
+  {
+   "folder": "hover_20261108_212111",
+   "mode": "motors",
+   "label": "livre-w1000-h30",
+   "height_cm": 30.0,
+   "set": {
+    "CTL_W0": 1000.0,
+    "CTL_FF_TH": -48.0,
+    "CTL_FF_PHI": 0.0,
+    "CTL_FF_PSI": 50.0,
+    "CTL_XY": 1.0,
+    "FLOW_SWAP": 1.0,
+    "FLOW_EKF": 1.0,
+    "Z_EKF": 1.0
+   },
+   "q": {},
+   "summary": "máx 11.3 cm, janela 4.0 s, h RMS 19.8 cm, XY médio [0.7, -3.5] RMS 7.1 cm",
+   "suggestion": {}
+  },
+  {
+   "folder": "hover_20261108_212346",
+   "mode": "motors",
+   "label": "antiwindup-w1000-h30",
+   "height_cm": 30.0,
+   "set": {
+    "CTL_W0": 1000.0,
+    "CTL_FF_TH": -48.0,
+    "CTL_FF_PHI": 0.0,
+    "CTL_FF_PSI": 50.0,
+    "CTL_XY": 1.0,
+    "FLOW_SWAP": 1.0,
+    "FLOW_EKF": 1.0,
+    "Z_EKF": 1.0
+   },
+   "q": {},
+   "summary": "máx 18.7 cm, janela 5.5 s, h RMS 21.0 cm, XY médio [3.1, -5.0] RMS 8.5 cm",
+   "suggestion": {
+    "CTL_W0": 1001,
+    "CTL_FF_TH": -48,
+    "CTL_FF_PHI": 0,
+    "CTL_FF_PSI": 86
+   }
+  },
+  {
+   "folder": "hover_20261108_212505",
+   "mode": "motors",
+   "label": "antiwindup-w1000-h30",
+   "height_cm": 30.0,
+   "set": {
+    "CTL_W0": 1000.0,
+    "CTL_FF_TH": -48.0,
+    "CTL_FF_PHI": 0.0,
+    "CTL_FF_PSI": 50.0,
+    "CTL_XY": 1.0,
+    "FLOW_SWAP": 1.0,
+    "FLOW_EKF": 1.0,
+    "Z_EKF": 1.0
+   },
+   "q": {},
+   "summary": "máx 7.3 cm, janela 8.4 s, h RMS 23.4 cm, XY médio [4.8, -6.9] RMS 10.0 cm",
+   "suggestion": {
+    "SNS_LVL_PHI": -1.5,
+    "SNS_LVL_TH": 0.26,
+    "CTL_W0": 1000,
+    "CTL_FF_TH": -45,
+    "CTL_FF_PHI": -24,
+    "CTL_FF_PSI": 87
+   }
+  },
+  {
+   "folder": "hover_20261108_212751",
+   "mode": "motors",
+   "label": "w1060-psi86",
+   "height_cm": 30.0,
+   "set": {
+    "CTL_W0": 1060.0,
+    "CTL_FF_TH": -56.0,
+    "CTL_FF_PHI": 0.0,
+    "CTL_FF_PSI": 86.0,
+    "CTL_XY": 1.0,
+    "FLOW_SWAP": 1.0,
+    "FLOW_EKF": 1.0,
+    "Z_EKF": 1.0
+   },
+   "q": {},
+   "summary": "máx 7.8 cm, janela 0.0 s",
+   "suggestion": {}
+  },
+  {
+   "folder": "hover_20261108_212828",
+   "mode": "motors",
+   "label": "w1060-psi86",
+   "height_cm": 30.0,
+   "set": {
+    "CTL_W0": 1060.0,
+    "CTL_FF_TH": -56.0,
+    "CTL_FF_PHI": 0.0,
+    "CTL_FF_PSI": 86.0,
+    "CTL_XY": 1.0,
+    "FLOW_SWAP": 1.0,
+    "FLOW_EKF": 1.0,
+    "Z_EKF": 1.0
+   },
+   "q": {},
+   "summary": "máx 8.8 cm, janela 4.4 s, h RMS 19.5 cm, XY médio [4.5, -3.9] RMS 9.1 cm",
+   "suggestion": {}
+  },
+  {
+   "folder": "hover_20261108_213146",
+   "mode": "motors",
+   "label": "w1060-psi86",
+   "height_cm": 30.0,
+   "set": {
+    "CTL_W0": 1060.0,
+    "CTL_FF_TH": -56.0,
+    "CTL_FF_PHI": 0.0,
+    "CTL_FF_PSI": 86.0,
+    "CTL_XY": 1.0,
+    "FLOW_SWAP": 1.0,
+    "FLOW_EKF": 1.0,
+    "Z_EKF": 1.0
+   },
+   "q": {},
+   "summary": "máx 6.7 cm, janela 0.0 s",
+   "suggestion": {}
+  },
+  {
+   "folder": "hover_20261108_214150",
+   "mode": "motors",
+   "label": "vz-ekf-w1000",
+   "height_cm": 30.0,
+   "set": {
+    "CTL_W0": 1000.0,
+    "CTL_FF_TH": -48.0,
+    "CTL_FF_PHI": 0.0,
+    "CTL_FF_PSI": 86.0,
+    "CTL_XY": 1.0,
+    "FLOW_SWAP": 1.0,
+    "FLOW_EKF": 1.0,
+    "Z_EKF": 1.0
+   },
+   "q": {},
+   "summary": "máx 8.9 cm, janela 0.0 s",
+   "suggestion": {}
+  },
+  {
+   "folder": "hover_20261108_214219",
+   "mode": "motors",
+   "label": "vz-ekf-w1000",
+   "height_cm": 30.0,
+   "set": {
+    "CTL_W0": 1000.0,
+    "CTL_FF_TH": -48.0,
+    "CTL_FF_PHI": 0.0,
+    "CTL_FF_PSI": 86.0,
+    "CTL_XY": 1.0,
+    "FLOW_SWAP": 1.0,
+    "FLOW_EKF": 1.0,
+    "Z_EKF": 1.0
+   },
+   "q": {},
+   "summary": "máx 14.6 cm, janela 0.0 s",
+   "suggestion": {}
+  },
+  {
+   "folder": "hover_20261108_214412",
+   "mode": "motors",
+   "label": "vz-ekf-xy0",
+   "height_cm": 30.0,
+   "set": {
+    "CTL_W0": 1000.0,
+    "CTL_FF_TH": -48.0,
+    "CTL_FF_PHI": 0.0,
+    "CTL_FF_PSI": 86.0,
+    "CTL_XY": 0.0,
+    "FLOW_SWAP": 1.0,
+    "FLOW_EKF": 1.0,
+    "Z_EKF": 1.0
+   },
+   "q": {},
+   "summary": "máx 5.6 cm, janela 2.0 s, h RMS 16.0 cm, XY médio [0.0, -0.0] RMS 0.0 cm",
+   "suggestion": {}
+  },
+  {
+   "folder": "hover_20261108_214916",
+   "mode": "motors",
+   "label": "z-forte-xy0",
+   "height_cm": 30.0,
+   "set": {
+    "CTL_W0": 1000.0,
+    "CTL_FF_TH": -48.0,
+    "CTL_FF_PHI": 0.0,
+    "CTL_FF_PSI": 86.0,
+    "CTL_XY": 0.0,
+    "FLOW_SWAP": 1.0,
+    "FLOW_EKF": 1.0,
+    "Z_EKF": 1.0
+   },
+   "q": {
+    "z": 15000.0,
+    "vz": 150.0
+   },
+   "summary": "máx 10.7 cm, janela 0.3 s, h RMS 10.4 cm, XY médio [0.0, -0.0] RMS 0.0 cm",
+   "suggestion": {}
+  },
+  {
+   "folder": "hover_20261108_215105",
+   "mode": "motors",
+   "label": "base-1",
+   "height_cm": 15.0,
+   "set": {
+    "CTL_W0": 900.0,
+    "CTL_FF_TH": -35.0,
+    "CTL_FF_PHI": 0.0,
+    "CTL_FF_PSI": 50.0,
+    "CTL_XY": 1.0,
+    "FLOW_SWAP": 1.0,
+    "FLOW_EKF": 1.0,
+    "Z_EKF": 1.0
+   },
+   "q": {},
+   "summary": "máx 2.9 cm, janela 0.0 s",
+   "suggestion": {}
+  },
+  {
+   "folder": "hover_20261108_215136",
+   "mode": "motors",
+   "label": "base-1",
+   "height_cm": 15.0,
+   "set": {
+    "CTL_W0": 900.0,
+    "CTL_FF_TH": -35.0,
+    "CTL_FF_PHI": 0.0,
+    "CTL_FF_PSI": 50.0,
+    "CTL_XY": 1.0,
+    "FLOW_SWAP": 1.0,
+    "FLOW_EKF": 1.0,
+    "Z_EKF": 1.0
+   },
+   "q": {},
+   "summary": "máx 2.6 cm, janela 0.0 s",
+   "suggestion": {}
+  },
+  {
+   "folder": "hover_20261108_215209",
+   "mode": "motors",
+   "label": "base-1",
+   "height_cm": 15.0,
+   "set": {
+    "CTL_W0": 900.0,
+    "CTL_FF_TH": -35.0,
+    "CTL_FF_PHI": 0.0,
+    "CTL_FF_PSI": 50.0,
+    "CTL_XY": 1.0,
+    "FLOW_SWAP": 1.0,
+    "FLOW_EKF": 1.0,
+    "Z_EKF": 1.0
+   },
+   "q": {},
+   "summary": "máx 6.6 cm, janela 0.0 s",
+   "suggestion": {}
+  },
+  {
+   "folder": "hover_20261108_215519",
+   "mode": "motors",
+   "label": "base2-1",
+   "height_cm": 20.0,
+   "set": {
+    "CTL_W0": 1000.0,
+    "CTL_FF_TH": -48.0,
+    "CTL_FF_PHI": 0.0,
+    "CTL_FF_PSI": 50.0,
+    "CTL_XY": 1.0,
+    "FLOW_SWAP": 1.0,
+    "FLOW_EKF": 1.0,
+    "Z_EKF": 1.0
+   },
+   "q": {},
+   "summary": "máx 7.1 cm, janela 5.1 s, h RMS 15.0 cm, XY médio [17.6, 0.8] RMS 18.3 cm",
+   "suggestion": {
+    "CTL_W0": 1050,
+    "CTL_FF_TH": -31,
+    "CTL_FF_PHI": -15,
+    "CTL_FF_PSI": -65
+   }
+  },
+  {
+   "folder": "hover_20261108_220019",
+   "mode": "dry",
+   "label": "mtf-regual",
+   "height_cm": 30.0,
+   "set": {},
+   "q": {},
+   "summary": "máx 7.5 cm, janela 7.9 s, h RMS 22.5 cm, XY médio [-0.0, 0.0] RMS 0.0 cm",
+   "suggestion": {
+    "CTL_W0": 1050,
+    "CTL_FF_TH": -20,
+    "CTL_FF_PHI": -40,
+    "CTL_FF_PSI": 0
+   }
+  },
+  {
+   "folder": "hover_20261108_220416",
+   "mode": "motors",
+   "label": "bat-cheia-w1050",
+   "height_cm": 20.0,
+   "set": {
+    "CTL_W0": 1050.0,
+    "CTL_FF_TH": -52.0,
+    "CTL_FF_PHI": 0.0,
+    "CTL_FF_PSI": 50.0,
+    "CTL_XY": 1.0,
+    "FLOW_SWAP": 1.0,
+    "FLOW_EKF": 1.0,
+    "Z_EKF": 1.0
+   },
+   "q": {},
+   "summary": "máx 6.8 cm, janela 0.0 s",
+   "suggestion": {}
+  },
+  {
+   "folder": "hover_20261108_220541",
+   "mode": "motors",
+   "label": "bat-cheia-w1050-b",
+   "height_cm": 20.0,
+   "set": {
+    "CTL_W0": 1050.0,
+    "CTL_FF_TH": -52.0,
+    "CTL_FF_PHI": 0.0,
+    "CTL_FF_PSI": 50.0,
+    "CTL_XY": 1.0,
+    "FLOW_SWAP": 1.0,
+    "FLOW_EKF": 1.0,
+    "Z_EKF": 1.0
+   },
+   "q": {},
+   "summary": "máx 6.8 cm, janela 0.0 s",
+   "suggestion": {}
+  },
+  {
+   "folder": "hover_20261108_220608",
+   "mode": "motors",
+   "label": "bat-cheia-w1050-b",
+   "height_cm": 20.0,
+   "set": {
+    "CTL_W0": 1050.0,
+    "CTL_FF_TH": -52.0,
+    "CTL_FF_PHI": 0.0,
+    "CTL_FF_PSI": 50.0,
+    "CTL_XY": 1.0,
+    "FLOW_SWAP": 1.0,
+    "FLOW_EKF": 1.0,
+    "Z_EKF": 1.0
+   },
+   "q": {},
+   "summary": "máx 80.9 cm, janela 0.0 s",
+   "suggestion": {}
+  },
+  {
+   "folder": "hover_20261108_220912",
+   "mode": "dry",
+   "label": "escala-xy",
+   "height_cm": 20.0,
+   "set": {},
+   "q": {},
+   "summary": "máx 23.6 cm, janela 38.1 s, h RMS 18.0 cm, XY médio [0.0, 0.0] RMS 0.0 cm",
+   "suggestion": {
+    "CTL_W0": 1050,
+    "CTL_FF_TH": -20,
+    "CTL_FF_PHI": -40,
+    "CTL_FF_PSI": 0
+   }
+  },
+  {
+   "folder": "hover_20261108_222149",
+   "mode": "dry",
+   "label": "escala-xy-b",
+   "height_cm": 20.0,
+   "set": {
+    "FLOW_EKF": 1.0,
+    "FLOW_SWAP": 1.0
+   },
+   "q": {},
+   "summary": "máx 24.1 cm, janela 16.6 s, h RMS 10.8 cm, XY médio [0.0, 0.0] RMS 0.0 cm",
+   "suggestion": {
+    "CTL_W0": 1050,
+    "CTL_FF_TH": -20,
+    "CTL_FF_PHI": -40,
+    "CTL_FF_PSI": 0
+   }
+  },
+  {
+   "folder": "hover_20261109_145940",
+   "mode": "motors",
+   "label": "giro-cruzado-integrador",
+   "height_cm": 20.0,
+   "set": {
+    "CTL_W0": 1050.0,
+    "CTL_FF_TH": -52.0,
+    "CTL_FF_PHI": 0.0,
+    "CTL_FF_PSI": 50.0,
+    "CTL_XY": 1.0,
+    "FLOW_SWAP": 1.0,
+    "FLOW_EKF": 1.0,
+    "Z_EKF": 1.0,
+    "FLOW_GYRO_X": 0.0,
+    "FLOW_GYRO_Y": 0.0,
+    "FLOW_GYRO_XY": 1.45,
+    "FLOW_GYRO_YX": -1.65,
+    "CTL_KI_XY": 0.3
+   },
+   "q": {},
+   "summary": "máx 10.9 cm, janela 0.0 s",
+   "suggestion": {}
+  },
+  {
+   "folder": "hover_20261109_150726",
+   "mode": "motors",
+   "label": "decolagem-ff-phi15-th40",
+   "height_cm": 20.0,
+   "set": {
+    "CTL_W0": 1050.0,
+    "CTL_FF_TH": -40.0,
+    "CTL_FF_PHI": -15.0,
+    "CTL_FF_PSI": 50.0,
+    "CTL_XY": 1.0,
+    "FLOW_SWAP": 1.0,
+    "FLOW_EKF": 1.0,
+    "Z_EKF": 1.0,
+    "FLOW_GYRO_X": 0.0,
+    "FLOW_GYRO_Y": 0.0,
+    "FLOW_GYRO_XY": 1.45,
+    "FLOW_GYRO_YX": -1.65,
+    "CTL_KI_XY": 0.3
+   },
+   "q": {},
+   "summary": "máx 13.1 cm, janela 0.0 s",
+   "suggestion": {}
+  },
+  {
+   "folder": "hover_20261109_151051",
+   "mode": "motors",
+   "label": "decolagem-ff-th30",
+   "height_cm": 30.0,
+   "set": {
+    "CTL_W0": 1050.0,
+    "CTL_FF_TH": -30.0,
+    "CTL_FF_PHI": -15.0,
+    "CTL_FF_PSI": 50.0,
+    "CTL_XY": 1.0,
+    "FLOW_SWAP": 1.0,
+    "FLOW_EKF": 1.0,
+    "Z_EKF": 1.0,
+    "FLOW_GYRO_X": 0.0,
+    "FLOW_GYRO_Y": 0.0,
+    "FLOW_GYRO_XY": 1.45,
+    "FLOW_GYRO_YX": -1.65,
+    "CTL_KI_XY": 0.3
+   },
+   "q": {},
+   "summary": "máx 12.2 cm, janela 3.6 s, h RMS 16.5 cm, XY médio [-29.9, -39.7] RMS 53.5 cm",
+   "suggestion": {}
+  },
+  {
+   "folder": "hover_20261109_172350",
+   "mode": "motors",
+   "label": "B-ki0",
+   "height_cm": 30.0,
+   "set": {
+    "CTL_W0": 1050.0,
+    "CTL_FF_TH": -30.0,
+    "CTL_FF_PHI": -15.0,
+    "CTL_FF_PSI": 50.0,
+    "CTL_XY": 1.0,
+    "FLOW_SWAP": 1.0,
+    "FLOW_EKF": 1.0,
+    "Z_EKF": 1.0,
+    "FLOW_GYRO_X": 0.0,
+    "FLOW_GYRO_Y": 0.0,
+    "FLOW_GYRO_XY": 1.45,
+    "FLOW_GYRO_YX": -1.65,
+    "CTL_KI_XY": 0.0
+   },
+   "q": {},
+   "summary": "máx 1.2 cm, janela 0.0 s",
+   "suggestion": {}
+  },
+  {
+   "folder": "hover_20261109_172414",
+   "mode": "motors",
+   "label": "B-ki0",
+   "height_cm": 30.0,
+   "set": {
+    "CTL_W0": 1050.0,
+    "CTL_FF_TH": -30.0,
+    "CTL_FF_PHI": -15.0,
+    "CTL_FF_PSI": 50.0,
+    "CTL_XY": 1.0,
+    "FLOW_SWAP": 1.0,
+    "FLOW_EKF": 1.0,
+    "Z_EKF": 1.0,
+    "FLOW_GYRO_X": 0.0,
+    "FLOW_GYRO_Y": 0.0,
+    "FLOW_GYRO_XY": 1.45,
+    "FLOW_GYRO_YX": -1.65,
+    "CTL_KI_XY": 0.0
+   },
+   "q": {},
+   "summary": "máx 0.5 cm, janela 0.0 s",
+   "suggestion": {}
+  },
+  {
+   "folder": "hover_20261109_172447",
+   "mode": "motors",
+   "label": "B-ki0",
+   "height_cm": 30.0,
+   "set": {
+    "CTL_W0": 1050.0,
+    "CTL_FF_TH": -30.0,
+    "CTL_FF_PHI": -15.0,
+    "CTL_FF_PSI": 50.0,
+    "CTL_XY": 1.0,
+    "FLOW_SWAP": 1.0,
+    "FLOW_EKF": 1.0,
+    "Z_EKF": 1.0,
+    "FLOW_GYRO_X": 0.0,
+    "FLOW_GYRO_Y": 0.0,
+    "FLOW_GYRO_XY": 1.45,
+    "FLOW_GYRO_YX": -1.65,
+    "CTL_KI_XY": 0.0
+   },
+   "q": {},
+   "summary": "máx 12.3 cm, janela 0.0 s",
+   "suggestion": {}
+  },
+  {
+   "folder": "hover_20261109_173205",
+   "mode": "motors",
+   "label": "B-ki0",
+   "height_cm": 30.0,
+   "set": {
+    "CTL_W0": 1050.0,
+    "CTL_FF_TH": -30.0,
+    "CTL_FF_PHI": -15.0,
+    "CTL_FF_PSI": 50.0,
+    "CTL_XY": 1.0,
+    "FLOW_SWAP": 1.0,
+    "FLOW_EKF": 1.0,
+    "Z_EKF": 1.0,
+    "FLOW_GYRO_X": 0.0,
+    "FLOW_GYRO_Y": 0.0,
+    "FLOW_GYRO_XY": 1.45,
+    "FLOW_GYRO_YX": -1.65,
+    "CTL_KI_XY": 0.0
+   },
+   "q": {},
+   "summary": "máx 9.1 cm, janela 0.1 s",
+   "suggestion": {}
+  },
+  {
+   "folder": "hover_20261109_173523",
+   "mode": "motors",
+   "label": "A-ki03-b",
+   "height_cm": 30.0,
+   "set": {
+    "CTL_W0": 1050.0,
+    "CTL_FF_TH": -30.0,
+    "CTL_FF_PHI": -15.0,
+    "CTL_FF_PSI": 50.0,
+    "CTL_XY": 1.0,
+    "FLOW_SWAP": 1.0,
+    "FLOW_EKF": 1.0,
+    "Z_EKF": 1.0,
+    "FLOW_GYRO_X": 0.0,
+    "FLOW_GYRO_Y": 0.0,
+    "FLOW_GYRO_XY": 1.45,
+    "FLOW_GYRO_YX": -1.65,
+    "CTL_KI_XY": 0.3
+   },
+   "q": {},
+   "summary": "máx 5.3 cm, janela 0.0 s",
+   "suggestion": {}
+  },
+  {
+   "folder": "hover_20261109_174312",
+   "mode": "motors",
+   "label": "bat-cheia-w1050",
+   "height_cm": 20.0,
+   "set": {
+    "CTL_W0": 1050.0,
+    "CTL_FF_TH": -52.0,
+    "CTL_FF_PHI": 0.0,
+    "CTL_FF_PSI": 50.0,
+    "CTL_XY": 1.0,
+    "FLOW_SWAP": 1.0,
+    "FLOW_EKF": 1.0,
+    "Z_EKF": 1.0
+   },
+   "q": {},
+   "summary": "máx 15.5 cm, janela 16.0 s, h RMS 10.7 cm, XY médio [-22.7, -11.5] RMS 45.5 cm",
+   "suggestion": {
+    "CTL_W0": 1145,
+    "CTL_FF_TH": -78,
+    "CTL_FF_PHI": -13,
+    "CTL_FF_PSI": 47
+   }
+  },
+  {
+   "folder": "hover_20261109_174429",
+   "mode": "motors",
+   "label": "bat-cheia-w1050",
+   "height_cm": 20.0,
+   "set": {
+    "CTL_W0": 1050.0,
+    "CTL_FF_TH": -52.0,
+    "CTL_FF_PHI": 0.0,
+    "CTL_FF_PSI": 50.0,
+    "CTL_XY": 1.0,
+    "FLOW_SWAP": 1.0,
+    "FLOW_EKF": 1.0,
+    "Z_EKF": 1.0
+   },
+   "q": {},
+   "summary": "máx 17.6 cm, janela 18.4 s, h RMS 10.6 cm, XY médio [-8.7, -14.7] RMS 38.0 cm",
+   "suggestion": {
+    "CTL_W0": 1157,
+    "CTL_FF_TH": -62,
+    "CTL_FF_PHI": -13,
+    "CTL_FF_PSI": 25
+   }
+  },
+  {
+   "folder": "hover_20261109_174830",
+   "mode": "motors",
+   "label": "melhor-w1100",
+   "height_cm": 20.0,
+   "set": {
+    "CTL_W0": 1100.0,
+    "CTL_FF_TH": -52.0,
+    "CTL_FF_PHI": 0.0,
+    "CTL_FF_PSI": 50.0,
+    "CTL_XY": 1.0,
+    "FLOW_SWAP": 1.0,
+    "FLOW_EKF": 1.0,
+    "Z_EKF": 1.0,
+    "FLOW_GYRO_X": 0.0,
+    "FLOW_GYRO_Y": 0.0,
+    "FLOW_GYRO_XY": 1.45,
+    "FLOW_GYRO_YX": -1.65,
+    "CTL_KI_XY": 0.3
+   },
+   "q": {},
+   "summary": "máx 19.9 cm, janela 0.0 s",
+   "suggestion": {}
+  }
+ ],
+ "boot_id": 259,
+ "boot_values": {
+  "CTL_DIST": 1.0,
+  "CTL_DIST_MAX": 400.0,
+  "CTL_FF_PHI": -40.0,
+  "CTL_FF_PSI": 0.0,
+  "CTL_FF_TH": -20.0,
+  "CTL_KI_XY": 0.30000001192092896,
+  "CTL_LQG_AJ": 1.0,
+  "CTL_PSI_MAX": 0.0,
+  "CTL_W0": 1050.0,
+  "CTL_XY": 0.0,
+  "FLOW_EKF": 0.0,
+  "FLOW_GYRO_X": 0.0,
+  "FLOW_GYRO_XY": 1.4500000476837158,
+  "FLOW_GYRO_Y": 0.0,
+  "FLOW_GYRO_YX": -1.649999976158142,
+  "FLOW_SWAP": 1.0,
+  "FLT_RAMP_CM": 0.0,
+  "FLT_TILT_MAX": 0.3499999940395355,
+  "FLT_Z_RATE": 0.05000000074505806,
+  "MOT_MAX": 0.949999988079071,
+  "MOT_W_AT_0": 0.0,
+  "MOT_W_AT_100": 1755.0,
+  "SNS_LVL_PHI": 0.0,
+  "SNS_LVL_TH": 0.0,
+  "Z_EKF": 0.0
+ }
+}

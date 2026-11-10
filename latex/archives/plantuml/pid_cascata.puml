@@ -1,0 +1,34 @@
+@startuml pid_cascata
+
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #444444
+skinparam ArrowThickness 1.5
+skinparam RectangleBorderThickness 1.2
+skinparam RectangleBorderColor #555555
+skinparam RectangleFontColor #222222
+
+left to right direction
+
+rectangle "Referência\n(x_d, y_d, z_d)" as REF #EEEEEE
+
+rectangle "PID Posição\n~50–100 Hz" as POS #D5CCF7
+rectangle "PID Atitude\n~250–500 Hz" as ATT #C0EAE0
+rectangle "PID Taxa\n~500–1000 Hz" as RATE #BEDAF5
+rectangle "Motor Mixing" as MIX #DDDDDD
+rectangle "Motores e Planta" as PLANT #FAEEDA
+
+REF  -right-> POS
+POS  -right-> ATT  : φ_d, θ_d, T
+ATT  -right-> RATE : p_d, q_d, r_d
+RATE -right-> MIX  : τ_φ, τ_θ, τ_ψ
+MIX  -right-> PLANT
+
+PLANT -up-> RATE  : taxas (p,q,r)\ngiroscópio
+PLANT -up-> ATT   : ângulos (φ,θ,ψ)\nIMU
+PLANT -up-> POS   : posição (x,y,z)\nfluxo óptico / GPS
+
+note bottom of POS : Malha externa\n(mais lenta)
+note bottom of RATE : Malha interna\n(mais rápida)
+
+@enduml

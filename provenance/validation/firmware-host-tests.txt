@@ -1,0 +1,21 @@
+PASS  test_attitude_mode
+PASS  test_bno_header
+PASS  test_ctrl_gains
+PASS  test_ctrl_params
+PASS  test_lqg_dist
+PASS  test_lqg_ert
+PASS  test_meas
+PASS  test_mixer
+PASS  test_mtf
+PASS  test_regressions
+PASS  test_sim_plant
+PASS  test_throttle
+PASS  test_trim
+PASS  test_lqg_ert_float
+
+PASS  lqg_ajustado_gains.c confere com tools/lqg_ajustado.py
+PASS  lqg_ert_model.c confere com reference/STM32_ert_rtw
+PASS  CRC dos ganhos igual no C e no Python (21F15F2A)
+PASS  tools/pi: projeto reproduz o Simulink e enlace com STM32 simulado
+
+all suites passed

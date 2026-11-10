@@ -1,0 +1,5 @@
+125.434	voo: ARMADO (Pi)
+125.461	voo: decolando para 30 cm
+128.436	dist z=0 th=0 phi=0 psi=0
+128.904	FAILSAFE: inclinacao excessiva
+128.910	dist z=0 th=0 phi=0 psi=0 rad/s

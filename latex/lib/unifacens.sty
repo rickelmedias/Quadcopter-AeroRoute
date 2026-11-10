@@ -1,0 +1,360 @@
+%% ============================================================================
+%% unifacens.sty - Customizações para o Centro Universitário Facens
+%% Atualizado em: Março/2026
+%% Baseado em: abnTeX2 e Manual de Textos Técnicos MSGQ-21.01 REV.18
+%% ============================================================================
+%%
+%% Este pacote contém customizações específicas do Centro Universitário Facens
+%% para trabalhos acadêmicos (TCC, dissertações, etc).
+%%
+%% PRINCIPAIS FUNCIONALIDADES:
+%% - Definição de variáveis institucionais (coordenadoria, integrantes, etc)
+%% - Formatação da capa conforme MANUAL MSGQ-21.01 REV.18
+%% - Formatação da folha de rosto conforme MANUAL MSGQ-21.01 REV.18
+%% - Adequação às normas ABNT NBR 14724:2011
+%%
+%% CORREÇÕES APLICADAS (validadas contra MANUAL MSGQ-21.01 REV.18):
+%% - Logo da capa: ajustado para height=2cm conforme manual (era scale=0.5)
+%% - Coordenadoria na capa: ajustado para Arial 16pt (era \Large ≈ 14pt)
+%% - Preâmbulo na folha de rosto: fonte corrigida para \normalsize/Arial 12pt (era \small)
+%% - Espaçamento do preâmbulo: corrigido para 1,5 / OnehalfSpace (era SingleSpace)
+%%
+%% ============================================================================
+
+% ============================================================================
+% INFORMAÇÕES DO PACOTE
+% ============================================================================
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{lib/unifacens}[2026/02/27 v2.0 Customizações UniFacens]
+
+% ============================================================================
+% LICENÇA
+% ============================================================================
+%% This work may be distributed and/or modified under the
+%% conditions of the LaTeX Project Public License, either version 1.3
+%% of this license or (at your option) any later version.
+%% The latest version of this license is in
+%%   http://www.latex-project.org/lppl.txt
+%% and version 1.3 or later is part of all distributions of LaTeX
+%% version 2005/12/01 or later.
+%%
+%% This work has the LPPL maintenance status `maintained'.
+%%
+%% Further information about abnTeX2 are available on 
+%% https://github.com/abntex/abntex2
+
+% ============================================================================
+% DEFINIÇÃO DE VARIÁVEIS INSTITUCIONAIS
+% ============================================================================
+% Estas variáveis armazenam informações específicas da instituição e do
+% trabalho que serão usadas na capa e folha de rosto.
+
+% --- COORDENADORIA ---
+\newcommand{\coordenadoria}{\def \@coordenadoria}
+                                % Define variável para coordenadoria
+                                % Exemplo: "Coordenadoria de Engenharia da Computação"
+                                % FONTE: MODELO DOCX - elemento obrigatório da capa
+
+% --- INTEGRANTES (AUTORES) ---
+\newcommand{\integranteum}{\def \@integranteum}
+                                % Define variável para primeiro autor
+                                % FONTE: MODELO DOCX - suporta trabalhos em grupo
+\newcommand{\integrantedois}{\def \@integrantedois}
+                                % Define variável para segundo autor
+                                % FONTE: MODELO DOCX - suporta até 2 autores
+                                % NOTA: Para mais autores, adicione \integrantetres, etc.
+
+% --- SUBTÍTULO ---
+\newcommand{\subtitulo}{\def \@subtitulo}
+                                % Define variável para subtítulo (opcional)
+                                % FONTE: MODELO DOCX - permite subtítulo após ":"
+
+% ============================================================================
+% INICIALIZAÇÃO DAS VARIÁVEIS
+% ============================================================================
+% Inicializa todas as variáveis como vazias para evitar erros de compilação
+% caso o usuário esqueça de definir alguma delas.
+
+\coordenadoria{}                % Inicializa vazia
+\integranteum{}                 % Inicializa vazia
+\integrantedois{}               % Inicializa vazia
+\subtitulo{}                    % Inicializa vazia
+
+% ============================================================================
+% COMANDOS PARA IMPRIMIR AS VARIÁVEIS
+% ============================================================================
+% Estes comandos permitem que as variáveis sejam usadas em qualquer parte
+% do documento.
+
+\newcommand{\imprimircoordenadoria}{\@coordenadoria}
+                                % Imprime o nome da coordenadoria
+\newcommand{\imprimirintegranteum}{\@integranteum}
+                                % Imprime o nome do primeiro integrante
+\newcommand{\imprimirintegrantedois}{\@integrantedois}
+                                % Imprime o nome do segundo integrante
+\newcommand{\imprimirsubtitulo}{\@subtitulo}
+                                % Imprime o subtítulo
+
+% ============================================================================
+% FORMATAÇÃO DA CAPA
+% ============================================================================
+% FONTE: MODELO DOCX - MODELO_TCC_WORD_-_FORMATAÇÃO_REV_02.docx
+% 
+% ESTRUTURA DA CAPA (de cima para baixo):
+% 1. Logotipo da instituição (centralizado)
+% 2. Nome da coordenadoria (14-16pt, negrito, MAIÚSCULA, centralizado)
+% 3. Espaço vertical (~5cm)
+% 4. Nome(s) do(s) autor(es) (14pt, negrito, MAIÚSCULA, centralizado)
+% 5. Espaço vertical (~5cm)
+% 6. Título do trabalho (14pt, negrito, MAIÚSCULA, centralizado)
+% 7. Subtítulo (se houver) (14pt, negrito, normal, centralizado)
+% 8. Espaço flexível (preenche até o rodapé)
+% 9. Local (14pt, negrito, centralizado)
+% 10. Ano (14pt, negrito, centralizado)
+
+\renewcommand{\imprimircapa}{
+    \begin{titlingpage}
+        % titlingpage = página sem numeração, para capa
+        
+        \begin{center}
+            % Todo conteúdo da capa é centralizado
+            
+            % ================================================================
+            % FORMATAÇÃO GERAL DA CAPA
+            % ================================================================
+            \bfseries           % Todos elementos da capa em negrito
+                                % FONTE: MODELO DOCX - toda capa em negrito
+            
+            % ================================================================
+            % 1. LOGOTIPO DA INSTITUIÇÃO
+            % ================================================================
+            \includegraphics[height=2cm]{logo-f.png}
+                                % Inclui logo da Facens
+                                % FONTE: MANUAL MSGQ-21.01 REV.18 - logo com altura 2cm
+                                % CORRIGIDO: era scale=0.5, ajustado para height=2cm conforme manual
+                                % O arquivo deve estar em ./images/logo-f.png
+            
+            % ================================================================
+            % 2. NOME DA COORDENADORIA
+            % ================================================================
+            \vspace{0.5cm}      % Pequeno espaço após o logo
+            
+            {{\fontsize{16}{19}\selectfont\bfseries\MakeUppercase{\imprimircoordenadoria}}}
+                                % Coordenadoria em MAIÚSCULA, Arial 16pt, negrito
+                                % CORRIGIDO: era \Large (~14pt). MANUAL MSGQ-21.01 REV.18: Arial 16
+                                % fontsize{16}{19} = 16pt fonte, 19pt entrelinha
+            
+            % ================================================================
+            % 3. ESPAÇO ATÉ OS AUTORES
+            % ================================================================
+            \vspace*{5cm}       % Espaço fixo de 5cm
+                                % FONTE: MODELO DOCX - layout da capa
+            
+            % ================================================================
+            % 4. NOME(S) DO(S) AUTOR(ES)
+            % ================================================================
+            \large{\MakeUppercase{\imprimirintegranteum}}\par
+                                % Primeiro autor em MAIÚSCULA
+                                % FONTE: MODELO DOCX - "RODRIGO GUIMARÃES CAMPOS"
+                                % Tamanho: \large (14pt aprox)
+                                % \par cria nova linha
+            
+            \large{\MakeUppercase{\imprimirintegrantedois}}
+                                % Segundo autor em MAIÚSCULA
+                                % FONTE: MODELO DOCX - suporta múltiplos autores
+                                % Se vazio, não aparece nada
+                                % NOTA: Para mais autores, adicione mais linhas
+            
+            % ================================================================
+            % 5. ESPAÇO ATÉ O TÍTULO
+            % ================================================================
+            \vspace*{5cm}       % Espaço fixo de 5cm
+                                % FONTE: MODELO DOCX - layout da capa
+            
+            % ================================================================
+            % 6. TÍTULO DO TRABALHO
+            % ================================================================
+            
+            \ifx\@subtitulo\empty
+                % Se NÃO HÁ subtítulo:
+                \large{\MakeUppercase{\imprimirtitulo}}
+                                % Título em MAIÚSCULA
+                                % FONTE: MODELO DOCX - "A QUESTÃO DA..."
+            \else
+                % Se HÁ subtítulo:
+                \large{\MakeUppercase{\imprimirtitulo}: \imprimirsubtitulo}
+                                % Título em MAIÚSCULA + : + subtítulo normal
+                                % FONTE: MODELO DOCX - formato "TÍTULO: subtítulo"
+            \fi
+            
+            % ================================================================
+            % 7. ESPAÇO FLEXÍVEL ATÉ O RODAPÉ
+            % ================================================================
+            \vfill              % Preenche o espaço restante verticalmente
+                                % Empurra local e data para o rodapé
+            
+            % ================================================================
+            % 8. LOCAL E ANO
+            % ================================================================
+            \large\imprimirlocal\par
+                                % Local (cidade/estado)
+                                % FONTE: MODELO DOCX - "SOROCABA, SP"
+            \large\imprimirdata
+                                % Ano de conclusão
+                                % FONTE: MODELO DOCX - "2021"
+                                
+        \end{center}
+    \end{titlingpage}
+}
+
+% ============================================================================
+% COMANDO PARA INSERIR DIAGRAMAS TIKZ
+% ============================================================================
+\newcommand{\inserirtikz}[4]{
+    \begin{figure}[H]
+        \centering
+        \caption{#2}
+        \label{#3}
+        \resizebox{\textwidth}{!}{%
+            \input{#1}%
+        }
+        \fonte{#4}
+    \end{figure}
+}
+
+% ============================================================================
+% FORMATAÇÃO DA FOLHA DE ROSTO
+% ============================================================================
+% FONTE: MODELO DOCX e ABNT NBR 14724:2011
+% 
+% ESTRUTURA DA FOLHA DE ROSTO (de cima para baixo):
+% 1. Nome(s) do(s) autor(es) (12pt, negrito, normal, centralizado)
+% 2. Espaço vertical (~5cm)
+% 3. Título do trabalho (14pt, negrito, MAIÚSCULA, centralizado)
+% 4. Subtítulo (se houver) (14pt, negrito, normal, centralizado)
+% 5. Espaço vertical (~5cm)
+% 6. Natureza do trabalho (12pt, normal, recuado à direita)
+% 7. Espaço flexível
+% 8. Local (14pt, negrito, centralizado)
+% 9. Ano (14pt, negrito, centralizado)
+
+\renewcommand{\folhaderostocontent}{
+    \begin{center}
+        % Todo conteúdo é centralizado (exceto natureza do trabalho)
+        
+        % ====================================================================
+        % 1. NOME(S) DO(S) AUTOR(ES)
+        % ====================================================================
+        \normalsize{\textbf{\MakeUppercase{\imprimirintegranteum}}}\par
+                                % Primeiro autor: 12pt, negrito
+                                % FONTE: Análise do DOCX - fonte menor que capa
+                                % \normalsize = 12pt (tamanho base do documento)
+        
+
+        \normalsize{\textbf{\MakeUppercase{\imprimirintegrantedois}}}
+                                % Segundo autor: 12pt, negrito
+                                % Se vazio, não aparece
+
+        % ====================================================================
+        % 2. ESPAÇO ATÉ O TÍTULO
+        % ====================================================================
+        \vspace*{5cm}           % Espaço fixo de 5cm
+                                % FONTE: Layout similar à capa
+
+        % ====================================================================
+        % 3. TÍTULO DO TRABALHO
+        % ====================================================================
+        \ifx\@subtitulo\empty
+            % Se NÃO HÁ subtítulo:
+            \large{\textbf{\MakeUppercase{\imprimirtitulo}}}
+                                % Título: 14pt, negrito, MAIÚSCULA
+                                % FONTE: ABNT - título destaque
+        \else
+            % Se HÁ subtítulo:
+            \large{\textbf{\MakeUppercase{\imprimirtitulo}: \imprimirsubtitulo}}
+                                % Título MAIÚSCULA + : + subtítulo normal
+        \fi
+
+        % ====================================================================
+        % 4. ESPAÇO ATÉ A NATUREZA DO TRABALHO
+        % ====================================================================
+        \vspace*{5cm}           % Espaço fixo de 5cm
+
+        % ====================================================================
+        % 5. NATUREZA DO TRABALHO
+        % ====================================================================
+        % Texto recuado à direita com informações sobre o trabalho
+        % FONTE: ABNT NBR 14724:2011 - elemento obrigatório
+        
+        \hspace*{8cm}           % Recuo de 8cm da margem esquerda
+                                % FONTE: Template antigo validado
+                                % Cria alinhamento à direita visual
+        \begin{minipage}{8cm}   % Caixa de texto de 8cm de largura
+                                % Permite quebra de linha automática
+            \begin{OnehalfSpace} % Espaçamento 1,5 (conforme MANUAL MSGQ-21.01 REV.18)
+                                % CORRIGIDO: era SingleSpace, deve ser 1,5 conforme manual
+                \normalsize\imprimirpreambulo
+                                % \normalsize = 12pt (CORRIGIDO: era \small, manual exige Arial 12)
+                                % Imprime o texto do preâmbulo
+                                % FONTE: Definido no main.tex com \preambulo{}
+            \end{OnehalfSpace}
+        \end{minipage}
+
+        % ====================================================================
+        % 6. ESPAÇO FLEXÍVEL ATÉ O RODAPÉ
+        % ====================================================================
+        \vfill                  % Preenche espaço restante
+                                % Empurra local e data para o rodapé
+
+        % ====================================================================
+        % 7. LOCAL E ANO
+        % ====================================================================
+        \large{\textbf\imprimirlocal}\par
+                                % Local: 14pt, negrito
+                                % FONTE: MODELO DOCX - rodapé em destaque
+        \large{\textbf\imprimirdata}
+                                % Ano: 14pt, negrito
+    \end{center}
+}
+
+% ============================================================================
+% FIM DAS CUSTOMIZAÇÕES
+% ============================================================================
+
+% ============================================================================
+% NOTAS PARA MANUTENÇÃO FUTURA
+% ============================================================================
+%
+% 1. ADIÇÃO DE MAIS AUTORES:
+%    Se precisar adicionar suporte para 3+ autores:
+%    - Adicione \newcommand{\integrantetres}{\def \@integrantetres}
+%    - Inicialize: \integrantetres{}
+%    - Crie comando de impressão: \newcommand{\imprimirintegrantetres}{...}
+%    - Adicione linha na capa e folha de rosto
+%
+% 2. AJUSTE DE ESPAÇAMENTOS:
+%    Os valores \vspace*{5cm} foram baseados no modelo DOCX.
+%    Para ajustar, mude esses valores (ex: 4cm, 6cm).
+%    Use \vspace* (com asterisco) para espaços que não devem ser removidos.
+%
+% 3. AJUSTE DE TAMANHOS DE FONTE:
+%    - \normalsize = 12pt (base do documento)
+%    - \small = 10-11pt
+%    - \large = 14pt (aproximadamente)
+%    - \Large = 14-16pt (aproximadamente)
+%    Para ajuste fino, use \fontsize{14}{16}\selectfont
+%
+% 4. MUDANÇA DE LOGOTIPO:
+%    Substitua logo-f.png na pasta images/
+%    Ajuste o scale= se o tamanho não ficar adequado
+%
+% 5. CONFORMIDADE COM NORMAS:
+%    Este pacote segue:
+%    - ABNT NBR 14724:2011 (Trabalhos acadêmicos)
+%    - Modelo DOCX institucional da Facens (Rev. 02)
+%    - Template abnTeX2 v1.9.7
+%
+% ============================================================================
+
+\endinput
+% Fim do arquivo unifacens.sty

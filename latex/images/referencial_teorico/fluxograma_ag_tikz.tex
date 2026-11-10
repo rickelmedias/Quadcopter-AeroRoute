@@ -1,0 +1,59 @@
+\resizebox{0.64\textwidth}{!}{%
+\begin{tikzpicture}[
+    node distance=0.72cm,
+    block/.style={
+        rectangle,
+        draw,
+        very thick,
+        minimum width=6.6cm,
+        minimum height=1.05cm,
+        align=center,
+        font=\small
+    },
+    decision/.style={
+        diamond,
+        draw,
+        very thick,
+        aspect=2.3,
+        minimum width=5.8cm,
+        align=center,
+        font=\small
+    },
+    terminal/.style={
+        ellipse,
+        draw,
+        very thick,
+        minimum width=3.2cm,
+        minimum height=0.8cm,
+        align=center,
+        font=\small
+    },
+    flow/.style={-{Stealth[length=3mm]}, very thick}
+]
+    \node[terminal] (start) {Início};
+    \node[block, below=of start] (init) {Inicialização\\\footnotesize Gerar população inicial};
+    \node[block, below=of init] (fit) {Avaliação de \textit{fitness}\\\footnotesize Calcular custo total de cada rota};
+    \node[block, below=of fit] (best) {Atualização do melhor indivíduo\\\footnotesize Preservar elite ou arquivo da melhor solução};
+    \node[block, below=of best] (select) {Seleção por torneio\\\footnotesize Escolher $k$ indivíduos e manter o melhor};
+    \node[block, below=of select] (cross) {Cruzamento ordenado (OX)\\\footnotesize Combinar pais preservando ordem relativa};
+    \node[block, below=of cross] (mut) {Mutação por inversão\\\footnotesize Inverter segmento aleatório do cromossomo};
+    \node[block, below=of mut] (newgen) {Nova geração\\\footnotesize Inserir descendentes e elites};
+    \node[block, below=of newgen] (evalchild) {Avaliação dos descendentes\\\footnotesize Calcular custo antes da decisão de parada};
+    \node[decision, below=0.95cm of evalchild] (stop) {Critério de\\parada atingido?};
+    \node[terminal, below=0.95cm of stop] (end) {Melhor solução};
+
+    \draw[flow] (start) -- (init);
+    \draw[flow] (init) -- (fit);
+    \draw[flow] (fit) -- (best);
+    \draw[flow] (best) -- (select);
+    \draw[flow] (select) -- (cross);
+    \draw[flow] (cross) -- (mut);
+    \draw[flow] (mut) -- (newgen);
+    \draw[flow] (newgen) -- (evalchild);
+    \draw[flow] (evalchild) -- (stop);
+    \draw[flow] (stop) -- node[right, font=\footnotesize] {Sim} (end);
+    \draw[flow] (stop.west) -- ++(-2.2,0)
+        node[pos=0.2, above, font=\footnotesize] {Não}
+        |- (fit.west);
+\end{tikzpicture}%
+}

@@ -1,0 +1,8 @@
+# Teste em espaço pequeno: decola a 30 cm, percorre o quadrado de 40 cm de
+# missoes/pontos.txt (ordem pelo algoritmo genético), volta à partida e pousa.
+#
+#   python -m dronectl missao missoes/quadrado_40cm.txt --sim   # drone simulado no STM32
+#   python -m dronectl missao missoes/quadrado_40cm.txt         # voo real
+takeoff 30
+route
+land
