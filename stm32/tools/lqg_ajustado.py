@@ -60,6 +60,14 @@ RN = [1.15e-4, 5.0e-8, 1.94e-7, 6.04e-8, 1.28e-2, 2.2e-3, 2.06e-6, 3.24e-7, 2.38
 #: o Kalman seguia o ruído em vy e a posição y andava com ele. Só as linhas de
 #: y e vy do Kalman mudam (M de vy por vy: 0,48 -> 0,24, igual ao de vx).
 RN_AJUSTADO = RN[:5] + [RN[4]] + RN[6:]
+#: Desvio da velocidade do fluxo depois da fusão com o acelerômetro (FLOW_EKF),
+#: em m/s. No voo de 08/11 o filtro deixou ~0,6 cm/s de ruído amostra a
+#: amostra; 3 cm/s deixa margem para o que sobra em baixa frequência e para a
+#: correlação entre amostras (a saída do filtro não é ruído branco).
+SIGMA_V_FUNDIDO = 0.03
+#: Variância das medidas do Kalman com a velocidade fundida: a do ajustado com
+#: vx e vy em SIGMA_V_FUNDIDO² (o LQG passa a confiar mais na velocidade).
+RN_FUNDIDO = RN_AJUSTADO[:4] + [SIGMA_V_FUNDIDO ** 2] * 2 + RN_AJUSTADO[6:]
 #: Variância (por passo) da perturbação de altura, em (rad/s)²: rápida o
 #: bastante para achar um hover 30 rad/s errado em poucos segundos.
 QD_ALTURA = 1.0
@@ -276,6 +284,12 @@ def gerar() -> str:
     out += [f"  {_linha(l)},  /* {n} */" for l, n in zip(M, lp.ESTADOS)]
     out += ["};", "", "const lqg_real_t LQG_AJ_L[LQG_NX][LQG_NY] = {"]
     out += [f"  {_linha(l)},  /* {n} */" for l, n in zip(L, lp.ESTADOS)]
+    Mf, Lf = kalman_lqg(RN_FUNDIDO)
+    out += ["};", "", f"/* Kalman com a velocidade fundida (FLOW_EKF): vx, vy com desvio de {SIGMA_V_FUNDIDO:g} m/s. */"]
+    out += ["const lqg_real_t LQG_AJ_M_FUSED[LQG_NX][LQG_NY] = {"]
+    out += [f"  {_linha(l)},  /* {n} */" for l, n in zip(Mf, lp.ESTADOS)]
+    out += ["};", "", "const lqg_real_t LQG_AJ_L_FUSED[LQG_NX][LQG_NY] = {"]
+    out += [f"  {_linha(l)},  /* {n} */" for l, n in zip(Lf, lp.ESTADOS)]
     out += ["};", "", "const lqg_dist_channel_t LQG_DIST_CHANNELS[LQG_DIST_NC] = {"]
     for nome, pos, vel, medidas, padrao in CANAIS:
         qd = {"z": QD_ALTURA, "psi": QD_GUINADA}.get(pos, QD_ATITUDE)

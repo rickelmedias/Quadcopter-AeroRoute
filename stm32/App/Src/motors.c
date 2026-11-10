@@ -18,6 +18,8 @@
 
 /** Período da task e dos quadros DShot, em ms (1 kHz). */
 #define PERIOD_MS 1U
+/** Sem atualização do controle de voo por este tempo, corta e exige novo armamento. */
+#define FLIGHT_COMMAND_TIMEOUT_MS 100U
 /** Uma linha MOT a cada N quadros (100 Hz). */
 #define LOG_EVERY 10U
 /** Rampa padrão da bancada, em décimos de por cento por segundo (20 %/s). */
@@ -51,6 +53,8 @@ static uint32_t rate = DEFAULT_RATE;
 static sweep_t sweep;
 /** Aceleração pedida pelo voo (0..1). */
 static float flight_throttle[MOTORS_COUNT];
+/** Tick da última atualização válida do controle de voo. */
+static uint32_t flight_command_ms;
 /** Pedido de parada; motivo em texto fixo. */
 static const char *volatile stop_request;
 /** Motores do beep (máscara). */
@@ -92,6 +96,7 @@ bool motors_arm(motors_owner_t who) {
   if (ok) {
     owner = who;
     sweep.active = false;
+    flight_command_ms = HAL_GetTick();
     for (unsigned i = 0U; i < MOTORS_COUNT; ++i) flight_throttle[i] = 0.0F;
   }
   taskEXIT_CRITICAL();
@@ -104,7 +109,10 @@ motors_owner_t motors_owner(void) { return owner; }
 
 void motors_set_flight_throttle(const float throttle[MOTORS_COUNT]) {
   taskENTER_CRITICAL();
-  for (unsigned i = 0U; i < MOTORS_COUNT; ++i) flight_throttle[i] = throttle[i];
+  if (owner == MOTORS_OWNER_FLIGHT && stop_request == NULL) {
+    for (unsigned i = 0U; i < MOTORS_COUNT; ++i) flight_throttle[i] = throttle[i];
+    flight_command_ms = HAL_GetTick();
+  }
   taskEXIT_CRITICAL();
 }
 
@@ -293,6 +301,9 @@ static void motors_task(void *argument) {
     if (why != NULL) {
       stop_request = NULL;
       stop_now(why);
+    } else if (owner == MOTORS_OWNER_FLIGHT &&
+               HAL_GetTick() - flight_command_ms >= FLIGHT_COMMAND_TIMEOUT_MS) {
+      stop_now("controle de voo sem atualizacao por 100 ms");
     }
     uint16_t value[MOTORS_COUNT];
     bool telemetry;

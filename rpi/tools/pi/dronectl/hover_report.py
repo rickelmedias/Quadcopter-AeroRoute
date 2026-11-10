@@ -427,6 +427,11 @@ def format_report(rep: Report) -> str:
                      f"({xy['final_cm'][0]:+}, {xy['final_cm'][1]:+}) cm, deriva "
                      f"({xy['drift_cm_s'][0]:+}, {xy['drift_cm_s'][1]:+}) cm/s, "
                      f"fluxo válido {xy['flow_valid_pct']}%")
+    if m.get('nav'):
+        from .nav_report import nav_line
+        line = nav_line(m['nav'])
+        if line:
+            lines.append(line)
     if 'attitude' in m:
         a = m['attitude']
         lines.append(f"atitude: φ {a['phi_mean_deg']:+}° ± {a['phi_std_deg']}, "

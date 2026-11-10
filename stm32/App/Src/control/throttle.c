@@ -22,6 +22,17 @@ float throttle_blend(float throttle, float idle, float factor) {
   return idle + (throttle - idle) * factor;
 }
 
+void throttle_blend_common(float *throttle, unsigned count, float idle, float factor) {
+  if (count == 0U) return;
+  float mean = 0.0F;
+  for (unsigned i = 0U; i < count; ++i) mean += throttle[i];
+  mean /= (float)count;
+  if (!(mean > idle) || factor >= 1.0F) return;
+  const float f = factor > 0.0F ? factor : 0.0F;
+  const float shift = (idle + (mean - idle) * f) - mean;
+  for (unsigned i = 0U; i < count; ++i) throttle[i] += shift;
+}
+
 bool throttle_desaturate(float *throttle, unsigned count, float min, float max) {
   if (count == 0U) return false;
   bool changed = false;

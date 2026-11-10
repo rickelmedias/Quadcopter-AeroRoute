@@ -12,7 +12,8 @@
  *   escreve a aceleração dos quatro motores a cada passo do LQG.
  *
  * ::motors_stop() pode ser chamada de qualquer task e zera tudo no próximo
- * quadro. O dono atual percebe a parada por ::motors_owner().
+ * quadro. No voo, a saída também desarma se não receber atualização do controle
+ * por 100 ms. O dono atual percebe a parada por ::motors_owner().
  *
  * Numeração: M1..M4 = PB6..PB9, a numeração física do drone (frente = M2 e
  * M4, trás = M1 e M3, direita = M1 e M2, esquerda = M3 e M4; M1 e M4 têm

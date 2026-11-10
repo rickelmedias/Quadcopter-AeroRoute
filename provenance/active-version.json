@@ -1,9 +1,8 @@
 {
-  "kind": "thesis-submission-baseline",
-  "submission_date": "2026-11-11",
+  "kind": "experimental-working-tree",
   "capture_date": "2026-11-10",
-  "firmware_ref": "hover-lqg-pi",
-  "firmware_commit": "af6034e16fae0fc868444f57ff526b14ccd971aa",
-  "pi_source": "~/drone",
-  "firmware_binary_verified": false
+  "original_branch": "hover-lqg-pi-better",
+  "base_commit": "af6034e16fae0fc868444f57ff526b14ccd971aa",
+  "pi_source": "~/drone-better",
+  "thesis_baseline": false
 }

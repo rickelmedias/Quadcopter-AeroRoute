@@ -60,6 +60,25 @@ typedef enum {
   FLIGHT_FLAG_SATURATED = 1U << 3        /**< Algum motor bateu em MOT_MIN ou MOT_MAX. */
 } flight_flags_t;
 
+/** @brief EKF de navegação de um passo (control/nav_ekf.h), para o DRONE_NAV_DEBUG. */
+typedef struct {
+  float flow_raw[2];        /**< Fluxo do MTF, x e y do sensor, em rad/s. */
+  float flow_body[2];       /**< Velocidade do fluxo no corpo (frente, direita), em m/s. */
+  float range_raw;          /**< Distância lida, em m. */
+  float range_filt;         /**< Distância filtrada, em m. */
+  float pos[3];             /**< Posição do EKF: x, y locais e z NED, em m. */
+  float vel[3];             /**< Velocidade do EKF, em m/s. */
+  float bias[3];            /**< Viés do acelerômetro estimado, em m/s². */
+  float accel[3];           /**< Aceleração usada na predição, em m/s². */
+  float flow_ratio;         /**< Última razão de teste do par x, y. */
+  float z_ratio;            /**< Última razão de teste de z. */
+  uint32_t flow_rejected;   /**< Correções de fluxo recusadas. */
+  uint32_t z_rejected;      /**< Correções de distância recusadas pelo EKF. */
+  uint32_t range_rejected;  /**< Leituras recusadas pelo filtro de distância. */
+  uint16_t flags;           /**< ::meas_diag_flag_t e ::MEAS_DIAG_Z_TO_LQG. */
+  uint8_t quality;          /**< Qualidade do fluxo, 0..255. */
+} flight_nav_telemetry_t;
+
 /** @brief Fotografia de um passo da malha. */
 typedef struct {
   /** Tick do passo, em ms. */
@@ -92,6 +111,8 @@ typedef struct {
   uint32_t mtf_misses;
   /** z NED do chão onde armou, em m; NAN até a primeira medida após armar. */
   float z_ground;
+  /** EKF de navegação neste passo (DRONE_NAV_DEBUG). */
+  flight_nav_telemetry_t nav;
 } flight_telemetry_t;
 
 /** @brief Fim de um trecho (TAKEOFF ou leg), para o DroneLink publicar. */

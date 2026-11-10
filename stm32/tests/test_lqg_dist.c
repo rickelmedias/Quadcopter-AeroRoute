@@ -120,7 +120,7 @@ static result_t simulate(bool adjusted, bool estimator, double dh, double dth, d
   lqg_gains_t eff = LQG_ERT_DEFAULT_GAINS;
   if (adjusted) {
     lqg_dist_apply_gains(&eff);
-    lqg_dist_apply_kalman(&eff);
+    lqg_dist_apply_kalman(&eff, false);
   }
   attitude_mode_mask_gains(&eff);
   lqg_ert_t f;
@@ -270,7 +270,7 @@ static void test_tuning(void) {
 static double simulate_xy(float psi, bool rotate) {
   lqg_gains_t eff = LQG_ERT_DEFAULT_GAINS;
   lqg_dist_apply_gains(&eff);
-  lqg_dist_apply_kalman(&eff);
+  lqg_dist_apply_kalman(&eff, false);
   lqg_ert_t f;
   lqg_ert_init(&f);
   static const unsigned idx[LQG_NY] = {LQG_X_Z, LQG_X_PHI, LQG_X_THETA, LQG_X_PSI, LQG_X_VX,
@@ -358,7 +358,7 @@ static double simulate_yaw(double authority, double torque, double tau) {
   srand(5);
   lqg_gains_t eff = LQG_ERT_DEFAULT_GAINS;
   lqg_dist_apply_gains(&eff);
-  lqg_dist_apply_kalman(&eff);
+  lqg_dist_apply_kalman(&eff, false);
   lqg_ert_t f;
   lqg_ert_init(&f);
   lqg_dist_t e;
@@ -427,7 +427,41 @@ static void test_yaw_disturbance(void) {
   }
 }
 
+/** @brief O limite de guinada encurta só a parcela de guinada do du. */
+static void test_limit_yaw(void) {
+  const float *pat = LQG_DIST_CHANNELS[LQG_DIST_PSI].pattern;
+  lqg_real_t du[LQG_NU], out[LQG_NU];
+  for (unsigned j = 0U; j < LQG_NU; ++j) du[j] = (lqg_real_t)(50.0F + 200.0F * pat[j]);
+  assert(!lqg_dist_limit_yaw(du, out, 0.0F) && out[0] == du[0]);
+  assert(!lqg_dist_limit_yaw(du, out, 300.0F) && out[1] == du[1]);
+  assert(lqg_dist_limit_yaw(du, out, 60.0F));
+  lqg_real_t yaw = 0.0, col = 0.0;
+  for (unsigned j = 0U; j < LQG_NU; ++j) {
+    yaw += (lqg_real_t)pat[j] * out[j];
+    col += out[j];
+  }
+  assert(fabs(yaw / LQG_NU - 60.0) < 1e-9);
+  assert(fabs(col / LQG_NU - 50.0) < 1e-9);  /* o coletivo não muda */
+  for (unsigned j = 0U; j < LQG_NU; ++j) du[j] = (lqg_real_t)(-200.0F * pat[j]);
+  assert(lqg_dist_limit_yaw(du, out, 60.0F));
+  yaw = 0.0;
+  for (unsigned j = 0U; j < LQG_NU; ++j) yaw += (lqg_real_t)pat[j] * out[j];
+  assert(fabs(yaw / LQG_NU + 60.0) < 1e-9);
+  /* FF/estimador podem ultrapassar o limite mesmo com LQG abaixo dele.
+     Preserva coletivo, pitch e roll ao limitar o pedido completo. */
+  const float *th = LQG_DIST_CHANNELS[LQG_DIST_THETA].pattern;
+  const float *ph = LQG_DIST_CHANNELS[LQG_DIST_PHI].pattern;
+  for (unsigned j = 0U; j < LQG_NU; ++j) {
+    du[j] = 100.0 + 30.0 * th[j] - 15.0 * ph[j] + (20.0 + 50.0 + 100.0) * pat[j];
+  }
+  assert(lqg_dist_limit_yaw(du, out, 60.0F));
+  for (unsigned j = 0U; j < LQG_NU; ++j) {
+    assert(fabs(out[j] - (100.0 + 30.0 * th[j] - 15.0 * ph[j] + 60.0 * pat[j])) < 1e-9);
+  }
+}
+
 int main(void) {
+  test_limit_yaw();
   test_tuning();
   test_yaw_disturbance();
   test_adjusted_kalman();

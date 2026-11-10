@@ -53,6 +53,23 @@ float throttle_ramp_up(uint32_t elapsed_ms, uint32_t total_ms);
 float throttle_blend(float throttle, float idle, float factor);
 
 /**
+ * @brief Aplica a rampa só à aceleração média, preservando a diferença entre os motores.
+ *
+ * ::throttle_blend encolhe cada motor em direção à marcha lenta, e com isso
+ * também a diferença que segura o nível (correção de atitude e desequilíbrio
+ * fixo): no instante em que o drone sai do chão a rampa ainda não terminou, e
+ * essa diferença chegaria atenuada. Aqui só a média entra em rampa e cada
+ * motor mantém seu desvio da média. Se algum motor ficar abaixo do mínimo,
+ * use ::throttle_desaturate em seguida.
+ *
+ * @param[in,out] throttle  Aceleração de cada motor (fração 0..1).
+ * @param[in]     count     Quantidade de motores.
+ * @param[in]     idle      Marcha lenta (fração 0..1).
+ * @param[in]     factor    Fração da rampa, 0..1.
+ */
+void throttle_blend_common(float *throttle, unsigned count, float idle, float factor);
+
+/**
  * @brief Desloca os motores juntos para caberem em [min, max].
  *
  * Valores não finitos viram @p min. Se a diferença entre o maior e o menor

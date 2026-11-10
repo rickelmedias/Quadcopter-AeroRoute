@@ -186,7 +186,7 @@ def cmd_hover(args) -> int:
         except KeyboardInterrupt:
             print('\nCtrl+C: pousando')
         except LinkError as exc:
-            print(f'error: {exc}')
+            print(f'erro: {exc}')
         finally:
             if link.armed or state_name(link.flight_state) not in ('STANDBY', 'FAILSAFE'):
                 _land_and_wait(link)
@@ -320,7 +320,7 @@ def cmd_hover_test(args) -> int:
                        countdown_s=args.countdown)
         opts.check()
     except ValueError as exc:
-        print(f'error: {exc}', file=sys.stderr)
+        print(f'erro: {exc}', file=sys.stderr)
         return 2
     if args.save:
         profile.params.update(params)
@@ -387,7 +387,7 @@ def cmd_hover_profile(args) -> int:
         q = parse_assignments(args.q, upper=False)
         check_q_names(q)
     except ValueError as exc:
-        print(f'error: {exc}', file=sys.stderr)
+        print(f'erro: {exc}', file=sys.stderr)
         return 2
     if args.apply_suggestion is not None:
         chosen = profile.apply_suggestion(args.apply_suggestion)
@@ -439,121 +439,123 @@ def cmd_rotas_limite(args) -> int:
 
 
 def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(prog='dronectl', description='Drone command and tuning')
+    parser = argparse.ArgumentParser(prog='dronectl', description='Comando e ajuste do drone')
     parser.add_argument('-p', '--port', default='/dev/serial0',
-                        help='STM32 serial port (or pyserial URL)')
+                        help='porta serial do STM32 (ou URL do pyserial)')
     parser.add_argument('-b', '--baud', type=int, default=115200)
     sub = parser.add_subparsers(dest='command', required=True)
 
     def stream_options(p):
-        p.add_argument('--rate', type=float, default=25.0, help='DRONE_CTRL_DEBUG rate in Hz')
-        p.add_argument('--window', type=int, default=250, help='Statistics window in samples')
-        p.add_argument('--csv', help='Write telemetry to this CSV')
-        p.add_argument('--profile', help='Apply this tuning profile (JSON) before starting')
+        p.add_argument('--rate', type=float, default=25.0, help='DRONE_CTRL_DEBUG, em Hz')
+        p.add_argument('--window', type=int, default=250, help='amostras na estatística')
+        p.add_argument('--csv', help='grava a telemetria neste CSV')
+        p.add_argument('--profile', help='perfil de ajuste (JSON) aplicado antes de começar')
 
-    sub.add_parser('status', help='State, gains and estimates').set_defaults(func=cmd_status)
-    p = sub.add_parser('monitor', help='Live sensor filtering without arming')
+    sub.add_parser('status', help='estado, ganhos e estimativa').set_defaults(func=cmd_status)
+    p = sub.add_parser('monitor', help='filtragem dos sensores ao vivo, sem armar')
     stream_options(p)
     p.set_defaults(func=cmd_monitor)
-    p = sub.add_parser('tune', help='Tuning shell with the drone on the ground')
+    p = sub.add_parser('tune', help='shell de ajuste com o drone no chão')
     stream_options(p)
     p.set_defaults(func=cmd_tune)
-    p = sub.add_parser('hover', help='Take off, hold and land')
-    p.add_argument('--height', type=float, default=0.5, help='Height in meters')
-    p.add_argument('--time', type=float, default=20.0, help='HOLD duration in seconds (without --debug)')
-    p.add_argument('--dry', action='store_true', help='Force FLT_DRY_RUN=1 (motors stopped)')
-    p.add_argument('--debug', action='store_true', help='Live tuning shell')
+    p = sub.add_parser('hover', help='decola, segura e pousa')
+    p.add_argument('--height', type=float, default=0.5, help='altura, em m')
+    p.add_argument('--time', type=float, default=20.0, help='tempo em HOLD, em s (sem --debug)')
+    p.add_argument('--dry', action='store_true', help='força FLT_DRY_RUN=1 (motores parados)')
+    p.add_argument('--debug', action='store_true', help='shell de ajuste em tempo real')
     stream_options(p)
     p.set_defaults(func=cmd_hover)
-    sub.add_parser('land', help='Land and disarm').set_defaults(func=cmd_land)
-    sub.add_parser('disarm', help='Disarm immediately').set_defaults(func=cmd_disarm)
-    p = sub.add_parser('param', help='STM32 parameters')
+    sub.add_parser('land', help='pousa e desarma').set_defaults(func=cmd_land)
+    sub.add_parser('disarm', help='desarma na hora').set_defaults(func=cmd_disarm)
+    p = sub.add_parser('param', help='parâmetros do STM32')
     p.add_argument('action', choices=['list', 'get', 'set'])
     p.add_argument('name', nargs='?')
     p.add_argument('value', nargs='?', type=float)
     p.set_defaults(func=cmd_param)
-    p = sub.add_parser('gains', help='STM32 LQG gains')
+    p = sub.add_parser('gains', help='ganhos do LQG no STM32')
     p.add_argument('action', choices=['query', 'reset', 'upload'])
-    p.add_argument('--profile', help='Weight profile to upload')
+    p.add_argument('--profile', help='perfil com os pesos (upload)')
     p.set_defaults(func=cmd_gains)
-    p = sub.add_parser('mission', aliases=['missao'], help='Step-by-step commands (takeoff, yaw, goto, route, land...)')
-    p.add_argument('arquivo', metavar='FILE', nargs='?', help='Mission file; omit for the interactive shell')
+    p = sub.add_parser('missao', help='comandos passo a passo (takeoff, yaw, goto, route, land...)')
+    p.add_argument('arquivo', nargs='?', help='arquivo de missão (sem ele: shell interativo)')
     p.add_argument('--sim', action='store_true',
-                   help='Enable FLT_SIM=1: simulated drone on STM32, motors stopped')
-    p.add_argument('--points', '--pontos', dest='pontos', metavar='FILE', help='Default route points file (tools/pi/missoes/pontos.txt)')
-    p.add_argument('--disable-sim', '--desligar-sim', dest='desligar_sim', action='store_true',
-                   help='Restore FLT_SIM=0 when finished')
+                   help='liga FLT_SIM=1: drone simulado no STM32, motores parados')
+    p.add_argument('--pontos', help='arquivo de pontos do "route" sem pontos '
+                   '(padrão: tools/pi/missoes/pontos.txt)')
+    p.add_argument('--desligar-sim', action='store_true',
+                   help='volta FLT_SIM=0 ao terminar')
     p.set_defaults(func=cmd_missao)
-    p = sub.add_parser('hover-test', help='Hover test: profile, guarded flight, recording and analysis (dry without --motors/--sim)')
+    p = sub.add_parser('hover-test', help='ensaio de hover: perfil, voo protegido, gravação e '
+                       'análise (sem --motors/--sim: a seco)')
     mode = p.add_mutually_exclusive_group()
-    mode.add_argument('--motors', action='store_true', help='Real flight: motors will spin')
-    mode.add_argument('--sim', action='store_true', help='Simulated drone on STM32 (FLT_SIM=1)')
-    p.add_argument('--height', type=float, help='Height in cm (profile default: 30)')
-    p.add_argument('--time', type=float, help='Hover duration after arrival in seconds (profile default: 20)')
-    p.add_argument('--set', action='append', metavar='NAME=VALUE[,...]',
-                   help='Parameter override for this test; repeatable')
-    p.add_argument('--q', action='append', metavar='STATE=WEIGHT[,...]',
-                   help='LQG Q weight for this test (x y z phi theta psi vx vy vz p q r)')
-    p.add_argument('--r', type=float, help='LQG R weight (default: 0.1)')
-    p.add_argument('--save', action='store_true', help='Save --set/--q/--r/--height/--time in the profile')
-    p.add_argument('--label', help='Test annotation saved in the recording')
-    p.add_argument('--rate', type=float, default=50.0, help='DRONE_CTRL_DEBUG rate in Hz')
+    mode.add_argument('--motors', action='store_true', help='voo real: os motores giram')
+    mode.add_argument('--sim', action='store_true', help='drone simulado no STM32 (FLT_SIM=1)')
+    p.add_argument('--height', type=float, help='altura, em cm (padrão: a do perfil, 30)')
+    p.add_argument('--time', type=float, help='tempo de hover depois de chegar, em s (perfil: 20)')
+    p.add_argument('--set', action='append', metavar='NOME=VALOR[,...]',
+                   help='parâmetro só deste ensaio (pode repetir)')
+    p.add_argument('--q', action='append', metavar='ESTADO=PESO[,...]',
+                   help='peso Q do LQG ajustado só deste ensaio (x y z phi theta psi vx vy vz p q r)')
+    p.add_argument('--r', type=float, help='peso R do LQG ajustado (padrão 0,1)')
+    p.add_argument('--save', action='store_true', help='grava --set/--q/--r/--height/--time no perfil')
+    p.add_argument('--label', help='anotação do ensaio (vai para o registro)')
+    p.add_argument('--rate', type=float, default=50.0, help='DRONE_CTRL_DEBUG, em Hz')
     p.add_argument('--geofence', type=float, default=80.0,
-                   help='Land at this distance from the takeoff point, in cm')
-    p.add_argument('--countdown', type=float, default=3.0, help='Countdown before arming, in seconds')
-    p.add_argument('--profile', help='Profile (default: ~/drone/perfil_hover.json)')
-    p.add_argument('--out', help='Test directory (default: ~/real_log_kit)')
+                   help='pousa a esta distância do ponto de decolagem, em cm')
+    p.add_argument('--countdown', type=float, default=3.0, help='contagem antes de armar, em s')
+    p.add_argument('--profile', help='perfil (padrão ~/drone/perfil_hover.json)')
+    p.add_argument('--out', help='pasta dos ensaios (padrão ~/real_log_kit)')
     p.set_defaults(func=cmd_hover_test)
-    p = sub.add_parser('hover-report', help='Analyze a recorded hover test again')
-    p.add_argument('folder', nargs='?', default='latest', help='Test directory (default: latest)')
-    p.add_argument('--dir', help='Search directory for the latest test (default: ~/real_log_kit)')
-    p.add_argument('--timeline', action='store_true', help='Show timeline (one line per second)')
-    p.add_argument('--plot', action='store_true', help='Save grafico.png in the directory (requires matplotlib)')
+    p = sub.add_parser('hover-report', help='reanalisa um ensaio de hover gravado')
+    p.add_argument('folder', nargs='?', default='latest', help='pasta do ensaio (padrão: o último)')
+    p.add_argument('--dir', help='onde procurar o último (padrão ~/real_log_kit)')
+    p.add_argument('--timeline', action='store_true', help='mostra a linha do tempo (1 linha/s)')
+    p.add_argument('--plot', action='store_true', help='grava grafico.png na pasta (matplotlib)')
     p.set_defaults(func=cmd_hover_report)
-    p = sub.add_parser('hover-profile', help='Profile used to start the next hover-test')
-    p.add_argument('--set', action='append', metavar='NAME=VALUE[,...]')
-    p.add_argument('--unset', action='append', metavar='NAME', help='Restore the factory value')
-    p.add_argument('--q', action='append', metavar='STATE=WEIGHT[,...]')
-    p.add_argument('--unset-q', action='append', metavar='STATE')
-    p.add_argument('--clear-q', action='store_true', help='Restore firmware default Q and R weights')
+    p = sub.add_parser('hover-profile', help='perfil com que o próximo hover-test começa')
+    p.add_argument('--set', action='append', metavar='NOME=VALOR[,...]')
+    p.add_argument('--unset', action='append', metavar='NOME', help='volta ao de fábrica')
+    p.add_argument('--q', action='append', metavar='ESTADO=PESO[,...]')
+    p.add_argument('--unset-q', action='append', metavar='ESTADO')
+    p.add_argument('--clear-q', action='store_true', help='volta ao Q e R do ajustado do firmware')
     p.add_argument('--r', type=float)
-    p.add_argument('--height', type=float, help='Default height in cm')
-    p.add_argument('--time', type=float, help='Default hover duration in seconds')
-    p.add_argument('--apply-suggestion', nargs='*', metavar='NAME',
-                   help='Apply all or selected suggestions from the latest test to the profile')
-    p.add_argument('--reset', action='store_true', help='Restore factory profile and retain history')
-    p.add_argument('--profile', help='Profile (default: ~/drone/perfil_hover.json)')
+    p.add_argument('--height', type=float, help='altura padrão, em cm')
+    p.add_argument('--time', type=float, help='tempo de hover padrão, em s')
+    p.add_argument('--apply-suggestion', nargs='*', metavar='NOME',
+                   help='passa a sugestão do último ensaio (toda, ou só estes nomes) para o perfil')
+    p.add_argument('--reset', action='store_true', help='perfil de fábrica (mantém o histórico)')
+    p.add_argument('--profile', help='perfil (padrão ~/drone/perfil_hover.json)')
     p.set_defaults(func=cmd_hover_profile)
-    p = sub.add_parser('routes-bench', aliases=['rotas-bench'], help='Benchmark greedy, 2-opt, genetic, brute-force and exact TSP solvers')
+    p = sub.add_parser('rotas-bench', help='benchmark guloso x 2-opt x genético x força bruta x exato (TSP)')
     p.add_argument('--n-min', type=int, default=3)
     p.add_argument('--n-max', type=int, default=30)
-    p.add_argument('--instances', '--instancias', dest='instancias', metavar='COUNT', type=int, default=10, help='Instances (seeds) per N')
-    p.add_argument('--exact-max-s', '--exato-max-s', dest='exato_max_s', metavar='SECONDS', type=float, default=10.0,
-                   help='Skip the exact solver above this predicted time per instance')
-    p.add_argument('--exact-max-mb', '--exato-max-mb', dest='exato_max_mb', metavar='MB', type=float, default=600.0,
-                   help='Held-Karp memory limit in MB (Pi Zero: use 150)')
-    p.add_argument('--brute-max-s', '--forca-max-s', dest='forca_max_s', metavar='SECONDS', type=float, default=10.0,
-                   help='Skip brute force above this predicted time per instance')
-    p.add_argument('--output', '--saida', dest='saida', metavar='DIRECTORY', default='resultados_rotas', help='Results directory')
+    p.add_argument('--instancias', type=int, default=10, help='instâncias (sementes) por N')
+    p.add_argument('--exato-max-s', type=float, default=10.0,
+                   help='não roda o exato se o tempo previsto por instância passar disso')
+    p.add_argument('--exato-max-mb', type=float, default=600.0,
+                   help='nem se a memória do Held-Karp passar disso (Pi Zero: use 150)')
+    p.add_argument('--forca-max-s', type=float, default=10.0,
+                   help='não roda a força bruta se o tempo previsto por instância passar disso')
+    p.add_argument('--saida', default='resultados_rotas', help='pasta dos resultados')
     p.set_defaults(func=cmd_rotas_bench)
-    p = sub.add_parser('routes-limit', aliases=['rotas-limite'], help='Explore exact TSP solver limits in time and RAM')
+    p = sub.add_parser('rotas-limite', help='até quantos pontos o TSP exato roda (tempo e RAM)')
     p.add_argument('--n-max', type=int, default=30)
-    p.add_argument('--time-max-s', '--tempo-max-s', dest='tempo_max_s', metavar='SECONDS', type=float, default=60.0,
-                   help='Maximum feasible exact-solver time per instance')
-    p.add_argument('--mem-max-mb', type=float, help='Default: 80 %% of free RAM')
-    p.add_argument('--output', '--saida', dest='saida', metavar='DIRECTORY', default='resultados_rotas', help='Results directory')
+    p.add_argument('--tempo-max-s', type=float, default=60.0,
+                   help='tempo por instância a partir do qual o exato é inviável')
+    p.add_argument('--mem-max-mb', type=float, help='padrão: 80 %% da RAM livre')
+    p.add_argument('--saida', default='resultados_rotas', help='pasta dos resultados')
     p.set_defaults(func=cmd_rotas_limite)
-    p = sub.add_parser('design', help='Offline design and Simulink comparison')
-    p.add_argument('--profile', help='Weight profile')
+    p = sub.add_parser('design', help='projeto offline e comparação com o Simulink')
+    p.add_argument('--profile', help='perfil com os pesos')
     p.set_defaults(func=cmd_design)
 
     args = parser.parse_args(argv)
     if args.command == 'param' and args.action != 'list' and not args.name:
-        parser.error('provide the parameter name')
+        parser.error('informe o nome do parâmetro')
     if args.command == 'param' and args.action == 'set' and args.value is None:
-        parser.error('provide the value')
+        parser.error('informe o valor')
     try:
         return args.func(args)
     except LinkError as exc:
-        print(f'error: {exc}', file=sys.stderr)
+        print(f'erro: {exc}', file=sys.stderr)
         return 1

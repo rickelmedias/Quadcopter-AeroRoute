@@ -1,5 +1,3 @@
 #!/bin/sh
-# Run the imported mission computer with a locally selected interpreter.
-set -eu
-cd "$(dirname "$0")/tools/pi"
-exec "${DRONE_PYTHON:-python3}" -m dronectl "$@"
+# Atalho: ~/drone/dronectl <subcomando> ... (roda tools/pi/dronectl no venv)
+cd "$(dirname "$0")/tools/pi" && exec "$HOME/drone-venv/bin/python" -m dronectl "$@"

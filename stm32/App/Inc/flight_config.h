@@ -58,7 +58,7 @@
  * controle com 0,8.
  */
 #define DEFAULT_MOT_MAX   0.95F
-/** Aceleração com o drone armado e parado no chão (fração 0..1). */
+/** Aceleração durante a partida de decolagem (fração 0..1); ARMADO envia zero. */
 #define DEFAULT_MOT_IDLE  0.05F
 
 /* ---- Zero (nível) do BNO08x -------------------------------------------
@@ -121,13 +121,13 @@
 /** Escala do fluxo em Y (ver DEFAULT_FLOW_SCALE_X). */
 #define DEFAULT_FLOW_SCALE_Y 0.942F
 /**
- * Compensação da rotação no fluxo: a rotação do corpo também move a imagem.
- * Nesta placa o pareamento é no mesmo eixo, com X invertido e Y não (ensaios
- * isolados por eixo, ver docs/acompanhamento_tecnico.md).
+ * Compensação da rotação no fluxo pelo eixo de mesmo nome (pareamento direto).
+ * Desligada: neste drone o fluxo responde ao giro do outro eixo (ver
+ * ::DEFAULT_FLOW_GYRO_XY). Os ensaios antigos usavam X = +1 e Y = -1.
  */
-#define DEFAULT_FLOW_GYRO_X  (+1.0F)
-/** Compensação da rotação no fluxo Y (ver DEFAULT_FLOW_GYRO_X). */
-#define DEFAULT_FLOW_GYRO_Y  (-1.0F)
+#define DEFAULT_FLOW_GYRO_X  0.0F
+/** Ver ::DEFAULT_FLOW_GYRO_X. */
+#define DEFAULT_FLOW_GYRO_Y  0.0F
 /**
  * O MTF-01 fica longe do centro do drone (na traseira): girando em guinada, ele
  * descreve um arco e mede uma velocidade que o centro não tem, r × distância.
@@ -141,6 +141,88 @@
 #define DEFAULT_FLOW_YAW_X   0.0F
 /** Ver ::DEFAULT_FLOW_YAW_X. */
 #define DEFAULT_FLOW_YAW_Y   0.09F
+/**
+ * Eixos do fluxo trocados em relação ao corpo. Ensaios de mão de 08/11 (a seco,
+ * nivelado): o movimento para o lado aparece no canal X do fluxo (direita
+ * negativa, esquerda positiva); frente e trás parecem cair no canal Y (frente
+ * positiva), com menos certeza. 0 mantém o mapeamento original (X = frente,
+ * Y = direita); 1 usa Y = frente e X = esquerda (padrão: é o que os voos usam).
+ */
+#define DEFAULT_FLOW_SWAP    1.0F
+/**
+ * 1 = o fluxo só entra se a qualidade passa de 30 (liga) e não cai a 15
+ * (desliga), a inclinação é menor que ~37° (cos ≥ 0,8) e |fluxo| ≤ 4,2 rad/s,
+ * como no estimador da branch mtf-bno-test (que seguia o ArduPilot). 0 =
+ * qualquer fluxo com qualidade > 0, como antes.
+ */
+#define DEFAULT_FLOW_GATE    0.0F
+/**
+ * 1 = o LQG recebe vx, vy do EKF de navegação (control/nav_ekf.h: fluxo +
+ * acelerômetro do BNO, com viés, quantização e gate) e usa o Kalman
+ * "fundido" (M, L com menos ruído em vx, vy; tools/lqg_ajustado.py). O EKF
+ * roda sempre, como diagnóstico (DRONE_NAV_DEBUG); este parâmetro só decide
+ * se o controle usa o que ele estima.
+ */
+#define DEFAULT_FLOW_EKF     0.0F
+/** 1 = o LQG recebe o z do EKF de navegação em vez da distância crua corrigida. */
+#define DEFAULT_Z_EKF        0.0F
+/** Ruído da aceleração horizontal do BNO em voo, em m/s² (desvio medido: 0,4 a 0,5). */
+#define DEFAULT_FEKF_ACC_N   1.0F
+/** Ruído da aceleração vertical do BNO em voo, em m/s². */
+#define DEFAULT_FEKF_ACCZ_N  1.0F
+/** Passeio do viés do acelerômetro, em m/s² por raiz de s. */
+#define DEFAULT_FEKF_BIAS_N  0.02F
+/**
+ * Ruído do fluxo, em rad/s. Vezes a distância dá m/s: 0,8 a 12 cm do chão são
+ * ~0,10 m/s, o desvio amostra a amostra medido em voo (o ArduPilot usa 0,25,
+ * mas o MTF em voo baixo é mais ruidoso).
+ */
+#define DEFAULT_FEKF_FLOW_N  0.8F
+/** Ruído da distância, em m (desvio medido parado: 4 a 6 mm). */
+#define DEFAULT_FEKF_RNG_N   0.006F
+/** Gate de inovação, em desvios (o padrão do ArduPilot é 3). */
+#define DEFAULT_FEKF_GATE    3.0F
+/**
+ * Taxa do DRONE_NAV_DEBUG (EKF de navegação) para a Pi, em Hz. O enlace é de
+ * 115200 baud e o DRONE_CTRL_DEBUG a 50 Hz já ocupa ~65% dele; a 10 Hz esta
+ * mensagem soma ~1 kB/s.
+ */
+#define DEFAULT_NAV_DBG_HZ   10.0F
+/**
+ * Integral do erro de posição x, y, em 1/s (0 desliga). O LQG só tem termo
+ * proporcional em x, y, e fraco (0,37° de inclinação por 10 cm): um erro de
+ * nível ou de equilíbrio de 1–2° deixava o drone 30–50 cm fora do ponto ou
+ * derivando para um lado. O integral desloca a referência que o LQG recebe até
+ * o erro médio zerar, como o I do laço de velocidade do ArduPilot. 0,3/s fica
+ * abaixo da banda do laço de posição (oscilação de x a ~0,2 Hz nos voos).
+ */
+#define DEFAULT_CTL_KI_XY    0.3F
+/** Limite do deslocamento integral de x, y, em m (anti-windup). */
+#define DEFAULT_CTL_XY_I_MAX 0.30F
+/**
+ * Pareamento cruzado da compensação do giro (FLOW_GYRO_XY e FLOW_GYRO_YX).
+ * Num voo de 08/11 (captura USB, hélices, 18 s de hover, ajuste por mínimos
+ * quadrados sem atraso) o fluxo bruto respondeu a gy no canal X e a gx no
+ * canal Y, não ao eixo do mesmo nome: flow_x ≈ -1,3 a -1,6·gy e
+ * flow_y ≈ +1,6 a +1,7·gx. Os módulos acima de 1 incluem o braço do sensor.
+ * Os ensaios a seco de 08/11 (222149, 220912) confirmaram flow_x ≈ -1,7·gy.
+ * Padrão desde 08/11: em 21:08–22:21 o --set esqueceu estes valores e todos
+ * os voos rodaram com o pareamento direto, errado.
+ */
+#define DEFAULT_FLOW_GYRO_XY 1.45F
+/** Ver ::DEFAULT_FLOW_GYRO_XY. */
+#define DEFAULT_FLOW_GYRO_YX (-1.65F)
+/**
+ * 1 = quando o MTF-01 devolve contagem zero num eixo (ele só reporta degraus
+ * de 0,2 rad/s), o Kalman recebe a própria predição, limitada à faixa de
+ * ±0,1 rad/s, no lugar de "velocidade = 0". Capturas de 08/11 mostraram que
+ * o sensor parado leva a um desvio de ~0,65 rad/s por amostra.
+ */
+#define DEFAULT_FLOW_CENS    0.0F
+/** Viés do fluxo X do sensor, em rad/s (medido parado: ~+0,047). 0 = sem correção. */
+#define DEFAULT_FLOW_BIAS_X  0.0F
+/** Viés do fluxo Y do sensor, em rad/s (medido parado: ~-0,024). 0 = sem correção. */
+#define DEFAULT_FLOW_BIAS_Y  0.0F
 
 /* ---- Voo ---------------------------------------------------------------- */
 
@@ -170,6 +252,8 @@
 #define FLIGHT_TAKEOFF_RAMP_MS 2000U
 /** Altura estimada acima da qual o drone conta como "saiu do chão", em m. */
 #define FLIGHT_LIFTED_HEIGHT_M 0.03F
+/** Altura estimada abaixo da qual o drone conta como apoiado no chão (ZUPT do EKF), em m. */
+#define FLIGHT_GROUNDED_HEIGHT_M 0.01F
 /** Menor velocidade de descida no pouso, em m/s (a rampa do pouso nunca é um degrau). */
 #define FLIGHT_LAND_MIN_RATE_M_S 0.03F
 /**
@@ -201,6 +285,20 @@
  * do efeito solo o drone sobe devagar enquanto o estimador acha o empuxo.
  */
 #define DEFAULT_FLT_PRESO      0.0F
+/**
+ * 1 = a rampa de partida só reduz a aceleração média, e a diferença entre os
+ * motores (atitude e desequilíbrio fixo) chega inteira (FLT_RAMP_CM). Em 7
+ * voos reais o pitch disparou (14 a 20°) logo depois de o drone sair do chão,
+ * quando a rampa ainda encolhia essa diferença a ~90%; o pico sempre cai no
+ * fim da rampa. 0 = comportamento anterior, para comparar.
+ */
+#define DEFAULT_FLT_RAMP_CM    0.0F
+/**
+ * Limite da guinada total (LQG + FF + estimador), em rad/s (0 = sem limite).
+ * Em 5 voos reais de 08/11 um giro súbito (|r| de 1,2 a 3,7 rad/s) fez o LQG
+ * pedir ±200 a ±400 rad/s e levou roll e pitch ao failsafe.
+ */
+#define DEFAULT_CTL_PSI_MAX    0.0F
 /** Subida que conta como progresso e recomeça a contagem, em m (ver ::FLIGHT_STUCK_ERROR_M). */
 #define FLIGHT_STUCK_RISE_M    0.02F
 /** Tempo travado até segurar na altura medida, em ms (ver ::FLIGHT_STUCK_ERROR_M). */
@@ -228,10 +326,10 @@
 #define DEFAULT_LAND_HEIGHT_M  0.03F
 /**
  * 1 = o LQG também segura x e y (usa o fluxo óptico); 0 = só atitude e
- * altura (control/attitude_mode.h). Ligado: o voo livre (sem cordinhas, sem
- * cabo) precisa segurar o ponto de decolagem.
+ * altura (control/attitude_mode.h). Padrão desligado até a atitude e a altura
+ * serem validadas. O ensaio de XY deve ser ativado explicitamente com CTL_XY=1.
  */
-#define DEFAULT_CTL_XY         1.0F
+#define DEFAULT_CTL_XY         0.0F
 
 /* ---- Ajuste lento do hover e do equilíbrio (control/trim.h) ---------------
    O LQR do TCC não tem integrador, então um hover errado ou um peso mal
@@ -263,10 +361,10 @@
  * rad/s por motor (+ na frente, − atrás). Até 05/11 a traseira era mais pesada
  * e o drone precisava de −90. Em 06/11 entrou o chumbo de verdade e o frame
  * ficou mais equilibrado; nos hovers de 06/11 o estimador de perturbação
- * parou sempre perto de θ = −22 e φ = −40 rad/s. Começar já neles evita que o
- * drone saia para o lado enquanto o estimador (lento, de propósito) aprende.
+ * parou perto de θ = −22 e φ = −40 rad/s. Usa-se o valor conservador de θ
+ * anterior à integração Pi; o estimador continua livre para corrigir o restante.
  */
-#define DEFAULT_CTL_FF_TH      (-50.0F)
+#define DEFAULT_CTL_FF_TH      (-20.0F)
 /**
  * Desequilíbrio esquerda/direita fixo, em rad/s (+ na esquerda; mesmo padrão do
  * φ do estimador). Nos hovers de 06/11 o estimador parou em −40 em todos os
@@ -277,12 +375,10 @@
  * Torque de guinada fixo, em rad/s (mesmo padrão do ψ do estimador). Nos voos
  * de 06/11 com o estimador de guinada, ele parou em +49 a +61.
  *
- * Os três desequilíbrios juntos (θ −50, φ −40, ψ +50) são o motor M4 (u1,
- * frente esquerda) precisando de ~15% menos aceleração que os outros: no voo de
- * 50 cm de 06/11 os motores ficaram em 76, 74, 76 e 61%. Valores da mediana
- * do total (fixo + estimado) no fim dos voos de 06/11 com o chumbo.
+ * Desligado por padrão: o torque fixo de guinada não foi qualificado no voo
+ * livre desta integração. Pode ser testado isoladamente com CTL_FF_PSI.
  */
-#define DEFAULT_CTL_FF_PSI     50.0F
+#define DEFAULT_CTL_FF_PSI     0.0F
 
 /** 1 = liga o ajuste lento (CTL_TRIM). Padrão desligado: o painel liga. */
 #define DEFAULT_CTL_TRIM       0.0F
