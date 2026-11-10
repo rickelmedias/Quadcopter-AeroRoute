@@ -84,80 +84,6 @@ Opções gerais: `-p/--port` (padrão `/dev/serial0`) e `-b/--baud` (115200).
 **Ctrl+C pousa.** Se a Pi cair, o STM32 percebe a perda da autorização, segura
 a posição e pousa sozinho depois de 5 s.
 
-## Ensaio de hover (`hover-test`)
-
-Um voo de ajuste por comando, para rodar por SSH (pelo atalho `~/drone/dronectl`)
-e repetir mudando um valor por vez. Cada ensaio grava tudo e termina com a
-análise e a sugestão para o próximo voo.
-
-```bash
-~/drone/dronectl hover-test --sim                    # drone simulado no STM32 (confere a cadeia toda)
-~/drone/dronectl hover-test                          # a seco: sensores reais, motores parados
-~/drone/dronectl hover-test --motors                 # VOO: 30 cm por 20 s (valores do perfil)
-~/drone/dronectl hover-test --motors --set CTL_W0=1080 --label "w0 1080"
-~/drone/dronectl hover-test --motors --q x=80,y=80   # pesos Q do LQG ajustado só neste voo
-~/drone/dronectl hover-test --motors --height 20 --time 30
-~/drone/dronectl hover-report                        # reanalisa o último ensaio (--timeline)
-~/drone/dronectl hover-profile                       # perfil, última sugestão e histórico
-~/drone/dronectl hover-profile --apply-suggestion SNS_LVL_PHI SNS_LVL_TH
-~/drone/dronectl hover-profile --set CTL_W0=1080 | --unset CTL_W0 | --q x=80 | --clear-q
-```
-
-**Valores em uso.** Todo ensaio parte dos **valores de fábrica do firmware +
-o perfil (`~/drone/perfil_hover.json`) + os `--set`/`--q` daquele ensaio**.
-Nada vaza de um ensaio para o outro: na primeira vez em cada boot do STM32 o
-`hover-test` lê o valor de fábrica de cada parâmetro que toca e, nos ensaios
-seguintes, volta a ele antes de aplicar o perfil. `--set` vale só para aquele
-voo; para manter, use `--save` ou `hover-profile --set`. Com pesos Q, a Pi
-projeta Kd e Kfd com o mesmo dlqr da tabela do firmware
-(`tools/lqg_ajustado.py`) e envia com CRC; sem eles, volta aos ganhos de
-fábrica.
-
-**O voo.** Liga o `DRONE_CTRL_DEBUG` a 50 Hz, confere atitude, giro e altura
-no chão, mede o chão (1 s), conta 3 s (só com `--motors`), arma, decola, segura
-`--time` segundos **depois de chegar** à altura e pousa. Termina, no fim, com
-FLT_DRY_RUN = 1, FLT_SIM = 0 e a telemetria rápida desligada.
-
-| Proteção da Pi (além das do STM32) | Ação |
-|---|---|
-| Altura mais de 25 cm acima do alvo por 250 ms | pousa |
-| Mais de 80 cm do ponto de decolagem por 250 ms (`--geofence`) | pousa |
-| Telemetria parada por 1 s | pousa |
-| Não chegou à altura no tempo da rampa + 23 s | pousa |
-| Ctrl+C, SIGTERM ou a sessão SSH caindo (SIGHUP) | pousa |
-| **Ctrl+C de novo** durante o pouso | **corta os motores** (desarma) |
-| Erro de comunicação | pousa (no ar) ou desarma (no chão) |
-
-Se a Pi morrer de vez, vale a supervisão do STM32: sem autorização ele segura
-e pousa sozinho em 5 s.
-
-**O que fica gravado** em `~/drone/ensaios/hover_<data>/`: `telemetria.csv`
-(cada passo do LQG: y, x̂, du, referência, motores, estado), `textos.txt`
-(mensagens do STM32, como os relatos `dist`), `meta.json` (parâmetros em uso,
-ganhos, chão, motivo do fim), `resumo.json` (métricas e sugestão) e
-`linha_do_tempo.txt` (uma linha por segundo).
-
-**A análise** (`dronectl/hover_report.py`) mede, na janela de hover (2 s
-depois de chegar até o pouso): erro de altura, deslocamento XY médio, RMS,
-máximo e deriva, φ e θ médios, quanto a guinada girou, motores M1..M4 e
-saturação, oscilação dominante e o relato `dist` de antes do pouso. E sugere:
-
-- `CTL_W0` = atual + d̂ de altura (o hover que o estimador achou);
-- `CTL_FF_TH/PHI/PSI` = atual + d̂ do canal (o desequilíbrio inteiro fica fixo
-  e o estimador começa do lugar certo);
-- `SNS_LVL_PHI/TH` = atual − φ/θ médios **com o drone parado** (parado no ar,
-  sem acelerar, ele está nivelado de verdade: o que o sensor mostra é o erro
-  do zero de nível, que vira deslocamento — 0,5° ≈ 14 cm). No máximo 1,5° por
-  voo e só com o XY ligado e pelo menos 5 s de janela.
-
-A sugestão fica no perfil, mas **só entra quando alguém aplica**
-(`hover-profile --apply-suggestion [NOMES]`).
-
-**No PC:** `sh tools/pi/buscar_ensaios.sh` traz os ensaios para
-`tools/pi/logs/hover/` (fora do Git) e, com matplotlib, desenha `grafico.png`
-de cada um (altura, XY, inclinação, guinada e motores com as fases do voo);
-`python3 -m dronectl hover-report <pasta> --plot` faz o mesmo para uma pasta.
-
 ## Missão passo a passo (`missao`)
 
 ```bash
@@ -241,10 +167,3 @@ Conferem que o projeto em numpy reproduz os ganhos do Simulink e exercitam o
 enlace inteiro (parâmetros, envio de ganhos com linha perdida, armar, decolar,
 pousar e telemetria) contra um STM32 simulado num pseudo-terminal
 (`tests/fake_fc.py`). Rodam também em `sh tests/run.sh`, na raiz.
-
-`tests/test_hover.py` cobre o ensaio de hover: a análise sobre um voo
-sintético (fases, métricas, sugestões e seus limites), o perfil, os ganhos do
-ajustado (com o Q de fábrica a Pi reproduz a tabela do firmware) e ensaios
-completos contra o STM32 falso com um modelo de voo 10× mais rápido (gravação,
-sugestão que leva o drone ao ponto, `--set` que não vaza para o próximo voo,
-pesos Q, cerca, telemetria perdida, Ctrl+C duplo e ensaio a seco).

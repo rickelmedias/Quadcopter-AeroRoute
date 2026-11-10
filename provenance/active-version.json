@@ -1,9 +1,6 @@
 {
-  "kind": "thesis-submission-baseline",
-  "submission_date": "2026-11-11",
-  "capture_date": "2026-11-10",
-  "firmware_ref": "hover-lqg-pi",
-  "firmware_commit": "af6034e16fae0fc868444f57ff526b14ccd971aa",
-  "pi_source": "~/drone",
-  "firmware_binary_verified": false
+  "kind": "historical-firmware-milestone",
+  "original_branch": "comunicacao-pi-stm32",
+  "original_commit": "f7349fed0630cd8a0fe3b3ea14effc5ae137ce5b",
+  "other_directories": "2026-11-10 submission capture, not contemporaneous historical deployment"
 }

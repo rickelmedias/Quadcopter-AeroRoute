@@ -50,7 +50,7 @@ void flight_get_snapshot(flight_snapshot_t *snapshot) {
   snapshot->armed = flight_ctrl_is_armed();
   snapshot->airborne = t.state == FLIGHT_STATE_TAKEOFF || t.state == FLIGHT_STATE_HOLD ||
                        t.state == FLIGHT_STATE_EXECUTING_LEG || t.state == FLIGHT_STATE_LAND;
-  snapshot->commanded_by_pi = snapshot->armed && flight_ctrl_origin() == FLIGHT_ORIGIN_PI;
+  snapshot->commanded_by_pi = snapshot->armed && flight_ctrl_armed_by_pi();
   snapshot->attitude_valid = (t.meas_flags & MEAS_ATTITUDE) != 0U;
   snapshot->altitude_valid = (t.meas_flags & MEAS_RANGE) != 0U;
   /* x e y só são integrados a partir do fluxo: valem enquanto ele chega. */

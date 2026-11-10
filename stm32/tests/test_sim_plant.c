@@ -84,23 +84,6 @@ int main(void) {
   }
   assert(fabs(sim.x[LQG_X_Z] - SIM_PLANT_GROUND_Z) < 1e-9);
 
-  /* Na partida (motores abaixo do hover) com o desequilíbrio fixo do drone
-     real (CTL_FF_TH/PHI/PSI): apoiado no chão, não tomba nem gira. */
-  const lqg_real_t unbalanced[LQG_NU] = {-900.0 - 140.0, -900.0 + 40.0, -900.0 + 60.0,
-                                         -900.0 + 40.0};
-  for (int k = 0; k < 200; ++k) sim_plant_step(&sim, unbalanced);
-  assert(fabs(sim.x[LQG_X_Z] - SIM_PLANT_GROUND_Z) < 1e-9);
-  for (unsigned i = LQG_X_PHI; i <= LQG_X_R; ++i) {
-    if (i != LQG_X_Z && i != LQG_X_PSI && i != LQG_X_VZ) assert(sim.x[i] == 0.0);
-  }
-  assert(sim.x[LQG_X_PSI] == 0.0 && sim.x[LQG_X_X] == 0.0 && sim.x[LQG_X_Y] == 0.0);
-  /* No ar, o mesmo desequilíbrio inclina: o chão só segura enquanto apoia. */
-  sim_plant_t air = sim;
-  air.x[LQG_X_Z] = SIM_PLANT_GROUND_Z - 0.3;
-  const lqg_real_t tilt[LQG_NU] = {-140.0, 40.0, 60.0, 40.0};
-  for (int k = 0; k < 20; ++k) sim_plant_step(&air, tilt);
-  assert(fabs(air.x[LQG_X_PHI]) + fabs(air.x[LQG_X_THETA]) > 1e-3);
-
   /* Decolar 0,5 m. */
   double target[LQG_NR] = {0.0, 0.0, SIM_PLANT_GROUND_Z - 0.5, 0.0};
   double t = run_until_stable(target);

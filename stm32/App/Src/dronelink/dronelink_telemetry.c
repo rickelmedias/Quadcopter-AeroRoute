@@ -5,15 +5,12 @@
 #include "dronelink/dronelink_telemetry.h"
 
 #include <math.h>
-#include <string.h>
 
 #include "control/ctrl_params.h"
 #include "control/flight_ctrl.h"
 #include "dronelink/dronelink_config.h"
 #include "dronelink/dronelink_mavlink.h"
 
-/** Mensagens do voo enviadas por chamada de dronelink_telemetry_tick(). */
-#define TEXTS_PER_TICK 2U
 /** Período de ATTITUDE e LOCAL_POSITION_NED, em ms (5 Hz). */
 #define STATE_PERIOD_MS 200U
 
@@ -77,29 +74,7 @@ void dronelink_telemetry_init(void) {
   last_debug_step = 0U;
 }
 
-/**
- * @brief Envia à Pi, como STATUSTEXT, as mensagens do voo ainda não entregues.
- *
- * No máximo ::TEXTS_PER_TICK por chamada, para nunca encher a fila normal de
- * uma vez. FAILSAFE vai como crítico; o resto, como informação.
- */
-static void send_flight_texts(void) {
-  char text[MAVLINK_MSG_STATUSTEXT_FIELD_TEXT_LEN + 1U];
-  for (unsigned n = 0U; n < TEXTS_PER_TICK && flight_ctrl_take_text(text, sizeof(text)); ++n) {
-    const uint8_t severity = strncmp(text, "FAILSAFE", 8) == 0 ? MAV_SEVERITY_CRITICAL
-                                                                : MAV_SEVERITY_INFO;
-    mavlink_message_t m;
-    mavlink_msg_statustext_pack(DRONELINK_SYSTEM_ID, DRONELINK_FC_COMPONENT_ID, &m, severity,
-                                text, 0U, 0U);
-    /* O motivo de um FAILSAFE não pode se perder na fila normal, que a
-       telemetria de 50 Hz quase enche; ele é raro e vai na fila das respostas. */
-    dronelink_send(&m, severity == MAV_SEVERITY_CRITICAL ? DRONELINK_TX_CRITICAL
-                                                          : DRONELINK_TX_NORMAL);
-  }
-}
-
 void dronelink_telemetry_tick(uint32_t now_ms) {
-  send_flight_texts();
   const bool state_due = now_ms - last_state_ms >= STATE_PERIOD_MS;
   ctrl_params_t p;
   ctrl_params_snapshot(&p);

@@ -11,9 +11,7 @@
  * sem hélice.
  *
  * O chão é um limite: z (NED) não passa de @c ground_z, e a velocidade
- * vertical para baixo é zerada ali. Apoiado no chão, o drone também fica
- * nivelado e parado (φ, θ, p, q, r, vx e vy zerados), como sobre as pernas;
- * x, y e ψ ficam onde estavam.
+ * vertical para baixo é zerada ali.
  *
  * Código puro (sem HAL), testado em tests/test_sim_plant.c.
  */

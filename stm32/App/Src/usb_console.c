@@ -7,7 +7,6 @@
 #include "control/ctrl_gains.h"
 #include "control/ctrl_params.h"
 #include "control/flight_ctrl.h"
-#include "control/lqg_tuning.h"
 #include "motors.h"
 #include "power.h"
 #include "sensor_log.h"
@@ -23,8 +22,8 @@
 
 /** Maior linha aceita, em caracteres. */
 #define LINE_MAX 64U
-/** Palavras por linha (`lq set <matriz> <linha> <coluna> <valor>` usa 6). */
-#define MAX_ARGS 6
+/** Palavras por linha. */
+#define MAX_ARGS 5
 /** Tempo máximo de espera pelo voo armar antes de decolar, em ms. */
 #define ARM_WAIT_MS 200U
 /** Tempo máximo de um trecho pedido pelo console, em ms. */
@@ -32,18 +31,8 @@
 /** Graus para radianos. */
 #define DEG_TO_RAD 0.017453293F
 
-/** Menor e maior prazo do watchdog, em ms. */
-#define WATCHDOG_MIN_MS 200U
-#define WATCHDOG_MAX_MS 5000U
-
 /** Bytes digitados no PC, vindos da interrupção USB. */
 static StreamBufferHandle_t rx;
-/** Prazo do watchdog em ms (0 = desligado). */
-static uint32_t watchdog_ms;
-/** Instante da última linha recebida (tick). */
-static TickType_t last_line_tick;
-/** O watchdog já agiu e ainda não chegou linha nova. */
-static bool watchdog_fired;
 
 /** @brief Bytes da USB (interrupção): só copia para o stream buffer. */
 void CDC_OnReceive(const uint8_t *data, uint32_t length) {
@@ -105,11 +94,7 @@ static void help(void) {
   log_text("rate <pct/s> | beep <1-4> | log on|off | status");
   log_text("voo: hover [h] | dry [h] | land | hold | lqg");
   log_text("goto <x> <y> <z> | move <dx> <dy> [dz] | yaw <graus>");
-  log_text("sp <x> <y> <altura> <guinada graus>: setpoint (m, m, m)");
-  log_text("xyzero: o ponto atual vira o (0,0)");
   log_text("param list|get N|set N V | gains [default]");
-  log_text("lq [default|begin] | lq set kd|kfd L C V | lq commit <crc>: Kd/Kfd (Q)");
-  log_text("wd <ms>: sem linha por <ms> pousa (bancada: para); ping");
   log_text("stop, disarm ou Enter vazio: para tudo");
 }
 
@@ -243,19 +228,12 @@ static bool flight_command(int argc, char **argv) {
     return true;
   }
   if (!strcmp(c, "land")) { report("pousar", flight_ctrl_land(FLIGHT_REASON_NONE)); return true; }
-  if (!strcmp(c, "xyzero")) { report("xyzero", flight_ctrl_xy_zero()); return true; }
   if (!strcmp(c, "hold")) { report("hold", flight_ctrl_hold(FLIGHT_REASON_NONE)); return true; }
   if (!strcmp(c, "lqg")) { lqg_status(); return true; }
   if (!strcmp(c, "goto") && argc >= 4) {
     flight_telemetry_t t;
     flight_ctrl_get_telemetry(&t);
     leg(FLIGHT_ACTION_GOTO_LOCAL, FLIGHT_FRAME_LOCAL_FRD, a1, a2, a3, t.ref[LQG_R_PSI]);
-    return true;
-  }
-  if (!strcmp(c, "sp") && argc >= 5) {
-    /* sp <x m> <y m> <altura m> <guinada graus>: setpoint (ver flight_ctrl_setpoint). */
-    const float a4 = strtof(argv[4], NULL);
-    report("setpoint", flight_ctrl_setpoint(a1, a2, a3, a4 * DEG_TO_RAD));
     return true;
   }
   if (!strcmp(c, "move") && argc >= 3) {
@@ -270,46 +248,6 @@ static bool flight_command(int argc, char **argv) {
 }
 
 /* ---- Ajuste ------------------------------------------------------------ */
-
-/**
- * @brief Envio de Kd/Kfd do LQG ajustado pelo painel (control/lqg_tuning.h).
- *
- * `lq set` não responde quando dá certo: são 64 linhas seguidas, e o CRC do
- * commit já diz se alguma se perdeu.
- */
-static void lq_command(int argc, char **argv) {
-  const char *sub = argc > 1 ? argv[1] : "";
-  if (!strcmp(sub, "begin")) {
-    lqg_tuning_begin();
-    return;
-  }
-  if (!strcmp(sub, "set") && argc >= 6) {
-    const lqg_tuning_matrix_t m = !strcmp(argv[2], "kd")    ? LQG_TUNING_KD
-                                  : !strcmp(argv[2], "kfd") ? LQG_TUNING_KFD
-                                                            : LQG_TUNING_COUNT;
-    const lqg_tuning_status_t s = lqg_tuning_stage(m, (unsigned)strtoul(argv[3], NULL, 10),
-                                                   (unsigned)strtoul(argv[4], NULL, 10),
-                                                   strtof(argv[5], NULL));
-    if (s != LQG_TUNING_OK) say("lq set: %s", lqg_tuning_status_text(s));
-    return;
-  }
-  if (!strcmp(sub, "commit") || !strcmp(sub, "default")) {
-    if (flight_ctrl_is_armed()) { say("lq: desarme antes"); return; }
-    if (!strcmp(sub, "default")) {
-      lqg_tuning_restore_default();
-    } else {
-      uint32_t computed = 0U;
-      const uint32_t expected = argc > 2 ? (uint32_t)strtoul(argv[2], NULL, 16) : 0U;
-      const lqg_tuning_status_t s = lqg_tuning_commit(expected, &computed);
-      if (s != LQG_TUNING_OK) {
-        say("lq commit: %s (crc=%08lX)", lqg_tuning_status_text(s), (unsigned long)computed);
-        return;
-      }
-    }
-  }
-  say("lq ganhos %s crc=%08lX", lqg_tuning_is_default() ? "padrao" : "do painel",
-      (unsigned long)lqg_tuning_active_crc());
-}
 
 /** @brief Comandos de parâmetros e ganhos; devolve false se não for um deles. */
 static bool tuning_command(int argc, char **argv) {
@@ -337,45 +275,7 @@ static bool tuning_command(int argc, char **argv) {
         (unsigned long)ctrl_gains_active_crc());
     return true;
   }
-  if (!strcmp(c, "lq")) {
-    lq_command(argc, argv);
-    return true;
-  }
   return false;
-}
-
-/** @brief Comandos do enlace com o PC (watchdog); false se não for um deles. */
-static bool link_command(int argc, char **argv) {
-  const char *c = argv[0];
-  if (!strcmp(c, "ping")) return true;
-  if (!strcmp(c, "wd")) {
-    const long ms = argc > 1 ? strtol(argv[1], NULL, 10) : -1;
-    if (ms != 0 && (ms < (long)WATCHDOG_MIN_MS || ms > (long)WATCHDOG_MAX_MS)) {
-      say("wd: 0 ou %u..%u ms", WATCHDOG_MIN_MS, WATCHDOG_MAX_MS);
-      return true;
-    }
-    watchdog_ms = (uint32_t)ms;
-    say("watchdog %lums", (unsigned long)watchdog_ms);
-    return true;
-  }
-  return false;
-}
-
-/**
- * @brief Watchdog do PC: sem linha por watchdog_ms, o voo pousa em rampa e a
- *        bancada para. Age uma vez por silêncio.
- */
-static void check_watchdog(void) {
-  if (watchdog_ms == 0U || watchdog_fired) return;
-  if ((xTaskGetTickCount() - last_line_tick) <= pdMS_TO_TICKS(watchdog_ms)) return;
-  if (motors_owner() == MOTORS_OWNER_BENCH) {
-    motors_stop("watchdog: PC parou de falar");
-    watchdog_fired = true;
-  } else if (flight_ctrl_is_armed()) {
-    (void)flight_ctrl_land(FLIGHT_REASON_LINK_LOST);
-    say("watchdog: PC parou de falar, pousando");
-    watchdog_fired = true;
-  }
 }
 
 /* ---- Laço do console --------------------------------------------------- */
@@ -398,8 +298,7 @@ static void command(char *line) {
     say("log %s", on ? "on" : "off");
     return;
   }
-  if (bench_command(argc, argv) || flight_command(argc, argv) || tuning_command(argc, argv) ||
-      link_command(argc, argv)) {
+  if (bench_command(argc, argv) || flight_command(argc, argv) || tuning_command(argc, argv)) {
     return;
   }
   stop_all("comando desconhecido");
@@ -412,15 +311,12 @@ static void console_task(void *argument) {
   size_t used = 0U;
   char previous = 0;
   log_text("console: SEM HELICES na bancada. digite help");
-  last_line_tick = xTaskGetTickCount();
   for (;;) {
     char c;
     while (xStreamBufferReceive(rx, &c, 1, pdMS_TO_TICKS(20)) == 1) {
       if (c == '\n' && previous == '\r') { previous = c; continue; }
       previous = c;
       if (c == '\r' || c == '\n') {
-        last_line_tick = xTaskGetTickCount();
-        watchdog_fired = false;
         line[used] = '\0';
         command(line);
         used = 0U;
@@ -431,7 +327,6 @@ static void console_task(void *argument) {
     if (motors_owner() == MOTORS_OWNER_BENCH && !CDC_HostDTR()) {
       motors_stop("porta USB fechada");
     }
-    check_watchdog();
   }
 }
 
