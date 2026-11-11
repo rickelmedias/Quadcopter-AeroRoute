@@ -34,6 +34,8 @@ Sobre o "better": `hover-lqg-pi-better` tinha o mesmo commit que `hover-lqg-pi`.
 
 ## Fase 2 (a partir de 2026-11-11)
 
+Temos cerca de um mês até a entrega oficial final. O `main` deve terminar como a versão que funciona como queríamos. Tudo o que existe até a submissão é a última versão do TCC; daqui em diante são melhorias.
+
 Objetivo de voo: decolar mantendo XY, atingir a altura definida, pairar, voltar ao ponto após perturbações e depois executar uma sequência de pontos.
 
 As milestones antigas não mudam. Os testes da Fase 2 ficam em branches novas (`phase2/<nn>-<tema>`) a partir de `main`. Quando um ensaio terminar com dados, criar uma tag (`phase2-<nn>-<tema>`) apontando para o código que gerou os dados.
@@ -51,13 +53,22 @@ Medir a influência dos motores nos sensores e obter as covariâncias R do Kalma
 
 Em cada condição, gravar com carimbo de tempo: aceleração e giro brutos, orientação do BNO, distância, fluxo e qualidade do MTF, comando DShot e, quando existir, tensão da bateria, corrente e RPM. Relatar média, desvio padrão, deriva e espectro (FFT), e relacionar os picos à rotação dos motores.
 
-## Hardware ainda não ligado
+## ESC e hardware ainda não ligado
 
-- `power.c`/`power.h` (**conferido**) já leem a bateria no PA1 e a corrente no PB0 pelo ADC1, mas estão desligados (`POWER_VBAT_ENABLED 0`, `POWER_CURRENT_ENABLED 0`). Os valores do divisor (11) e da escala de corrente (50 A/V) são provisórios. Ainda não há failsafe de bateria baixa.
-- O pad TX do ESC (telemetria serial, uma linha para os quatro motores) não está ligado. O F411 só tem USART1, USART2 e USART6. As duas primeiras já estão em uso, e o RX da USART6 fica no PA12 (USB) ou no PC7. É preciso confirmar no esquema da Black Pill se há pino livre.
-- Alternativa para a RPM sem solda: DShot bidirecional (eRPM) do AM32. Exige mudar `dshot.c` para captura de entrada no mesmo pino.
+ESC: Skystars KM55A II 4 em 1, AM32 Turbo (2024), MCU AT32F421, 3S–6S, DShot300/600 (TCC, `metodologias.tex`).
+
+**Pinos em uso (conferido no `.ioc`):** PA2/PA3 USART2 (MTF-01), PA9/PA10 USART1 (Pi), PA4–PA7 SPI1 (flash), PA11/PA12 USB, PA13/PA14 SWD, PB3/PB10 I2C2 + PB4 INT + PB5 RST (BNO085), PB6–PB9 TIM4 (DShot). Reservados no `power.c`: PA1 (bateria) e PB0 (corrente). Livres no encapsulamento de 48 pinos: PA8, PA15, PB1, PB12–PB15 (PA0 é o botão KEY, PC13 o LED, PB2 é o BOOT1).
+
+**TX do ESC (telemetria KISS, conferido no código do AM32 em `references/AM32`):** quadro de 10 bytes a 115200 baud com temperatura (°C), tensão (cV), corrente (cA), consumo (mAh), eRPM/100 e CRC8. O ESC responde quando o pacote DShot do motor tem o bit de telemetria ligado. Os quatro ESCs da placa 4 em 1 dividem uma linha, por isso os pedidos são feitos um motor por vez.
+- Não há RX de UART livre. A USART6 só tem RX no PA12 (USB) ou no PC7 (não existe na Black Pill), e a USART1 só tem RX no PA10 ou no PB3 (BNO).
+- Na bancada, sem a Pi, ligar o TX do ESC no PA10 (USART1_RX) no lugar do TX da Pi. Não muda pino e só troca quem interpreta a USART1.
+- Para o voo com a Pi, usar o DShot bidirecional com EDT (Extended DShot Telemetry) do AM32. Ele traz eRPM a cada quadro e temperatura, tensão e corrente, sem fio extra, mas exige reescrever o `dshot.c` para captura de entrada no TIM4.
+
+**CURR:** saída analógica do sensor de corrente total da placa. Vai no PB0 (ADC1, canal 8), já previsto em `power.c`. Cada placa tem uma escala, e a do KM55A II não está documentada: calibrar comparando com a corrente da telemetria KISS ou com um multímetro. A vantagem sobre a telemetria é a taxa (o ADC pode ler a 1 kHz).
+
+**Bateria:** `power.c`/`power.h` (**conferido**) já leem o PA1 (divisor) e o PB0 (CURR), mas estão desligados (`POWER_VBAT_ENABLED 0`, `POWER_CURRENT_ENABLED 0`). O divisor (11) e a escala (50 A/V) são provisórios. Com o TX ligado, a telemetria já dá a tensão, e o divisor vira uma redundância independente do ESC. Ainda não há failsafe de bateria baixa.
 
 ## Acesso
 
 - Pi: `ssh r1ddax@r1ddax.local`, programa em `~/drone`, ensaios em `~/drone/ensaios`.
-- Gravação do STM32: DFU por USB com o STM32CubeProgrammer. O comando de CLI exato que a equipe usa ainda precisa ser registrado.
+- Gravação do STM32: DFU por USB com `STM32_Programmer_CLI -c port=USB1 -w build/Release/DroneController.hex -v -g`, recuperado do histórico das sessões. O "usb0" de que a equipe lembrava é o `USB1` do CubeProgrammer. Procedimento completo: skill `stm32-flash`.

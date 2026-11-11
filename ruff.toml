@@ -1,0 +1,5 @@
+line-length = 100
+target-version = "py39"  # Python on the Raspberry Pi Zero W
+
+[format]
+quote-style = "preserve"

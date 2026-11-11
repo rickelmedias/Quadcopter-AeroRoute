@@ -1,0 +1,11 @@
+# Project C style. Generated and vendor trees have their own .clang-format with DisableFormat.
+BasedOnStyle: LLVM
+IndentWidth: 2
+ColumnLimit: 100
+PointerAlignment: Right
+# Include order matters with the STM32 HAL and FreeRTOS headers.
+SortIncludes: Never
+AllowShortFunctionsOnASingleLine: Empty
+AllowShortIfStatementsOnASingleLine: Never
+AlignConsecutiveMacros: AcrossComments
+ReflowComments: false
