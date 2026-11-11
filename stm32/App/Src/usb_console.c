@@ -111,7 +111,7 @@ static void print_param(size_t index) {
 static void help(void) {
   log_text("bancada: arm | m <0-4> <pct> | sweep <0-4> [max] [passo] [seg]");
   log_text("rate <pct/s> | beep <1-4> | log on|off | status");
-  log_text("cap <pct>: limite da bancada (max 40) | dir <0-4> n|r [save]: sentido");
+  log_text("cap <pct>: limite da bancada (40 ao ligar, ate 100) | dir <0-4> n|r [save]: sentido");
   log_text("voo: hover [h] | dry [h] | land | hold | lqg");
   log_text("goto <x> <y> <z> | move <dx> <dy> [dz] | yaw <graus>");
   log_text("sp <x> <y> <altura> <guinada graus>: setpoint (m, m, m)");

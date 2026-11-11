@@ -8,7 +8,7 @@
  *
  * - ::MOTORS_OWNER_BENCH: teste de bancada pelo console USB ou pela IHM. Cada
  *   motor segue um alvo em décimos de por cento, com rampa limitada, ou uma
- *   varredura, nunca acima do limite ajustável (no máximo 40 %). Desarma sem
+ *   varredura, nunca acima do limite ajustável (40 % ao ligar, até 100 %). Desarma sem
  *   ::motors_bench_keepalive() por 300 ms.
  * - ::MOTORS_OWNER_FLIGHT: o controle de voo (control/flight_ctrl.h), que
  *   escreve a aceleração dos quatro motores a cada passo do LQG.
@@ -33,7 +33,7 @@
 
 /** Quantidade de motores. */
 #define MOTORS_COUNT              MOTOR_ARB_COUNT
-/** Limite fixo de aceleração da bancada, em décimos de por cento (400 = 40 %). */
+/** Limite fixo de aceleração da bancada, em décimos de por cento (1000 = 100 %). */
 #define MOTORS_BENCH_MAX_PERMILLE MOTOR_ARB_BENCH_HARD_MAX
 
 /** @brief Quem está com a saída armada. */

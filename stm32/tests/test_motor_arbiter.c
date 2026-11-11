@@ -51,18 +51,32 @@ static void test_disarmed_sends_zero(void) {
   }
 }
 
-/** @brief O alvo nunca passa do limite fixo de 40 %, nem pedindo 100 %. */
-static void test_hard_cap(void) {
+/** @brief Ao ligar o limite é 40 %: pedir 100 % para em 40 %. */
+static void test_default_cap(void) {
   motor_arb_t a;
   uint32_t now = 0U;
   motor_arb_init(&a, now);
-  assert(motor_arb_bench_cap(&a, 1000U) == MOTOR_ARB_BENCH_HARD_MAX);
+  assert(a.cap == MOTOR_ARB_BENCH_DEFAULT_CAP);
   assert(motor_arb_arm(&a, MOTOR_ARB_OWNER_BENCH, now));
   motor_arb_bench_rate(&a, 1000U);
   assert(motor_arb_bench_set(&a, 0x0FU, 1000U));
   const motor_arb_frame_t f = run_alive(&a, &now, 2000U);
+  assert(a.sent_permille[0] == MOTOR_ARB_BENCH_DEFAULT_CAP);
+  assert(f.value[0] == dshot_from_permille(MOTOR_ARB_BENCH_DEFAULT_CAP));
+}
+
+/** @brief O limite ajustável vai até 100 % e não passa disso. */
+static void test_hard_cap(void) {
+  motor_arb_t a;
+  uint32_t now = 0U;
+  motor_arb_init(&a, now);
+  assert(motor_arb_bench_cap(&a, 2000U) == MOTOR_ARB_BENCH_HARD_MAX);
+  assert(motor_arb_arm(&a, MOTOR_ARB_OWNER_BENCH, now));
+  motor_arb_bench_rate(&a, 1000U);
+  assert(motor_arb_bench_set(&a, 0x0FU, 1500U));
+  const motor_arb_frame_t f = run_alive(&a, &now, 2000U);
   assert(a.sent_permille[0] == MOTOR_ARB_BENCH_HARD_MAX);
-  assert(f.value[0] == dshot_from_permille(MOTOR_ARB_BENCH_HARD_MAX));
+  assert(f.value[0] == DSHOT_THROTTLE_MAX);
 }
 
 /** @brief Abaixar o limite abaixa alvos já dados e a varredura. */
@@ -213,6 +227,7 @@ static void test_direction_rules(void) {
 
 int main(void) {
   test_disarmed_sends_zero();
+  test_default_cap();
   test_hard_cap();
   test_lower_cap_clamps();
   test_group_mask();

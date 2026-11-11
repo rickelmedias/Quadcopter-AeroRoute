@@ -57,7 +57,7 @@ The UI only requests; the STM32 decides.
 - Disarmed means DShot value 0 on all four channels, sent continuously. This is the boot state.
 - Arming requires: DTR on, HMI heartbeat present, all motor commands at 0, sensors valid, battery above a minimum when measured.
 - Link loss (no HMI heartbeat for 300 ms), DTR drop, USB disconnect or a fault forces DShot 0 and disarms.
-- Throttle is capped in firmware at 40 % (hard limit, compile-time). The UI cap slider can only lower it. Commands above the active cap are clamped, not rejected.
+- Bench throttle never exceeds the adjustable cap. The cap starts at 40 % on every boot and the UI slider can move it from 0 to 100 %. Commands above the active cap are clamped, not rejected.
 - Direction changes are accepted only while disarmed, with all motors stopped.
 - The UI has a permanent **STOP** control (also the space bar) that sends disarm. The firmware disarms on its own if the UI freezes.
 - Agents never arm or spin motors. A person at the bench uses the HMI.
@@ -69,7 +69,7 @@ The UI only requests; the STM32 decides.
 - **Bottom: frozen samples.** List of saved rows, each with the difference from live values (Δ), highlighted when Δ exceeds 3σ of that row. Two saved rows can be compared with each other.
 - **Motor panel.**
   - Arm/disarm and STOP.
-  - **Cap slider** 0–40 %: maximum any motor slider can reach.
+  - **Cap slider** 0–100 %, 40 % at boot: maximum any motor slider can reach.
   - **Four motor sliders** 0 to cap, each showing DShot value sent and RPM received.
   - **Group:** checkboxes select which motors (any subset or all) follow one shared slider.
   - **Direction per motor:** normal/reversed toggle, applied with AM32 DShot commands 7/8 while disarmed. By default not saved to the ESC (resets on power-up); a separate "save to ESC" button sends command 12. The current bench configuration (M1 and M4 reversed, `stm32/docs/guia_teste_motores.md`) is shown as the reference.
@@ -111,7 +111,7 @@ hmi/
 
 ## Plan
 
-1. Firmware: arming state machine and DShot 0 guarantee, with host tests. **Done:** `actuators/motor_arbiter` (tested in `tests/test_motor_arbiter.c`, MISRA clean), 40 % hard cap, adjustable cap, 300 ms bench keepalive, direction commands; console `cap` and `dir`. Not yet run on hardware.
+1. Firmware: arming state machine and DShot 0 guarantee, with host tests. **Done:** `actuators/motor_arbiter` (tested in `tests/test_motor_arbiter.c`, MISRA clean), adjustable cap (40 % at boot, up to 100 %), 300 ms bench keepalive, direction commands; console `cap` and `dir`. Not yet run on hardware.
 2. Firmware: DroneLink over USB CDC with heartbeat and the standard messages above.
 3. Server: link, recorder and replay of recorded sessions (allows UI work without hardware).
 4. Web UI: live panel, freeze and comparison, then the motor panel.
@@ -122,4 +122,4 @@ hmi/
 
 - Which values get charts by default.
 
-Decided: freeze saves instantly and persists until deleted; firmware cap 40 % with a UI cap slider; per-motor sliders, any-subset grouping and direction toggles; no front-end build step.
+Decided: freeze saves instantly and persists until deleted; UI cap slider 0–100 %, 40 % at boot; per-motor sliders, any-subset grouping and direction toggles; no front-end build step.

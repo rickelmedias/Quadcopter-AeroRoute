@@ -79,11 +79,11 @@ desarma os motores.
 | Comando | O que faz |
 |---|---|
 | `arm` | Arma a saída. Só aceita com todos os motores em 0. |
-| `m <motor> <pct>` | Alvo de um motor (1 a 4) ou de todos (0), limitado pelo `cap` (no máximo 40%). |
+| `m <motor> <pct>` | Alvo de um motor (1 a 4) ou de todos (0), limitado pelo `cap`. |
 | `sweep <motor> [max] [passo] [seg]` | Sobe de 0 até `max`% em degraus de `passo`%, segura cada degrau `seg` segundos e desce até 0. Padrão: `cap`, 10, 3. |
 | `rate <pct/s>` | Velocidade máxima da rampa, de 1 a 100 %/s. Padrão 20 %/s (0 a 100% em 5 s). |
 | `beep <motor>` | Faz o ESC apitar, para descobrir qual motor é qual. Só desarmado. |
-| `cap <pct>` | Limite da bancada para todos os comandos acima. O firmware nunca passa de 40%. |
+| `cap <pct>` | Limite da bancada para todos os comandos acima: começa em 40% ao ligar e pode ir até 100%. |
 | `dir <motor> n\|r [save]` | Sentido normal ou invertido (comandos 7/8 do AM32). Só desarmado. Sem `save`, volta ao religar o ESC; com `save`, grava na EEPROM do ESC. |
 | `log on` / `log off` | Liga ou silencia as linhas MTF, BNO e MOT. |
 | `status`, `help` | Mostra o estado ou a ajuda. |

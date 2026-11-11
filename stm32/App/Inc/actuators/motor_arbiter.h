@@ -14,8 +14,8 @@
  *   com tudo parado.
  * - Armar exige dono livre, alvos e rampa em zero e nenhum comando especial
  *   pendente.
- * - A bancada nunca passa de ::MOTOR_ARB_BENCH_HARD_MAX. O limite ajustável
- *   (::motor_arb_bench_cap) só pode ser menor.
+ * - A bancada nunca passa do limite ajustável (::motor_arb_bench_cap), que
+ *   começa em ::MOTOR_ARB_BENCH_DEFAULT_CAP e vai até ::MOTOR_ARB_BENCH_HARD_MAX.
  * - A bancada desarma sem keepalive por ::MOTOR_ARB_BENCH_KEEPALIVE_MS e o
  *   voo sem atualização por ::MOTOR_ARB_FLIGHT_TIMEOUT_MS.
  */
@@ -27,8 +27,10 @@
 
 /** Quantidade de motores. */
 #define MOTOR_ARB_COUNT              4U
-/** Limite fixo da bancada, em décimos de por cento (400 = 40 %). */
-#define MOTOR_ARB_BENCH_HARD_MAX     400U
+/** Limite fixo da bancada, em décimos de por cento (1000 = 100 %). */
+#define MOTOR_ARB_BENCH_HARD_MAX     1000U
+/** Limite ajustável ao ligar, em décimos de por cento (400 = 40 %). */
+#define MOTOR_ARB_BENCH_DEFAULT_CAP  400U
 /** Sem keepalive da bancada por este tempo, em ms, desarma. */
 #define MOTOR_ARB_BENCH_KEEPALIVE_MS 300U
 /** Sem atualização do controle de voo por este tempo, em ms, desarma. */
@@ -105,7 +107,7 @@ typedef struct {
   const char *stopped;             /**< Motivo se desarmou neste quadro, senão NULL. */
 } motor_arb_frame_t;
 
-/** @brief Estado inicial: desarmado, limite = limite fixo. */
+/** @brief Estado inicial: desarmado, limite ajustável = ::MOTOR_ARB_BENCH_DEFAULT_CAP. */
 void motor_arb_init(motor_arb_t *a, uint32_t now_ms);
 
 /**

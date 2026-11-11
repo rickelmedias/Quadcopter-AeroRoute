@@ -58,7 +58,7 @@ void motor_arb_init(motor_arb_t *a, uint32_t now_ms) {
   *a = (motor_arb_t){0};
   a->owner = MOTOR_ARB_OWNER_NONE;
   a->rate = MOTOR_ARB_DEFAULT_RATE;
-  a->cap = MOTOR_ARB_BENCH_HARD_MAX;
+  a->cap = MOTOR_ARB_BENCH_DEFAULT_CAP;
   a->flight_ms = now_ms;
   a->bench_alive_ms = now_ms;
   a->sweep_note = -2;
