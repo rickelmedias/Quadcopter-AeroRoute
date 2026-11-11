@@ -62,6 +62,21 @@ typedef struct {
 
 /** Canais gerados por tools/lqg_ajustado.py. */
 extern const lqg_dist_channel_t LQG_DIST_CHANNELS[LQG_DIST_NC];
+
+/**
+ * @brief Limita a parcela de guinada do du a ±@p limit, sem mexer nas demais.
+ *
+ * A guinada tem pouca autoridade no drone real, então um giro súbito leva o
+ * LQG a pedir centenas de rad/s nos quatro motores e isso arrasta a atitude
+ * (roll e pitch) junto. A parcela de guinada é a projeção de @p du no padrão do
+ * canal ::LQG_DIST_PSI; só ela é encurtada.
+ *
+ * @param[in]  du     Saída do LQG.
+ * @param[out] out    du com a guinada limitada (igual a @p du se não precisar).
+ * @param[in]  limit  Limite em rad/s (<= 0 desliga).
+ * @return true se algum valor mudou.
+ */
+bool lqg_dist_limit_yaw(const lqg_real_t du[LQG_NU], lqg_real_t out[LQG_NU], float limit);
 /** Kd do LQG ajustado (gerado). */
 extern const lqg_real_t LQG_AJ_KD[LQG_NU][LQG_NX];
 /** Kfd do LQG ajustado (gerado). */
@@ -70,6 +85,10 @@ extern const lqg_real_t LQG_AJ_KFD[LQG_NU][LQG_NR];
 extern const lqg_real_t LQG_AJ_M[LQG_NX][LQG_NY];
 /** L do Kalman do LQG ajustado (gerado). */
 extern const lqg_real_t LQG_AJ_L[LQG_NX][LQG_NY];
+/** M do Kalman para a velocidade fundida (FLOW_EKF): vx, vy menos ruidosos (gerado). */
+extern const lqg_real_t LQG_AJ_M_FUSED[LQG_NX][LQG_NY];
+/** L do Kalman para a velocidade fundida (gerado). */
+extern const lqg_real_t LQG_AJ_L_FUSED[LQG_NX][LQG_NY];
 /**
  * Autoridade real de guinada dividida pela do B do TCC (gerado, ~3e-4). O B do
  * TCC põe ~2000 vezes mais aceleração de guinada por rad/s do que o drone tem;
@@ -95,10 +114,15 @@ void lqg_dist_apply_gains(lqg_gains_t *gains);
 /**
  * @brief Troca L e M pelos do Kalman do LQG ajustado numa cópia dos ganhos.
  *
- * Só as linhas de y e vy diferem das do Simulink: o TCC supunha o fluxo em vy
- * bem menos ruidoso que em vx, e no drone os dois têm o mesmo ruído.
+ * Sem fusão, só as linhas de y e vy diferem das do Simulink: o TCC supunha o
+ * fluxo em vy bem menos ruidoso que em vx, e no drone os dois têm o mesmo
+ * ruído. Com @p fused (FLOW_EKF), vx e vy vêm do filtro de fusão e o Kalman
+ * confia mais neles.
+ *
+ * @param[in,out] gains  Cópia dos ganhos em uso.
+ * @param[in]     fused  Velocidade horizontal fundida com o acelerômetro.
  */
-void lqg_dist_apply_kalman(lqg_gains_t *gains);
+void lqg_dist_apply_kalman(lqg_gains_t *gains, bool fused);
 
 /**
  * @brief Entrada da predição do Kalman com a guinada e a altura na escala real.

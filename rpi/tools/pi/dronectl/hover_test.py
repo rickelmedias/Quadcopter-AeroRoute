@@ -50,6 +50,7 @@ from .gains import REPO_ROOT, Gains
 from .hover_report import (ARMED, FAILSAFE, HOLD, LEG, MOTOR_OF_INPUT, STANDBY, TAKEOFF,
                            CSV_HEADER, Report, Sample, analyze, format_report, sample_row)
 from .link import DroneLink, LinkError, state_name
+from .nav_report import analyze_nav, nav_notes, save_nav_log
 
 #: Perfil padrão (fora de tools/: o deploy não apaga).
 PROFILE_PATH = Path.home() / 'drone' / 'perfil_hover.json'
@@ -215,14 +216,15 @@ def check_q_names(q: Dict[str, float]) -> None:
                          f'(use {", ".join(names)})')
 
 
-def adjusted_gains(q_override: Dict[str, float],
-                   r: Optional[float]) -> Tuple[Gains, List[float], float]:
+def adjusted_gains(q_override: Dict[str, float], r: Optional[float],
+                   fused: bool = False) -> Tuple[Gains, List[float], float]:
     """Kd/Kfd do dlqr do ajustado com os pesos Q pedidos e o Kalman do ajustado.
 
     ``q_override`` usa os nomes dos estados (x, y, z, phi, theta, psi, vx, vy,
     vz, p, q, r); o que faltar fica com o Q do LQG ajustado do firmware. L e
     M são os do ajustado (``kalman_lqg(RN_AJUSTADO)``), os mesmos que o
-    firmware usa com os ganhos de fábrica.
+    firmware usa com os ganhos de fábrica; com ``fused`` (FLOW_EKF = 1), os do
+    Kalman da velocidade fundida (``kalman_lqg(RN_FUNDIDO)``), como o firmware.
 
     Returns:
         Os ganhos, o Q completo usado e o R usado.
@@ -234,7 +236,7 @@ def adjusted_gains(q_override: Dict[str, float],
     if rr <= 0 or any(v < 0 for v in q):
         raise ValueError('Q não pode ser negativo e R precisa ser positivo')
     Kd, Kfd = aj.ganhos_lqg(q, rr)
-    M, L = aj.kalman_lqg(aj.RN_AJUSTADO)
+    M, L = aj.kalman_lqg(aj.RN_FUNDIDO if fused else aj.RN_AJUSTADO)
     return Gains(Kd=Kd, Kfd=Kfd, L=L, M=M), q, rr
 
 
@@ -295,6 +297,8 @@ class HoverTest:
         self.say = say
         #: (time.monotonic da chegada, DebugSample).
         self.samples: List[Tuple[float, object]] = []
+        #: (time.monotonic da chegada, NavSample) do DRONE_NAV_DEBUG.
+        self.nav_samples: List[Tuple[float, object]] = []
         self.texts: List[Tuple[float, str]] = []
         self.stop_reason: Optional[str] = None
         self.kill = False
@@ -311,11 +315,15 @@ class HoverTest:
         self.report: Optional[Report] = None
         link.on_text = self._on_text
         link.subscribe(self._on_sample)
+        link.subscribe_nav(self._on_nav)
 
     # -- recepção (thread do enlace) --
 
     def _on_sample(self, s) -> None:
         self.samples.append((time.monotonic(), s))
+
+    def _on_nav(self, n) -> None:
+        self.nav_samples.append((time.monotonic(), n))
 
     def _on_text(self, text: str) -> None:
         self.texts.append((time.monotonic(), text))
@@ -398,6 +406,15 @@ class HoverTest:
                  (', '.join(f'{k}={v:g}' for k, v in sorted(changed.items())) or 'nada'))
         self.profile.save()  # guarda os valores de fábrica lidos
 
+    def _flow_ekf_on(self) -> bool:
+        """FLOW_EKF em uso no STM32: o Kalman enviado com --q precisa ser o mesmo modo."""
+        if 'FLOW_EKF' in self.applied:
+            return self.applied['FLOW_EKF'] >= 0.5
+        try:
+            return self.link.param_get('FLOW_EKF') >= 0.5
+        except LinkError:
+            return False  # firmware sem fusão
+
     def _apply_gains(self) -> None:
         q = dict(self.profile.q)
         q.update(self.opts.q)
@@ -409,13 +426,14 @@ class HoverTest:
             return
         if self.applied.get('CTL_LQG_AJ', 1.0) < 0.5:
             raise LinkError('os pesos Q são do LQG ajustado: precisa de CTL_LQG_AJ = 1')
+        fused = self._flow_ekf_on()
         try:
-            gains, q_used, r_used = adjusted_gains(q, r)
+            gains, q_used, r_used = adjusted_gains(q, r, fused)
         except ValueError as exc:
             raise LinkError(str(exc)) from exc
         crc = self.link.upload_gains(gains)
         self.gains_info = {'custom': True, 'q_changed': q, 'q': q_used, 'r': r_used,
-                           'crc': f'{crc:08X}'}
+                           'fused': fused, 'crc': f'{crc:08X}'}
         self.say(f'ganhos do ajustado com Q {q or "de fábrica"} e R={r_used:g} em uso '
                  f'(crc {crc:08X})')
 
@@ -674,6 +692,11 @@ class HoverTest:
             report.notes.insert(0, f'fim do voo: {self.land_reason}')
         if self.error:
             report.notes.insert(0, f'ensaio interrompido: {self.error}')
+        nav = list(self.nav_samples)
+        if nav:
+            save_nav_log(folder / 'nav_log.csv', nav)
+            report.metrics['nav'] = analyze_nav([n for _, n in nav], [s for _, s in samples])
+            report.notes.extend(nav_notes(report.metrics['nav']))
         (folder / 'resumo.json').write_text(
             json.dumps({'metrics': report.metrics, 'suggestion': report.suggestion,
                         'notes': report.notes}, indent=1, ensure_ascii=False), encoding='utf-8')
@@ -685,8 +708,10 @@ class HoverTest:
         """Descrição auditável dos ganhos esperados para o CRC que foi usado."""
         q_changed = self.gains_info.get('q_changed', {})
         r = self.gains_info.get('r')
-        gains, q, r_used = adjusted_gains(q_changed, r)
+        fused = bool(self.gains_info.get('fused', self.applied.get('FLOW_EKF', 0.0) >= 0.5))
+        gains, q, r_used = adjusted_gains(q_changed, r, fused)
         return {'custom': bool(self.gains_info.get('custom')), 'crc': self.gains_info.get('crc'),
+                'kalman': 'fundido (FLOW_EKF)' if fused else 'ajustado',
                 'q': q, 'r': r_used, 'state_names': _ajustado().lp.ESTADOS,
                 'Kd': gains.Kd, 'Kfd': gains.Kfd, 'L': gains.L, 'M': gains.M}
 

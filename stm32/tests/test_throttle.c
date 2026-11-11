@@ -26,6 +26,23 @@ static void test_ramp_down(void) {
 }
 
 /** @brief Rampa de partida: da marcha lenta até o hover, sem degrau. */
+/** @brief A rampa na média preserva a diferença entre os motores. */
+static void test_blend_common(void) {
+  float t[4] = {0.62F, 0.58F, 0.62F, 0.58F};
+  throttle_blend_common(t, 4U, 0.05F, 0.5F);
+  assert(fabsf((t[0] + t[1] + t[2] + t[3]) / 4.0F - 0.325F) < 1e-6F);
+  assert(fabsf((t[0] - t[1]) - 0.04F) < 1e-6F);
+  float u[4] = {0.62F, 0.58F, 0.62F, 0.58F};
+  throttle_blend_common(u, 4U, 0.05F, 1.0F);
+  assert(u[0] == 0.62F && u[1] == 0.58F);
+  float z[4] = {0.62F, 0.58F, 0.62F, 0.58F};
+  throttle_blend_common(z, 4U, 0.05F, 0.0F);
+  assert(fabsf((z[0] + z[1] + z[2] + z[3]) / 4.0F - 0.05F) < 1e-6F);
+  float lo[4] = {0.03F, 0.04F, 0.03F, 0.04F};  /* média abaixo da marcha lenta: não muda */
+  throttle_blend_common(lo, 4U, 0.05F, 0.5F);
+  assert(lo[0] == 0.03F);
+}
+
 static void test_ramp_up(void) {
   assert(throttle_ramp_up(0U, 2000U) == 0.0F);
   assert(throttle_ramp_up(2000U, 2000U) == 1.0F);
@@ -66,6 +83,7 @@ static void test_desaturate(void) {
 int main(void) {
   test_ramp_down();
   test_ramp_up();
+  test_blend_common();
   test_desaturate();
   printf("test_throttle: ok\n");
   return 0;

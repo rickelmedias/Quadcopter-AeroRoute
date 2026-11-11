@@ -20,6 +20,7 @@ static meas_input_t level(float range) {
   in.q[0] = 1.0F;
   in.attitude_valid = in.gyro_valid = in.range_valid = in.flow_valid = true;
   in.range_m = range;
+  in.pred_vx = in.pred_vy = NAN;
   return in;
 }
 
@@ -159,11 +160,221 @@ static void test_attitude_signs_and_yaw_unwrap(void) {
   assert(NEAR(y[LQG_Y_PSI], 0.0, 1e-7));
 }
 
+/** @brief FLOW_GATE: qualidade com histerese, inclinação e fluxo absurdo. */
+static void test_flow_gate(void) {
+  ctrl_params_t p = defaults();
+  p.flow_scale_x = p.flow_scale_y = 1.0F;
+  p.flow_gate = 1.0F;
+  meas_state_t s;
+  meas_reset(&s);
+  lqg_real_t y[LQG_NY];
+  meas_input_t in = level(1.0F);
+  in.flow_x = 0.2F;
+  in.flow_quality = 20U;  /* abaixo do limiar de ligar (30): ainda recusado */
+  assert((meas_update(&s, &in, &p, y) & MEAS_FLOW) == 0U);
+  in.flow_quality = 40U;
+  assert((meas_update(&s, &in, &p, y) & MEAS_FLOW) != 0U);
+  in.flow_quality = 20U;  /* histerese: acima de 15 continua ligado */
+  assert((meas_update(&s, &in, &p, y) & MEAS_FLOW) != 0U);
+  in.flow_quality = 10U;  /* abaixo de 15 desliga */
+  assert((meas_update(&s, &in, &p, y) & MEAS_FLOW) == 0U);
+  in.flow_quality = 50U;
+  in.flow_x = 5.0F;       /* acima de 4,2 rad/s: corrompido */
+  assert((meas_update(&s, &in, &p, y) & MEAS_FLOW) == 0U);
+  in.flow_x = 0.2F;
+  in.roll = 0.7F;         /* inclinado ~40°: a distância não é a altura */
+  assert((meas_update(&s, &in, &p, y) & MEAS_FLOW) == 0U);
+  p.flow_gate = 0.0F;     /* desligado: aceita tudo, como antes */
+  assert((meas_update(&s, &in, &p, y) & MEAS_FLOW) != 0U);
+}
+
+/**
+ * @brief Pareamento cruzado: rotação pura (sem translação) não gera velocidade.
+ *
+ * Como no voo de 08/11: flow_x responde ao giro y do BNO (-1,45), flow_y ao giro
+ * x (+1,65). Com o pareamento direto antigo sobra velocidade falsa; com o
+ * cruzado, ela some, nas duas orientações do sensor.
+ */
+static void test_flow_gyro_cross(void) {
+  ctrl_params_t p = defaults();
+  p.flow_scale_x = p.flow_scale_y = 1.0F;
+  p.flow_yaw_x = p.flow_yaw_y = 0.0F;
+  p.sgn_vx = p.sgn_vy = p.sgn_yaw = 1.0F;
+  meas_state_t s;
+  meas_reset(&s);
+  lqg_real_t y[LQG_NY];
+  const float gx = 0.3F, gy = -0.4F, range = 0.12F;
+  meas_input_t in = level(range);
+  in.gyro[0] = gx;
+  in.gyro[1] = gy;
+  in.flow_x = -1.45F * gy;
+  in.flow_y = +1.65F * gx;
+  /* Pareamento direto de antes: sobra velocidade falsa. */
+  p.flow_gyro_x = 1.0F;
+  p.flow_gyro_y = -1.0F;
+  p.flow_gyro_xy = p.flow_gyro_yx = 0.0F;
+  p.flow_swap = 1.0F;
+  (void)meas_update(&s, &in, &p, y);
+  assert(fabs((double)y[LQG_Y_VX]) > 0.05 || fabs((double)y[LQG_Y_VY]) > 0.05);
+  /* Cruzado: rotação pura vira velocidade nula, com ou sem FLOW_SWAP. */
+  p.flow_gyro_x = p.flow_gyro_y = 0.0F;
+  p.flow_gyro_xy = 1.45F;
+  p.flow_gyro_yx = -1.65F;
+  for (int swap = 0; swap < 2; ++swap) {
+    p.flow_swap = (float)swap;
+    (void)meas_update(&s, &in, &p, y);
+    assert(NEAR(y[LQG_Y_VX], 0.0, 1e-5) && NEAR(y[LQG_Y_VY], 0.0, 1e-5));
+  }
+  /* Translação continua passando: 0,1 rad/s a mais no canal Y (frente com swap). */
+  p.flow_swap = 1.0F;
+  in.flow_y += 0.1F;
+  (void)meas_update(&s, &in, &p, y);
+  assert(NEAR(y[LQG_Y_VX], 0.1 * range, 1e-5) && NEAR(y[LQG_Y_VY], 0.0, 1e-5));
+}
+
+/**
+ * @brief EKF de navegação: com FLOW_EKF o vx do LQG sai bem menos ruidoso que o
+ *        fluxo cru; desligado, nada muda. Só quadro novo do MTF corrige.
+ */
+static void test_flow_ekf(void) {
+  ctrl_params_t p = defaults();
+  p.flow_scale_x = p.flow_scale_y = 1.0F;
+  p.flow_yaw_x = p.flow_yaw_y = 0.0F;
+  p.flow_gyro_x = p.flow_gyro_y = p.flow_gyro_xy = p.flow_gyro_yx = 0.0F;
+  p.sgn_vx = p.sgn_vy = p.sgn_yaw = 1.0F;
+  p.flow_swap = 0.0F;
+  lqg_real_t y[LQG_NY];
+  double var[2] = {0.0, 0.0};
+  for (int fuse = 0; fuse < 2; ++fuse) {
+    p.flow_ekf = (float)fuse;
+    meas_state_t s;
+    meas_reset(&s);
+    unsigned long seed = 7UL;
+    double acc = 0.0;
+    int n = 0;
+    for (int k = 0; k < 1500; ++k) {
+      meas_input_t in = level(0.15F);
+      in.accel_valid = true;
+      in.mtf_frame = (uint32_t)k + 1U;
+      in.mtf_time_ms = 10U * (uint32_t)k;
+      seed = seed * 1103515245UL + 12345UL;
+      const float jitter = ((float)((seed >> 8) & 0xFFFFU) / 65535.0F - 0.5F) * 2.0F;
+      in.flow_x = 0.6F + jitter;  /* 0,6 rad/s a 15 cm = 9 cm/s, com ±1 rad/s de ruído */
+      (void)meas_update(&s, &in, &p, y);
+      if (k > 500) {
+        acc += ((double)y[LQG_Y_VX] - 0.09) * ((double)y[LQG_Y_VX] - 0.09);
+        ++n;
+      }
+    }
+    var[fuse] = acc / n;
+    assert(fuse == 0 || (s.diag.flags & MEAS_DIAG_XY_TO_LQG) != 0U);
+  }
+  assert(var[1] < var[0] / 9.0);  /* desvio pelo menos 3 vezes menor */
+
+  /* O mesmo quadro repetido não corrige o EKF de novo. */
+  meas_state_t s;
+  meas_reset(&s);
+  meas_input_t in = level(0.15F);
+  in.accel_valid = true;
+  in.mtf_frame = 5U;
+  (void)meas_update(&s, &in, &p, y);
+  const uint32_t updates = s.nav.flow_updates + (s.nav.h_started ? 1U : 0U);
+  (void)meas_update(&s, &in, &p, y);
+  assert(s.nav.flow_updates + (s.nav.h_started ? 1U : 0U) == updates);
+  assert((s.diag.flags & MEAS_DIAG_NEW_FRAME) == 0U);
+
+  /* Aceleração para a frente (eixo y do BNO com o sinal de p) faz a
+     velocidade x do EKF crescer sem fluxo. */
+  in.flow_valid = false;
+  in.lin_accel[1] = p.sgn_p * 1.0F;
+  for (int k = 0; k < 20; ++k) (void)meas_update(&s, &in, &p, y);
+  assert(s.nav.h[0].x[1] > 0.15F && fabsf(s.nav.h[1].x[1]) < 1e-4F);
+}
+
+/** @brief Z_EKF: com a distância filtrada, um salto isolado do telêmetro não chega ao LQG. */
+static void test_z_ekf(void) {
+  ctrl_params_t p = defaults();
+  lqg_real_t y[LQG_NY];
+  for (int use = 0; use < 2; ++use) {
+    p.z_ekf = (float)use;
+    meas_state_t s;
+    meas_reset(&s);
+    for (int k = 0; k < 200; ++k) {
+      meas_input_t in = level(0.15F);
+      in.accel_valid = true;
+      in.mtf_frame = (uint32_t)k + 1U;
+      in.mtf_time_ms = 10U * (uint32_t)k;
+      if (k == 150) in.range_m = 0.60F;  /* reflexo isolado */
+      (void)meas_update(&s, &in, &p, y);
+      if (k == 150) {
+        if (use) {
+          assert(NEAR(y[LQG_Y_Z], -0.15, 0.01));
+          assert((s.diag.flags & MEAS_DIAG_RANGE_REJECTED) != 0U);
+        } else {
+          assert(NEAR(y[LQG_Y_Z], -0.60, 1e-6));
+        }
+      }
+    }
+    assert(use == 0 || (s.diag.flags & MEAS_DIAG_Z_TO_LQG) != 0U);
+  }
+}
+
+/** @brief FLOW_BIAS e FLOW_CENS: viés subtraído e zero tratado como faixa. */
+static void test_flow_bias_and_censoring(void) {
+  ctrl_params_t p = defaults();
+  p.flow_scale_x = p.flow_scale_y = 1.0F;
+  p.flow_yaw_x = p.flow_yaw_y = 0.0F;
+  p.flow_gyro_x = p.flow_gyro_y = 0.0F;
+  p.sgn_vx = p.sgn_vy = p.sgn_yaw = 1.0F;
+  p.flow_swap = 0.0F;
+  meas_state_t s;
+  meas_reset(&s);
+  lqg_real_t y[LQG_NY];
+  meas_input_t in = level(1.0F);
+  in.flow_x = 0.4F;
+  p.flow_bias_x = 0.1F;
+  (void)meas_update(&s, &in, &p, y);
+  assert(NEAR(y[LQG_Y_VX], 0.3, 1e-6));  /* viés de 0,1 rad/s a 1 m = 0,1 m/s tirado */
+  p.flow_bias_x = 0.0F;
+
+  /* Censura: contagem zero. A predição dentro de ±0,1 m/s (a 1 m) é aceita. */
+  p.flow_cens = 1.0F;
+  in.flow_x = 0.0F;
+  in.flow_y = 0.0F;
+  in.pred_vx = 0.06F;
+  in.pred_vy = -0.04F;
+  (void)meas_update(&s, &in, &p, y);
+  assert(NEAR(y[LQG_Y_VX], 0.06, 1e-5) && NEAR(y[LQG_Y_VY], -0.04, 1e-5));
+  /* Fora da faixa, é limitada à borda (meio degrau = 0,1 m/s a 1 m). */
+  in.pred_vx = 0.5F;
+  in.pred_vy = -0.5F;
+  (void)meas_update(&s, &in, &p, y);
+  assert(NEAR(y[LQG_Y_VX], 0.1, 1e-5) && NEAR(y[LQG_Y_VY], -0.1, 1e-5));
+  /* Leitura não zero: a medida vale, a predição é ignorada. */
+  in.flow_x = 0.4F;
+  (void)meas_update(&s, &in, &p, y);
+  assert(NEAR(y[LQG_Y_VX], 0.4, 1e-6));
+  /* Sem predição (NaN) ou com FLOW_CENS desligado: zero é zero, como antes. */
+  in.flow_x = 0.0F;
+  in.pred_vx = NAN;
+  (void)meas_update(&s, &in, &p, y);
+  assert(NEAR(y[LQG_Y_VX], 0.0, 1e-6));
+  in.pred_vx = 0.05F;
+  p.flow_cens = 0.0F;
+  (void)meas_update(&s, &in, &p, y);
+  assert(NEAR(y[LQG_Y_VX], 0.0, 1e-6));
+}
+
 /** @brief Fluxo -> velocidade, com escala, compensação do giro e guinada. */
 static void test_flow_velocity(void) {
   ctrl_params_t p = defaults();
   p.flow_scale_x = p.flow_scale_y = 1.0F;
   p.flow_yaw_x = p.flow_yaw_y = 0.0F;
+  /* Mapeamento original e pareamento direto (os padrões mudaram em 08/11). */
+  p.flow_swap = 0.0F;
+  p.flow_gyro_x = 1.0F;
+  p.flow_gyro_y = -1.0F;
+  p.flow_gyro_xy = p.flow_gyro_yx = 0.0F;
   meas_state_t s;
   meas_reset(&s);
   lqg_real_t y[LQG_NY];
@@ -175,6 +386,16 @@ static void test_flow_velocity(void) {
   (void)meas_update(&s, &in, &p, y);
   assert(NEAR(y[LQG_Y_VX], p.sgn_vx * 0.2, 1e-6));
   assert(NEAR(y[LQG_Y_VY], p.sgn_vy * -0.1, 1e-6));
+
+  /* FLOW_SWAP: o canal Y vira a frente e o X a esquerda (direita = -X). */
+  p.flow_swap = 1.0F;
+  in.flow_x = 0.2F;
+  in.flow_y = -0.1F;
+  in.gyro[0] = in.gyro[1] = 0.0F;
+  (void)meas_update(&s, &in, &p, y);
+  assert(NEAR(y[LQG_Y_VX], p.sgn_vx * -0.1, 1e-6));
+  assert(NEAR(y[LQG_Y_VY], p.sgn_vy * -0.2, 1e-6));
+  p.flow_swap = 0.0F;
 
   /* Rotação pura: o fluxo que o giro explica é removido (X com sinal oposto
      e Y com o mesmo sinal, como medido na bancada). */
@@ -272,6 +493,11 @@ int main(void) {
   test_rearm_keeps_yaw_origin();
   test_attitude_signs_and_yaw_unwrap();
   test_flow_velocity();
+  test_flow_gate();
+  test_flow_bias_and_censoring();
+  test_flow_gyro_cross();
+  test_flow_ekf();
+  test_z_ekf();
   test_invalid_readings_hold_last_value();
   test_level_trim();
   printf("test_meas: ok\n");

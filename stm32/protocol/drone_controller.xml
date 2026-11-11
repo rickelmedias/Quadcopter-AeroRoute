@@ -263,5 +263,24 @@
       <field type="uint8_t" name="meas_flags" enum="DRONE_MEAS_FLAG">Measurements refreshed in this step.</field>
       <field type="uint8_t" name="ctrl_flags" enum="DRONE_CTRL_FLAG">Controller condition.</field>
     </message>
+    <message id="51021" name="DRONE_NAV_DEBUG">
+      <description>Navigation EKF step (control/nav_ekf.h): optical flow, range finder and BNO08x linear acceleration fused into position, velocity and accelerometer bias in x, y (local frame) and z (NED). Sent at NAV_DBG_HZ (0 = off) so the Pi can validate the horizontal estimate and the quality of z.</description>
+      <field type="uint32_t" name="time_boot_ms" units="ms">STM32 tick of the step.</field>
+      <field type="float[2]" name="flow_raw" units="rad/s">MTF-01 flow, sensor x and y.</field>
+      <field type="float[2]" name="flow_body" units="m/s">Flow velocity in body axes (forward, right), after scale and gyro compensation, before fusion.</field>
+      <field type="float" name="range_raw" units="m">Range finder reading.</field>
+      <field type="float" name="range_filt" units="m">Range after the jump gate and low-pass filter.</field>
+      <field type="float[3]" name="pos" units="m">EKF position x, y (local) and z (NED, negative above ground).</field>
+      <field type="float[3]" name="vel" units="m/s">EKF velocity vx, vy (local) and vz (NED, negative = climbing).</field>
+      <field type="float[3]" name="bias" units="m/s/s">EKF accelerometer bias x, y, z.</field>
+      <field type="float[3]" name="accel" units="m/s/s">Linear acceleration used in the prediction: x, y (local) and down.</field>
+      <field type="float" name="flow_ratio">Last innovation test ratio of the x/y pair (above 1 = rejected).</field>
+      <field type="float" name="z_ratio">Last innovation test ratio of z (above 1 = rejected).</field>
+      <field type="uint16_t" name="flow_rejected">Flow corrections rejected by the gate (wraps).</field>
+      <field type="uint16_t" name="z_rejected">Range corrections rejected by the EKF gate (wraps).</field>
+      <field type="uint16_t" name="range_rejected">Readings rejected by the range filter (wraps).</field>
+      <field type="uint16_t" name="flags">Bits: 1 new MTF frame, 2 flow fused, 4 flow rejected, 8 xy usable, 16 xy sent to the LQG, 32 range rejected, 64 z rejected, 128 z usable, 256 z sent to the LQG.</field>
+      <field type="uint8_t" name="quality">MTF-01 flow quality, 0 to 255.</field>
+    </message>
   </messages>
 </mavlink>

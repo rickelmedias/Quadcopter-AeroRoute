@@ -105,6 +105,7 @@ class DroneLink:
         self._inbox: Deque[Tuple[int, object]] = deque(maxlen=400)
         self._seq = 0
         self._subscribers: List[Callable[[DebugSample], None]] = []
+        self._nav_subscribers: List[Callable[[object], None]] = []
 
         self.boot_id = 0
         self.capabilities = 0
@@ -170,6 +171,10 @@ class DroneLink:
     def subscribe(self, callback: Callable[[DebugSample], None]) -> None:
         """Chama @p callback (na thread de recepção) a cada DRONE_CTRL_DEBUG."""
         self._subscribers.append(callback)
+
+    def subscribe_nav(self, callback: Callable[[object], None]) -> None:
+        """Chama @p callback (na thread de recepção) a cada DRONE_NAV_DEBUG (NavSample)."""
+        self._nav_subscribers.append(callback)
 
     # ---- threads -------------------------------------------------------
 
@@ -242,6 +247,15 @@ class DroneLink:
                     callback(sample)
                 except Exception as exc:  # um assinante com erro não derruba o enlace
                     self.on_text(f'erro no assinante da telemetria: {exc}')
+            notify = False
+        elif kind == 'DRONE_NAV_DEBUG':
+            from .nav_report import NavSample
+            sample = NavSample.from_msg(msg)
+            for callback in list(self._nav_subscribers):
+                try:
+                    callback(sample)
+                except Exception as exc:  # um assinante com erro não derruba o enlace
+                    self.on_text(f'erro no assinante do EKF: {exc}')
             notify = False
         elif kind == 'ATTITUDE':
             self.attitude = msg

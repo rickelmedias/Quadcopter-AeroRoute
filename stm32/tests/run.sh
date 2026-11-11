@@ -24,7 +24,7 @@ PURE="App/Src/attitude.c App/Src/mtf_parser.c
       App/Src/control/ctrl_gains.c App/Src/control/ctrl_params.c App/Src/control/meas.c
       App/Src/control/mixer.c App/Src/control/attitude_mode.c App/Src/control/trim.c App/Src/control/throttle.c
       App/Src/control/lqg_tuning.c App/Src/control/lqg_dist.c App/Src/control/lqg_ajustado_gains.c
-      App/Src/control/sim_plant.c"
+      App/Src/control/sim_plant.c App/Src/control/nav_ekf.c App/Src/control/range_filter.c"
 REFERENCE="reference/STM32_ert_rtw/STM32.c reference/STM32_ert_rtw/STM32_data.c"
 
 CFLAGS="-std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined

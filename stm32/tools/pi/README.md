@@ -124,14 +124,19 @@ FLT_DRY_RUN = 1, FLT_SIM = 0 e a telemetria rápida desligada.
 | Mais de 80 cm do ponto de decolagem por 250 ms (`--geofence`) | pousa |
 | Telemetria parada por 1 s | pousa |
 | Não chegou à altura no tempo da rampa + 23 s | pousa |
-| Ctrl+C, SIGTERM ou a sessão SSH caindo (SIGHUP) | pousa |
+| Ctrl+C durante a decolagem, com altura medida < 10 cm e estimada < 12 cm | corta os motores |
+| Ctrl+C acima disso, SIGTERM ou a sessão SSH caindo (SIGHUP) | pousa |
 | **Ctrl+C de novo** durante o pouso | **corta os motores** (desarma) |
 | Erro de comunicação | pousa (no ar) ou desarma (no chão) |
 
 Se a Pi morrer de vez, vale a supervisão do STM32: sem autorização ele segura
 e pousa sozinho em 5 s.
 
-**O que fica gravado** em `~/drone/ensaios/hover_<data>/`: `telemetria.csv`
+**O que fica gravado** em `~/real_log_kit/hover_<data>/`: `real_log.csv`
+(separado por `;`, uma linha por amostra, com M1..M4 físicos, medidas,
+estimativas, referências, saídas LQG, flags, todos os parâmetros, CRC/Q/R dos
+ganhos repetidos), `gains.json` (Kd, Kfd, L e M completos), `telemetria.csv`
+(formato compacto usado pelo relatório),
 (cada passo do LQG: y, x̂, du, referência, motores, estado), `textos.txt`
 (mensagens do STM32, como os relatos `dist`), `meta.json` (parâmetros em uso,
 ganhos, chão, motivo do fim), `resumo.json` (métricas e sugestão) e
@@ -153,7 +158,9 @@ saturação, oscilação dominante e o relato `dist` de antes do pouso. E sugere
 A sugestão fica no perfil, mas **só entra quando alguém aplica**
 (`hover-profile --apply-suggestion [NOMES]`).
 
-**No PC:** `sh tools/pi/buscar_ensaios.sh` traz os ensaios para
+**No PC:** `sh tools/pi/buscar_real_log_kit.sh` traz os kits para
+`real_log_kit/` na raiz do repositório, sem apagar os já copiados. O comando
+antigo `sh tools/pi/buscar_ensaios.sh` traz os ensaios legados para
 `tools/pi/logs/hover/` (fora do Git) e, com matplotlib, desenha `grafico.png`
 de cada um (altura, XY, inclinação, guinada e motores com as fases do voo);
 `python3 -m dronectl hover-report <pasta> --plot` faz o mesmo para uma pasta.

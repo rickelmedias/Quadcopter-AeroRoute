@@ -3,6 +3,7 @@ contra o STM32 simulado (tests/fake_fc.py com o modelo de voo).
 
 Rodar a partir de tools/pi:  python3 -m unittest discover -s tests
 """
+import csv
 import json
 import math
 import os
@@ -12,6 +13,7 @@ import threading
 import time
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
@@ -79,6 +81,47 @@ def flight_texts(t_mid, t_end):
 
 class HoverReportTest(unittest.TestCase):
     """A análise mede o voo e sugere o próximo a partir dos números certos."""
+
+    def test_ctrl_c_near_ground_cuts_without_waiting_for_land(self):
+        from dronectl.hover_test import HoverTest
+
+        commands = []
+        test = object.__new__(HoverTest)
+        sample = SimpleNamespace(state=TAKEOFF, meas_flags=4, y=[-0.164],
+                                 x_hat=[0.0, 0.0, -0.165])
+        def arm(armed):
+            commands.append(('arm', armed))
+            sample.state = STANDBY
+
+        test.link = SimpleNamespace(arm=arm, land=lambda: commands.append(('land',)))
+        test.opts = SimpleNamespace(mode='motors')
+        test.say = lambda message: None
+        test.stop_reason = 'Ctrl+C'
+        test.ground = -0.08
+        test.samples = [(time.monotonic(), sample)]
+        test.land()
+        self.assertEqual(commands, [('arm', False)])
+
+    def test_ctrl_c_above_ground_still_lands(self):
+        from dronectl.hover_test import HoverTest
+
+        commands = []
+        sample = SimpleNamespace(state=TAKEOFF, meas_flags=4, y=[-0.28],
+                                 x_hat=[0.0, 0.0, -0.28])
+        def land():
+            commands.append(('land',))
+            sample.state = STANDBY
+
+        test = object.__new__(HoverTest)
+        test.link = SimpleNamespace(arm=lambda armed: commands.append(('arm', armed)),
+                                    land=land)
+        test.opts = SimpleNamespace(mode='motors')
+        test.say = lambda message: None
+        test.stop_reason = 'Ctrl+C'
+        test.ground = -0.08
+        test.samples = [(time.monotonic(), sample)]
+        test.land()
+        self.assertEqual(commands, [('land',)])
 
     def test_metrics_and_suggestion(self):
         samples, t_mid, t_end = synthetic_flight()
@@ -266,9 +309,20 @@ class HoverTestRunTest(unittest.TestCase):
         test = self._run(label='primeiro')
         self.assertIsNone(test.error, self.lines)
         self.assertEqual(test.land_reason, 'fim do tempo de hover')
-        for name in ('telemetria.csv', 'textos.txt', 'meta.json', 'resumo.json',
-                     'linha_do_tempo.txt'):
+        for name in ('real_log.csv', 'gains.json', 'telemetria.csv', 'textos.txt', 'meta.json',
+                     'resumo.json', 'linha_do_tempo.txt'):
             self.assertTrue((test.folder / name).exists(), name)
+        with open(test.folder / 'real_log.csv', newline='', encoding='utf-8') as f:
+            rows = list(csv.DictReader(f, delimiter=';'))
+        self.assertGreater(len(rows), 10)
+        self.assertEqual(rows[0]['mode'], 'sim')
+        self.assertIn('m1_pct', rows[0])
+        self.assertIn('x_m', rows[0])
+        self.assertIn('param_CTL_W0', rows[0])
+        self.assertEqual(float(rows[0]['param_CTL_W0']), 1050.0)
+        gains = json.loads((test.folder / 'gains.json').read_text(encoding='utf-8'))
+        self.assertEqual(gains['crc'], '21F15F2A')
+        self.assertEqual(len(gains['Kd']), 4)
         self.assertEqual(self.fc.state, 2)
         # Volta ao estado seguro: sem telemetria rápida, a seco, sem simulado.
         self.assertEqual(self.fc.params['DBG_RATE_HZ'][0], 0.0)

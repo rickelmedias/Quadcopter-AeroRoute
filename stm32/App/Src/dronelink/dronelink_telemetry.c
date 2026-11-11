@@ -23,6 +23,10 @@ static uint32_t last_state_ms;
 static uint32_t last_debug_ms;
 /** Passo do último DRONE_CTRL_DEBUG (para não repetir o mesmo passo). */
 static uint32_t last_debug_step;
+/** Último envio do DRONE_NAV_DEBUG. */
+static uint32_t last_nav_ms;
+/** Passo do último DRONE_NAV_DEBUG. */
+static uint32_t last_nav_step;
 
 /**
  * @brief z do LOCAL_POSITION_NED relativo ao chão (0 no chão, -h a h metros).
@@ -71,10 +75,24 @@ static void send_debug(const flight_telemetry_t *t) {
   dronelink_send(&m, DRONELINK_TX_NORMAL);
 }
 
+/** @brief DRONE_NAV_DEBUG com o EKF de navegação (control/nav_ekf.h). */
+static void send_nav(const flight_telemetry_t *t) {
+  const flight_nav_telemetry_t *n = &t->nav;
+  mavlink_message_t m;
+  mavlink_msg_drone_nav_debug_pack(DRONELINK_SYSTEM_ID, DRONELINK_FC_COMPONENT_ID, &m, t->time_ms,
+                                   n->flow_raw, n->flow_body, n->range_raw, n->range_filt, n->pos,
+                                   n->vel, n->bias, n->accel, n->flow_ratio, n->z_ratio,
+                                   (uint16_t)n->flow_rejected, (uint16_t)n->z_rejected,
+                                   (uint16_t)n->range_rejected, n->flags, n->quality);
+  dronelink_send(&m, DRONELINK_TX_NORMAL);
+}
+
 void dronelink_telemetry_init(void) {
   last_state_ms = 0U;
   last_debug_ms = 0U;
   last_debug_step = 0U;
+  last_nav_ms = 0U;
+  last_nav_step = 0U;
 }
 
 /**
@@ -107,7 +125,9 @@ void dronelink_telemetry_tick(uint32_t now_ms) {
   const bool debug_on = rate > 0.0F;
   const uint32_t period = debug_on ? (uint32_t)(1000.0F / rate) : 0U;
   const bool debug_due = debug_on && now_ms - last_debug_ms >= period;
-  if (!state_due && !debug_due) return;
+  const float nav_rate = p.nav_debug_rate_hz;
+  const bool nav_due = nav_rate > 0.0F && now_ms - last_nav_ms >= (uint32_t)(1000.0F / nav_rate);
+  if (!state_due && !debug_due && !nav_due) return;
 
   static flight_telemetry_t t;
   flight_ctrl_get_telemetry(&t);
@@ -119,5 +139,10 @@ void dronelink_telemetry_tick(uint32_t now_ms) {
     last_debug_ms = now_ms;
     last_debug_step = t.step;
     send_debug(&t);
+  }
+  if (nav_due && t.step != last_nav_step) {
+    last_nav_ms = now_ms;
+    last_nav_step = t.step;
+    send_nav(&t);
   }
 }

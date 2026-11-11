@@ -17,6 +17,7 @@ venv/
 # Ensaios locais -------------------------------------------------------------
 # CSVs de telemetria gravados pelo dronectl (tools/pi) na Pi ou no PC.
 tools/pi/logs/
+/real_log_kit/
 
 # Conversas completas usadas como referência são arquivos locais. Os
 # documentos consolidados e revisados continuam em docs/.

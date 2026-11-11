@@ -178,6 +178,8 @@ static lqg_dist_t dist;
 static bool dist_released;
 /** O XY já entrou neste voo (drone fora do chão); a posição foi zerada ali. */
 static bool xy_engaged;
+/** Deslocamento integral da referência x, y (referencial local), em m: ver ::update_xy_integral. */
+static float xy_int[2];
 /** Tick do último aviso de fluxo ausente com o XY ligado. */
 static uint32_t flow_lost_said_ms;
 /** Altura medida (z NED) deste passo, em m. */
@@ -683,6 +685,7 @@ static void handle_request(const request_t *req, uint32_t now) {
       lqg_dist_reset(&dist);
       dist_released = false;
       xy_engaged = false;
+      xy_int[0] = xy_int[1] = 0.0F;
       trim_reset(&trim);
       if (trim_learned_valid) {
         trim.theta = trim_learned.theta;
@@ -836,6 +839,19 @@ static void read_sensors(meas_input_t *in) {
   in->flow_x = (float)mtf.flow_x * 0.01F;
   in->flow_y = (float)mtf.flow_y * 0.01F;
   in->flow_valid = mtf.flow_valid;
+  in->flow_quality = mtf.quality;
+  /* Prior x̂[k|k-1] do Kalman: base da correção censurada do fluxo (FLOW_CENS). */
+  in->pred_vx = (float)lqg.x_pred[LQG_X_VX];
+  in->pred_vy = (float)lqg.x_pred[LQG_X_VY];
+  memcpy(in->lin_accel, bno.lin_accel, sizeof(in->lin_accel));
+  in->accel_valid = bno.online;
+  /* ZUPT só com o drone de fato apoiado: preso a "velocidade zero" depois de sair do chão, o
+     EKF esconderia o deslize (voo de 08/11 21:10: andou ~40 cm com o log em y = -0,9 cm). */
+  in->on_ground = is_armed_state(state) && !lifted &&
+                  (!isfinite(z_ground) ||
+                   z_ground - (float)lqg.x_filt[LQG_X_Z] < FLIGHT_GROUNDED_HEIGHT_M);
+  in->mtf_frame = mtf.frames;
+  in->mtf_time_ms = mtf.time_ms;
 }
 
 /**
@@ -887,6 +903,39 @@ static void supervise(uint8_t flags, const lqg_real_t y[LQG_NY], uint32_t now) {
       now - mtf_lost_since_ms > MTF_LOST_MS) {
     say("MTF sem dado: pousando");
     enter_land(FLIGHT_REASON_SENSOR_UNHEALTHY);
+  }
+}
+
+/**
+ * @brief Integral do erro de posição x, y (CTL_KI_XY).
+ *
+ * O LQG só tem termo proporcional em x, y. Um erro constante (nível do BNO,
+ * desequilíbrio) segura o drone fora do ponto ou o faz derivar para um lado.
+ * O integral soma o erro e desloca a referência que o LQG recebe; o
+ * pré-compensador tem ganho DC unitário, então o equilíbrio anda junto.
+ *
+ * Anti-windup: só integra no ar, com o XY ligado, fora do pouso e com
+ * velocidade x, y válida neste passo (fluxo ou inércia do EKF); fora disso
+ * congela. O deslocamento é limitado a CTL_XY_I_MAX (norma do vetor) e zera
+ * quando o XY desliga ou o ganho é 0.
+ *
+ * @param[in] flags  Medidas válidas deste passo (::meas_flag_t).
+ */
+static void update_xy_integral(uint8_t flags) {
+  if (!xy_engaged || !(prm.ki_xy > 0.0F)) {
+    xy_int[0] = xy_int[1] = 0.0F;
+    return;
+  }
+  const bool integrate = lifted && is_airborne_state(state) && state != FLIGHT_STATE_LAND &&
+                         (flags & MEAS_FLOW) != 0U;
+  if (!integrate) return;
+  xy_int[0] += prm.ki_xy * (ref[LQG_R_X] - (float)lqg.x_filt[LQG_X_X]) * DT_S;
+  xy_int[1] += prm.ki_xy * (ref[LQG_R_Y] - (float)lqg.x_filt[LQG_X_Y]) * DT_S;
+  const float norm = sqrtf(xy_int[0] * xy_int[0] + xy_int[1] * xy_int[1]);
+  const float limit = fmaxf(prm.xy_i_max, 0.0F);
+  if (norm > limit && norm > 0.0F) {
+    xy_int[0] *= limit / norm;
+    xy_int[1] *= limit / norm;
   }
 }
 
@@ -1139,6 +1188,18 @@ static void update_dist(bool enabled, const float u[LQG_NU]) {
     say("dist z=%d th=%d phi=%d psi=%d", (int)lqg_dist_get(&dist, LQG_DIST_Z),
         (int)lqg_dist_get(&dist, LQG_DIST_THETA), (int)lqg_dist_get(&dist, LQG_DIST_PHI),
         (int)lqg_dist_get(&dist, LQG_DIST_PSI));
+    /* Alturas em cm; velocidades em cm/s NED (+ desce). A Pi guarda este
+       texto mesmo sem USB, permitindo comparar os dois observadores de Z. */
+    if (xy_engaged) {
+      say("XY I cm x=%d y=%d", (int)(xy_int[0] * 100.0F), (int)(xy_int[1] * 100.0F));
+    }
+    if (meas_z_tracking && isfinite(z_ground)) {
+      say("Z cm h=%d ref=%d vz=%d vd=%d",
+          (int)((z_ground - meas_z_smooth) * 100.0F),
+          (int)((z_ground - ref[LQG_R_Z]) * 100.0F),
+          (int)(lqg.x_filt[LQG_X_VZ] * 100.0),
+          (int)(dist.s[LQG_DIST_Z][1] * 100.0F));
+    }
   }
   /* No chão o apoio segura o drone, e o estimador leria isso como empuxo
      sobrando (05/11: d̂ de altura em −160 rad/s e o drone não decolava). Até
@@ -1166,7 +1227,7 @@ static void update_dist(bool enabled, const float u[LQG_NU]) {
  * @param[out] du_applied  Entrada aplicada, para a predição.
  * @param[out] flags       Recebe ::FLIGHT_FLAG_SATURATED e ::FLIGHT_FLAG_CONTROL_ACTIVE.
  */
-static void compute_output(const lqg_real_t du[LQG_NU], float throttle[LQG_NU],
+static void compute_output(const lqg_real_t du_lqg[LQG_NU], float throttle[LQG_NU],
                            lqg_real_t du_applied[LQG_NU], uint8_t *flags) {
   const uint32_t now = HAL_GetTick();
   const uint32_t since_arm = now - armed_ms;
@@ -1181,7 +1242,8 @@ static void compute_output(const lqg_real_t du[LQG_NU], float throttle[LQG_NU],
   }
   if (!active) {
     for (unsigned i = 0U; i < LQG_NU; ++i) {
-      throttle[i] = is_armed_state(state) ? prm.mot_idle : 0.0F;
+      /* Armar apenas reserva a saída. O ESC só recebe rotação após TAKEOFF. */
+      throttle[i] = state == FLIGHT_STATE_TAKEOFF ? prm.mot_idle : 0.0F;
     }
     if (dist_active) {
       const float idle[LQG_NU] = {0.0F, 0.0F, 0.0F, 0.0F};
@@ -1213,19 +1275,30 @@ static void compute_output(const lqg_real_t du[LQG_NU], float throttle[LQG_NU],
     trim_values(&trim, slow_w);
   }
   for (unsigned i = 0U; i < LQG_NU; ++i) trim_w[i] += slow_w[i];
+  /* Limita o pedido completo: FF e estimador também produzem torque de yaw.
+     Limitar só du deixava essas parcelas ultrapassarem CTL_PSI_MAX. */
+  lqg_real_t requested[LQG_NU], limited[LQG_NU];
+  for (unsigned i = 0U; i < LQG_NU; ++i) requested[i] = du_lqg[i] + trim_w[i];
+  const bool yaw_cut = lqg_dist_limit_yaw(requested, limited, prm.psi_max);
   for (unsigned i = 0U; i < LQG_NU; ++i) {
-    const float w = prm.w0 + (float)du[i] + trim_w[i];
+    const float w = prm.w0 + (float)limited[i];
     throttle[i] = span > 0.0F ? (w - prm.mot_w_at_0) / span : 0.0F;
   }
   /* Um motor no teto desloca os quatro: a diferença que segura o nível fica. */
   bool modified = throttle_desaturate(throttle, LQG_NU, prm.mot_min, prm.mot_max);
-  if (modified) *flags |= FLIGHT_FLAG_SATURATED;
+  if (modified || yaw_cut) *flags |= FLIGHT_FLAG_SATURATED;
+  if (yaw_cut) modified = true;
   if (ramping_up || spinning_down) {
     const float factor = ramping_up
         ? throttle_ramp_up(since_arm - SPINUP_MS, FLIGHT_TAKEOFF_RAMP_MS)
         : throttle_ramp_down(now - land_spindown_ms, FLIGHT_LAND_SPINDOWN_MS);
-    for (unsigned i = 0U; i < LQG_NU; ++i) {
-      throttle[i] = throttle_blend(throttle[i], prm.mot_idle, factor);
+    if (ramping_up && prm.ramp_common_mode >= 0.5F) {
+      throttle_blend_common(throttle, LQG_NU, prm.mot_idle, factor);
+      (void)throttle_desaturate(throttle, LQG_NU, prm.mot_min, prm.mot_max);
+    } else {
+      for (unsigned i = 0U; i < LQG_NU; ++i) {
+        throttle[i] = throttle_blend(throttle[i], prm.mot_idle, factor);
+      }
     }
     modified = true;
   }
@@ -1236,8 +1309,10 @@ static void compute_output(const lqg_real_t du[LQG_NU], float throttle[LQG_NU],
          saturação nem rampa, é exatamente o du do LQG. */
       du_applied[i] = modified
           ? (lqg_real_t)(prm.mot_w_at_0 + throttle[i] * span - prm.w0 - trim_w[i])
-          : du[i];
-      sim_input[i] = (float)du_applied[i] + slow_w[i];
+          : du_lqg[i];
+      /* A planta simulada recebe o comando físico completo. O Kalman continua
+         usando du_applied, pois FF/trim são perturbações fora do modelo. */
+      sim_input[i] = (float)du_applied[i] + trim_w[i];
     }
   }
   *flags |= FLIGHT_FLAG_CONTROL_ACTIVE;
@@ -1250,6 +1325,30 @@ static void compute_output(const lqg_real_t du[LQG_NU], float throttle[LQG_NU],
   } else {
     update_trim(integrate);
   }
+}
+
+/** @brief Copia o estado do EKF de navegação e o diagnóstico do passo para a telemetria. */
+static void nav_snapshot(flight_nav_telemetry_t *n) {
+  const nav_ekf_t *f = &meas.nav;
+  const meas_diag_t *d = &meas.diag;
+  memcpy(n->flow_raw, d->flow_raw, sizeof(n->flow_raw));
+  memcpy(n->flow_body, d->flow_body, sizeof(n->flow_body));
+  memcpy(n->accel, d->accel, sizeof(n->accel));
+  n->range_raw = d->range_raw;
+  n->range_filt = d->range_filt;
+  const nav_ekf_axis_t *axes[3] = {&f->h[0], &f->h[1], &f->z};
+  for (unsigned i = 0U; i < 3U; ++i) {
+    n->pos[i] = axes[i]->x[0];
+    n->vel[i] = axes[i]->x[1];
+    n->bias[i] = axes[i]->x[2];
+  }
+  n->flow_ratio = f->flow_ratio;
+  n->z_ratio = f->z_ratio;
+  n->flow_rejected = f->flow_rejected;
+  n->z_rejected = f->z_rejected;
+  n->range_rejected = f->range.rejected;
+  n->flags = d->flags;
+  n->quality = d->quality;
 }
 
 /** @brief Publica a fotografia do passo e, na taxa pedida, a linha EST. */
@@ -1271,6 +1370,7 @@ static void publish(uint32_t now, uint32_t step_count, uint8_t meas_flags, uint8
   memcpy(t.ref, ref, sizeof(t.ref));
   memcpy(t.q, bno.q, sizeof(t.q));
   t.z_ground = z_ground;
+  nav_snapshot(&t.nav);
   if (step_us > t.max_step_us) t.max_step_us = step_us;
   if ((meas_flags & (MEAS_ATTITUDE | MEAS_GYRO)) != (MEAS_ATTITUDE | MEAS_GYRO)) ++t.bno_misses;
   if ((meas_flags & MEAS_RANGE) == 0U) ++t.mtf_misses;
@@ -1331,7 +1431,7 @@ static void step(uint32_t step_count) {
      ajustado troca Kd/Kfd (gerados ou do painel USB) e o Kalman. */
   if (prm.lqg_adjusted >= 0.5F && ctrl_gains_active_is_default()) {
     lqg_tuning_apply(&lqg_aj_gains, &gains_effective);
-    lqg_dist_apply_kalman(&gains_effective);
+    lqg_dist_apply_kalman(&gains_effective, prm.flow_ekf >= 0.5F);
   }
   meas_z_now = (float)y[LQG_Y_Z];
   meas_range_ok = (meas_flags & MEAS_RANGE) != 0U;
@@ -1339,7 +1439,10 @@ static void step(uint32_t step_count) {
      o fluxo do MTF não vale (sensor a 8–10 cm do piso) e, sem ele, o Kalman
      integraria a inclinação da mesa como velocidade durante a rampa de
      partida. Ao entrar, a posição é zerada: o ponto de decolagem é o (0, 0). */
-  if (use_xy && is_airborne_state(state) && lifted && !xy_engaged) {
+  /* Com FLOW_EKF o XY liga já na partida: o EKF segura a velocidade zero no chão (ZUPT) e,
+     no ar sem fluxo, segue pela inércia, então o drone não perde a origem na subida. */
+  const bool early_xy = prm.flow_ekf >= 0.5F && nav_ekf_xy_inertial(&meas.nav);
+  if (use_xy && is_airborne_state(state) && (lifted || early_xy) && !xy_engaged) {
     static const unsigned horizontal[] = {LQG_X_X, LQG_X_Y, LQG_X_VX, LQG_X_VY};
     for (unsigned k = 0U; k < sizeof(horizontal) / sizeof(horizontal[0]); ++k) {
       lqg.x_filt[horizontal[k]] = 0.0;
@@ -1347,6 +1450,7 @@ static void step(uint32_t step_count) {
     }
     ref[LQG_R_X] = ref[LQG_R_Y] = 0.0F;
     goal.target[LQG_R_X] = goal.target[LQG_R_Y] = 0.0F;
+    nav_ekf_zero_position(&meas.nav);
     xy_engaged = true;
     say("XY: ligado, ponto (0,0) na decolagem");
   }
@@ -1411,8 +1515,12 @@ static void step(uint32_t step_count) {
   check_stuck(now);
   update_reference(now);
 
+  update_xy_integral(meas_flags);
   lqg_real_t r[LQG_NR];
   for (unsigned i = 0U; i < LQG_NR; ++i) r[i] = (lqg_real_t)ref[i];
+  /* Só o LQG vê o deslocamento integral; ref (e o log) continua sendo o alvo. */
+  r[LQG_R_X] += (lqg_real_t)xy_int[0];
+  r[LQG_R_Y] += (lqg_real_t)xy_int[1];
   /* Com o XY na malha, o LQG trabalha no referencial da proa (ver
      attitude_mode_rotate_horizontal). ψ é o mesmo que girou o fluxo em meas. */
   const bool heading_frame = use_xy && xy_engaged;
@@ -1421,6 +1529,13 @@ static void step(uint32_t step_count) {
     attitude_mode_rotate_pair(&y[LQG_Y_VX], &y[LQG_Y_VY], -psi_now);
     attitude_mode_rotate_pair(&r[LQG_R_X], &r[LQG_R_Y], -psi_now);
     if (!lqg.ic_load) attitude_mode_rotate_horizontal(lqg.x_pred, -psi_now);
+  }
+  /* O Kalman do LQG não mede vz: ele a tira do modelo de empuxo, e o erro do modelo vira um
+     viés (−14 a −18 cm/s com a altura parada nos voos de 08/11, que segurava o drone a ~5 cm).
+     Com Z_EKF, o prior de vz é o do EKF (distância + acelerômetro), que acompanhou a altura. */
+  if (prm.z_ekf >= 0.5F && is_airborne_state(state) && !lqg.ic_load &&
+      nav_ekf_z_usable(&meas.nav) && isfinite(meas.nav.z.x[1])) {
+    lqg.x_pred[LQG_X_VZ] = (lqg_real_t)meas.nav.z.x[1];
   }
   lqg_real_t du[LQG_NU];
   lqg_ert_output(&lqg, &gains_effective, y, r, du);

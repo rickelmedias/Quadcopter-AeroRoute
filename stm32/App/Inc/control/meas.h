@@ -31,6 +31,7 @@
 #define CONTROL_MEAS_H
 
 #include "control/ctrl_params.h"
+#include "control/nav_ekf.h"
 #include "control/lqg_ert.h"
 
 #include <stdbool.h>
@@ -70,7 +71,55 @@ typedef struct {
   float flow_y;
   /** Fluxo utilizável. */
   bool flow_valid;
+  /** Qualidade da imagem do fluxo, 0..255 (usada só com FLOW_GATE). */
+  uint8_t flow_quality;
+  /** Velocidade vx prevista pelo Kalman para este passo (x̂[k|k-1]), em m/s; NAN se não houver. */
+  float pred_vx;
+  /** Velocidade vy prevista pelo Kalman para este passo, em m/s; NAN se não houver. */
+  float pred_vy;
+  /** Aceleração linear do BNO08x (gravidade já removida), em m/s², eixos do sensor. */
+  float lin_accel[3];
+  /** Aceleração linear válida (BNO online). */
+  bool accel_valid;
+  /** Drone apoiado no chão (armado e ainda não levantou): aplica velocidade zero ao EKF. */
+  bool on_ground;
+  /** Contador de quadros do MTF-01: as correções do EKF só usam quadro novo. */
+  uint32_t mtf_frame;
+  /** Relógio do MTF-01 no quadro, em ms (intervalo entre quadros). */
+  uint32_t mtf_time_ms;
 } meas_input_t;
+
+/** Menor distância aceita pelo filtro de distância do EKF, em m. */
+#define NAV_MIN_RANGE_M 0.02F
+
+/** Distância mínima do MTF para o fluxo entrar no EKF (abaixo disso o fluxo é ruído), em m. */
+#define NAV_FLOW_MIN_RANGE_M 0.12F
+
+/** @brief Bits de ::meas_diag_t::flags (o que o EKF de navegação fez neste passo). */
+typedef enum {
+  MEAS_DIAG_NEW_FRAME = 1U << 0,       /**< Chegou quadro novo do MTF. */
+  MEAS_DIAG_FLOW_FUSED = 1U << 1,      /**< Velocidade do fluxo fundida no EKF. */
+  MEAS_DIAG_FLOW_REJECTED = 1U << 2,   /**< Velocidade do fluxo recusada pelo gate. */
+  MEAS_DIAG_XY_USABLE = 1U << 3,       /**< Velocidade x, y do EKF convergida e recente. */
+  MEAS_DIAG_XY_TO_LQG = 1U << 4,       /**< O LQG recebeu a velocidade do EKF (FLOW_EKF). */
+  MEAS_DIAG_RANGE_REJECTED = 1U << 5,  /**< Distância recusada pelo filtro de distância. */
+  MEAS_DIAG_Z_REJECTED = 1U << 6,      /**< Altura recusada pelo gate do EKF. */
+  MEAS_DIAG_Z_USABLE = 1U << 7         /**< z do EKF recente. */
+} meas_diag_flag_t;
+
+/** Bit extra (fora do uint8 de telemetria): o LQG recebeu o z do EKF (Z_EKF). */
+#define MEAS_DIAG_Z_TO_LQG (1U << 8)
+
+/** @brief O que o EKF de navegação viu neste passo, para a telemetria. */
+typedef struct {
+  float flow_raw[2];   /**< Fluxo do MTF, x e y do sensor, em rad/s. */
+  float flow_body[2];  /**< Velocidade do fluxo nos eixos do corpo (frente, direita), em m/s. */
+  float range_raw;     /**< Distância lida, em m. */
+  float range_filt;    /**< Distância filtrada, em m. */
+  float accel[3];      /**< Aceleração usada na predição: x, y locais e para baixo, em m/s². */
+  uint16_t flags;      /**< Combinação de ::meas_diag_flag_t e ::MEAS_DIAG_Z_TO_LQG. */
+  uint8_t quality;     /**< Qualidade do fluxo, 0..255. */
+} meas_diag_t;
 
 /** @brief Estado da conversão (referência da guinada e última medida). */
 typedef struct {
@@ -84,6 +133,16 @@ typedef struct {
   float yaw_unwrapped;
   /** A origem da guinada já foi definida. */
   bool yaw_ready;
+  /** Qualidade do fluxo acima do limiar, com histerese (FLOW_GATE). */
+  bool flow_quality_ok;
+  /** EKF de navegação x, y, z (control/nav_ekf.h). */
+  nav_ekf_t nav;
+  /** Último quadro do MTF usado nas correções. */
+  uint32_t last_mtf_frame;
+  /** Relógio do MTF no último quadro, em ms. */
+  uint32_t last_mtf_time_ms;
+  /** Diagnóstico do passo, para a telemetria. */
+  meas_diag_t diag;
 } meas_state_t;
 
 /**

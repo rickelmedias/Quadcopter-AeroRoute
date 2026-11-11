@@ -74,6 +74,36 @@ typedef struct {
   float flow_yaw_x;
   /** FLOW_YAW_Y: idem para y do corpo. */
   float flow_yaw_y;
+  /** FLOW_GYRO_XY: ganho do giro y do BNO (roll) no fluxo X; 0 desliga (pareamento cruzado). */
+  float flow_gyro_xy;
+  /** FLOW_GYRO_YX: ganho do giro x do BNO (pitch) no fluxo Y; 0 desliga. */
+  float flow_gyro_yx;
+  /** FLOW_EKF: 1 = o LQG recebe vx, vy do EKF de navegação (control/nav_ekf.h). */
+  float flow_ekf;
+  /** Z_EKF: 1 = o LQG recebe o z do EKF de navegação (distância filtrada e acelerômetro). */
+  float z_ekf;
+  /** FEKF_ACC_N: ruído da aceleração horizontal no EKF, em m/s². */
+  float fekf_acc_noise;
+  /** FEKF_ACCZ_N: ruído da aceleração vertical no EKF, em m/s². */
+  float fekf_accz_noise;
+  /** FEKF_BIAS_N: passeio do viés do acelerômetro, em m/s² por raiz de s. */
+  float fekf_bias_noise;
+  /** FEKF_FLOW_N: ruído do fluxo no EKF, em rad/s (vezes a distância = m/s). */
+  float fekf_flow_noise;
+  /** FEKF_RNG_N: ruído da distância no EKF, em m. */
+  float fekf_range_noise;
+  /** FEKF_GATE: gate de inovação do EKF, em desvios (0 desliga). */
+  float fekf_gate;
+  /** FLOW_GATE: 1 = rejeita fluxo de baixa qualidade, com inclinação grande ou absurdo. */
+  float flow_gate;
+  /** FLOW_CENS: 1 = fluxo zero vira "dentro de uma contagem": usa a predição do Kalman nessa faixa. */
+  float flow_cens;
+  /** FLOW_BIAS_X: viés do fluxo X do sensor parado, em rad/s (subtraído da leitura). */
+  float flow_bias_x;
+  /** FLOW_BIAS_Y: idem para o fluxo Y. */
+  float flow_bias_y;
+  /** FLOW_SWAP: 1 = o canal Y do fluxo é a frente e o X é a esquerda (eixos do MTF girados). */
+  float flow_swap;
   /** FLT_HOVER_H: altura padrão do comando hover, em m. */
   float hover_height;
   /** FLT_Z_RATE: velocidade da rampa de referência vertical, em m/s (0 = degrau). */
@@ -94,6 +124,12 @@ typedef struct {
   float debug_rate_hz;
   /** LOG_EST_HZ: taxa da linha EST no log USB, em Hz (0 desliga). */
   float log_est_hz;
+  /** NAV_DBG_HZ: taxa do DRONE_NAV_DEBUG para a Pi, em Hz (0 desliga). */
+  float nav_debug_rate_hz;
+  /** CTL_KI_XY: ganho do integral do erro de posição x, y, em 1/s (0 desliga). */
+  float ki_xy;
+  /** CTL_XY_I_MAX: limite do deslocamento integral de x, y, em m. */
+  float xy_i_max;
   /** SNS_ZERO_ROLL: roll cru do BNO08x com o drone nivelado, em graus. */
   float zero_roll_deg;
   /** SNS_ZERO_PITCH: pitch cru do BNO08x com o drone nivelado, em graus. */
@@ -131,6 +167,10 @@ typedef struct {
   float use_dist;
   /** FLT_PRESO: 1 = liga o detector de subida presa (bancada com cordinhas). */
   float stuck_detect;
+  /** CTL_PSI_MAX: limite da guinada total (LQG + FF + estimador), rad/s; 0 desliga. */
+  float psi_max;
+  /** FLT_RAMP_CM: 1 = a rampa de partida só reduz a média, sem encolher a diferença entre motores. */
+  float ramp_common_mode;
 } ctrl_params_t;
 
 /** @brief Regras de um parâmetro. */

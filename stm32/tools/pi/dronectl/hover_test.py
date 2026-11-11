@@ -24,8 +24,8 @@ O que ele faz, em ordem:
    saída da cerca (80 cm do ponto de decolagem), telemetria parada por 1 s,
    Ctrl+C ou a sessão SSH caindo (SIGHUP) → pouso; **Ctrl+C de novo corta os
    motores** (desarma onde estiver);
-4. grava tudo em ``~/drone/ensaios/hover_<data>/`` (telemetria.csv, textos.txt,
-   meta.json, resumo.json, linha_do_tempo.txt) e imprime a análise
+4. grava tudo em ``~/real_log_kit/hover_<data>/`` (incluindo o CSV completo
+   ``real_log.csv`` para planilhas), e imprime a análise
    (``hover_report``) com a sugestão para o próximo voo, que fica guardada no
    perfil.
 
@@ -50,11 +50,12 @@ from .gains import REPO_ROOT, Gains
 from .hover_report import (ARMED, FAILSAFE, HOLD, LEG, MOTOR_OF_INPUT, STANDBY, TAKEOFF,
                            CSV_HEADER, Report, Sample, analyze, format_report, sample_row)
 from .link import DroneLink, LinkError, state_name
+from .nav_report import analyze_nav, nav_notes, save_nav_log
 
 #: Perfil padrão (fora de tools/: o deploy não apaga).
 PROFILE_PATH = Path.home() / 'drone' / 'perfil_hover.json'
-#: Pasta padrão dos ensaios.
-RESULTS_DIR = Path.home() / 'drone' / 'ensaios'
+#: Kit autocontido de cada ensaio. Fica fora do deploy para não ser apagado.
+RESULTS_DIR = Path.home() / 'real_log_kit'
 #: Altura e tempo de hover de um perfil novo.
 DEFAULT_HEIGHT_CM = 30.0
 DEFAULT_TIME_S = 20.0
@@ -85,6 +86,11 @@ LAND_WAIT_S = 30.0
 REACHED_M = 0.03
 #: Altura abaixo da qual o drone conta como no chão, em m.
 ON_GROUND_M = 0.05
+# Durante a decolagem, Ctrl+C a poucos centímetros do chão precisa cortar
+# antes que o pouso normal mantenha o hover por mais de meio segundo.
+# O ensaio de 08/11 abortado a 8,4 cm ainda terminou em failsafe no pouso.
+LOW_ABORT_MEAS_M = 0.10
+LOW_ABORT_EST_M = 0.12
 #: Ensaio a seco: tempo depois do tempo de hover até pousar, em s.
 DRY_EXTRA_S = 3.0
 #: Ensaios guardados no histórico do perfil.
@@ -210,14 +216,15 @@ def check_q_names(q: Dict[str, float]) -> None:
                          f'(use {", ".join(names)})')
 
 
-def adjusted_gains(q_override: Dict[str, float],
-                   r: Optional[float]) -> Tuple[Gains, List[float], float]:
+def adjusted_gains(q_override: Dict[str, float], r: Optional[float],
+                   fused: bool = False) -> Tuple[Gains, List[float], float]:
     """Kd/Kfd do dlqr do ajustado com os pesos Q pedidos e o Kalman do ajustado.
 
     ``q_override`` usa os nomes dos estados (x, y, z, phi, theta, psi, vx, vy,
     vz, p, q, r); o que faltar fica com o Q do LQG ajustado do firmware. L e
     M são os do ajustado (``kalman_lqg(RN_AJUSTADO)``), os mesmos que o
-    firmware usa com os ganhos de fábrica.
+    firmware usa com os ganhos de fábrica; com ``fused`` (FLOW_EKF = 1), os do
+    Kalman da velocidade fundida (``kalman_lqg(RN_FUNDIDO)``), como o firmware.
 
     Returns:
         Os ganhos, o Q completo usado e o R usado.
@@ -229,7 +236,7 @@ def adjusted_gains(q_override: Dict[str, float],
     if rr <= 0 or any(v < 0 for v in q):
         raise ValueError('Q não pode ser negativo e R precisa ser positivo')
     Kd, Kfd = aj.ganhos_lqg(q, rr)
-    M, L = aj.kalman_lqg(aj.RN_AJUSTADO)
+    M, L = aj.kalman_lqg(aj.RN_FUNDIDO if fused else aj.RN_AJUSTADO)
     return Gains(Kd=Kd, Kfd=Kfd, L=L, M=M), q, rr
 
 
@@ -290,10 +297,14 @@ class HoverTest:
         self.say = say
         #: (time.monotonic da chegada, DebugSample).
         self.samples: List[Tuple[float, object]] = []
+        #: (time.monotonic da chegada, NavSample) do DRONE_NAV_DEBUG.
+        self.nav_samples: List[Tuple[float, object]] = []
         self.texts: List[Tuple[float, str]] = []
         self.stop_reason: Optional[str] = None
         self.kill = False
         self.applied: Dict[str, float] = {}
+        #: Fotografia de todos os parâmetros do STM32 imediatamente antes de armar.
+        self.params_snapshot: Dict[str, float] = {}
         self.gains_info: Dict = {}
         self.ground: Optional[float] = None
         self.armed_by_us = False
@@ -304,11 +315,15 @@ class HoverTest:
         self.report: Optional[Report] = None
         link.on_text = self._on_text
         link.subscribe(self._on_sample)
+        link.subscribe_nav(self._on_nav)
 
     # -- recepção (thread do enlace) --
 
     def _on_sample(self, s) -> None:
         self.samples.append((time.monotonic(), s))
+
+    def _on_nav(self, n) -> None:
+        self.nav_samples.append((time.monotonic(), n))
 
     def _on_text(self, text: str) -> None:
         self.texts.append((time.monotonic(), text))
@@ -391,6 +406,15 @@ class HoverTest:
                  (', '.join(f'{k}={v:g}' for k, v in sorted(changed.items())) or 'nada'))
         self.profile.save()  # guarda os valores de fábrica lidos
 
+    def _flow_ekf_on(self) -> bool:
+        """FLOW_EKF em uso no STM32: o Kalman enviado com --q precisa ser o mesmo modo."""
+        if 'FLOW_EKF' in self.applied:
+            return self.applied['FLOW_EKF'] >= 0.5
+        try:
+            return self.link.param_get('FLOW_EKF') >= 0.5
+        except LinkError:
+            return False  # firmware sem fusão
+
     def _apply_gains(self) -> None:
         q = dict(self.profile.q)
         q.update(self.opts.q)
@@ -402,15 +426,27 @@ class HoverTest:
             return
         if self.applied.get('CTL_LQG_AJ', 1.0) < 0.5:
             raise LinkError('os pesos Q são do LQG ajustado: precisa de CTL_LQG_AJ = 1')
+        fused = self._flow_ekf_on()
         try:
-            gains, q_used, r_used = adjusted_gains(q, r)
+            gains, q_used, r_used = adjusted_gains(q, r, fused)
         except ValueError as exc:
             raise LinkError(str(exc)) from exc
         crc = self.link.upload_gains(gains)
         self.gains_info = {'custom': True, 'q_changed': q, 'q': q_used, 'r': r_used,
-                           'crc': f'{crc:08X}'}
+                           'fused': fused, 'crc': f'{crc:08X}'}
         self.say(f'ganhos do ajustado com Q {q or "de fábrica"} e R={r_used:g} em uso '
                  f'(crc {crc:08X})')
+
+    def _snapshot_for_log(self) -> None:
+        """Lê a configuração completa que ficará repetida no CSV do ensaio.
+
+        A leitura acontece desarmado, depois de aplicar perfil, ``--set`` e
+        ganhos, para que o arquivo prove exatamente com que configuração o
+        voo começou. ``param_list`` também pega parâmetros que o hover-test
+        normalmente não altera (sinais, limites, curva de motor etc.).
+        """
+        self.params_snapshot = self.link.param_list()
+        self.applied = dict(self.params_snapshot)
 
     def prepare(self) -> None:
         o = self.opts
@@ -434,6 +470,7 @@ class HoverTest:
                                 'firmware?)')
 
         self._set('DBG_RATE_HZ', o.rate_hz)
+        self._snapshot_for_log()
         self._wait_samples(int(o.rate_hz), 3.0)
         s = self._last()
         if s is None:
@@ -458,7 +495,8 @@ class HoverTest:
         o = self.opts
         if o.mode == 'motors' and o.countdown_s > 0:
             self.say(f'MOTORES VÃO GIRAR: decolando em {o.countdown_s:.0f} s (Ctrl+C cancela; '
-                     'no ar, Ctrl+C pousa e Ctrl+C de novo corta os motores)')
+                     'perto do chão na decolagem corta; acima disso pousa; '
+                     'Ctrl+C de novo corta os motores)')
             end = time.monotonic() + o.countdown_s
             while time.monotonic() < end and not self.stop_reason:
                 time.sleep(0.05)
@@ -546,6 +584,24 @@ class HoverTest:
 
     def land(self) -> None:
         """Pede pouso e espera o desarme (Ctrl+C de novo corta os motores)."""
+        # Durante a decolagem, um cancelamento a poucos centímetros do chão
+        # não deve manter o empuxo de hover enquanto o firmware aguarda a
+        # referência de pouso e mais 500 ms de contato. No ensaio de 08/11 o
+        # Ctrl+C veio a 2,6 cm e o failsafe ocorreu nesse intervalo. Exige
+        # amostra recente, altura medida e estimada baixas; em voo mais alto,
+        # o primeiro Ctrl+C continua pedindo pouso.
+        s = self._last()
+        if (self.stop_reason == 'Ctrl+C' and self.opts.mode == 'motors' and
+                self._state() == TAKEOFF and self.ground is not None and s is not None and
+                self.samples and time.monotonic() - self.samples[-1][0] < 0.2 and
+                s.meas_flags & 4):
+            h_meas, h_est = self._height(s)
+            if h_meas < LOW_ABORT_MEAS_M and h_est < LOW_ABORT_EST_M:
+                self._disarm_now('Ctrl+C durante a decolagem, perto do chão')
+                end = time.monotonic() + 2.0
+                while time.monotonic() < end and self._state() not in (STANDBY, FAILSAFE):
+                    time.sleep(0.05)
+                return
         try:
             self.link.land()
         except LinkError as exc:
@@ -606,7 +662,8 @@ class HoverTest:
         o = self.opts
         return {'date': datetime.now().isoformat(timespec='seconds'), 'label': o.label,
                 'mode': o.mode, 'height_m': o.height_m, 'time_s': o.time_s,
-                'params': self.applied, 'set_this_test': o.params, 'gains': self.gains_info,
+                'params': self.params_snapshot or self.applied, 'set_this_test': o.params,
+                'gains': self.gains_info,
                 'boot_id': self.link.boot_id, 'ground_y_z': self.ground,
                 'land_reason': self.land_reason, 'stop_reason': self.stop_reason,
                 'error': self.error}
@@ -620,6 +677,8 @@ class HoverTest:
             w.writerow(CSV_HEADER)
             for t_pi, s in samples:
                 w.writerow(sample_row(t_pi, s))
+        self._save_real_log(folder, samples)
+        self._save_gains(folder)
         (folder / 'textos.txt').write_text(''.join(f'{t:.3f}\t{txt}\n' for t, txt in texts),
                                            encoding='utf-8')
         meta = self.meta()
@@ -633,12 +692,77 @@ class HoverTest:
             report.notes.insert(0, f'fim do voo: {self.land_reason}')
         if self.error:
             report.notes.insert(0, f'ensaio interrompido: {self.error}')
+        nav = list(self.nav_samples)
+        if nav:
+            save_nav_log(folder / 'nav_log.csv', nav)
+            report.metrics['nav'] = analyze_nav([n for _, n in nav], [s for _, s in samples])
+            report.notes.extend(nav_notes(report.metrics['nav']))
         (folder / 'resumo.json').write_text(
             json.dumps({'metrics': report.metrics, 'suggestion': report.suggestion,
                         'notes': report.notes}, indent=1, ensure_ascii=False), encoding='utf-8')
         (folder / 'linha_do_tempo.txt').write_text('\n'.join(report.timeline) + '\n',
                                                    encoding='utf-8')
         return report
+
+    def _gain_snapshot(self) -> Dict:
+        """Descrição auditável dos ganhos esperados para o CRC que foi usado."""
+        q_changed = self.gains_info.get('q_changed', {})
+        r = self.gains_info.get('r')
+        fused = bool(self.gains_info.get('fused', self.applied.get('FLOW_EKF', 0.0) >= 0.5))
+        gains, q, r_used = adjusted_gains(q_changed, r, fused)
+        return {'custom': bool(self.gains_info.get('custom')), 'crc': self.gains_info.get('crc'),
+                'kalman': 'fundido (FLOW_EKF)' if fused else 'ajustado',
+                'q': q, 'r': r_used, 'state_names': _ajustado().lp.ESTADOS,
+                'Kd': gains.Kd, 'Kfd': gains.Kfd, 'L': gains.L, 'M': gains.M}
+
+    def _save_gains(self, folder: Path) -> None:
+        """Salva as matrizes uma vez; o CSV guarda CRC, Q e R em cada linha."""
+        (folder / 'gains.json').write_text(
+            json.dumps(self._gain_snapshot(), indent=1, ensure_ascii=False), encoding='utf-8')
+
+    def _save_real_log(self, folder: Path, samples: List[Tuple[float, object]]) -> None:
+        """CSV de planilha, com cabeçalhos físicos e contexto repetido em cada amostra.
+
+        ``telemetria.csv`` continua sendo o formato compacto interno do
+        hover-report. Este arquivo é deliberadamente largo: pode ser aberto
+        isoladamente no LibreOffice/Excel e não exige juntar meta ou ganhos.
+        """
+        state_names = _ajustado().lp.ESTADOS
+        gain = self._gain_snapshot()
+        params = self.params_snapshot or self.applied
+        header = (
+            ['t_pi_s', 't_stm32_ms', 'step', 'state', 'meas_flags', 'ctrl_flags',
+             'mode', 'boot_id', 'target_height_m', 'ground_y_z_m',
+             'm1_pct', 'm2_pct', 'm3_pct', 'm4_pct'] +
+            ['y_z_m', 'y_phi_rad', 'y_theta_rad', 'y_psi_rad', 'y_vx_m_s', 'y_vy_m_s',
+             'y_p_rad_s', 'y_q_rad_s', 'y_r_rad_s'] +
+            ['x_m', 'y_m', 'z_m', 'phi_rad', 'theta_rad', 'psi_rad', 'vx_m_s', 'vy_m_s',
+             'vz_m_s', 'p_rad_s', 'q_rad_s', 'r_rad_s'] +
+            ['du_u1_rad_s', 'du_u2_rad_s', 'du_u3_rad_s', 'du_u4_rad_s',
+             'ref_x_m', 'ref_y_m', 'ref_z_m', 'ref_psi_rad',
+             'thr_u1_pct', 'thr_u2_pct', 'thr_u3_pct', 'thr_u4_pct',
+             'gain_custom', 'gain_crc'] +
+            [f'q_{name}' for name in state_names] + ['r_lqr'] +
+            [f'param_{name}' for name in sorted(params)]
+        )
+        with open(folder / 'real_log.csv', 'w', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f, delimiter=';')
+            writer.writerow(header)
+            for t_pi, s in samples:
+                motors = [0.0] * 4
+                for input_index, motor in enumerate(MOTOR_OF_INPUT):
+                    motors[motor - 1] = s.throttle[input_index] * 100.0
+                row = ([f'{t_pi:.6f}', s.time_ms, s.step, s.state, s.meas_flags, s.ctrl_flags,
+                        self.opts.mode, self.link.boot_id, f'{self.opts.height_m:.6g}',
+                        '' if self.ground is None else f'{self.ground:.6g}'] +
+                       [f'{v:.6f}' for v in motors] +
+                       [f'{v:.8g}' for v in s.y] + [f'{v:.8g}' for v in s.x_hat] +
+                       [f'{v:.8g}' for v in s.du] + [f'{v:.8g}' for v in s.ref] +
+                       [f'{v * 100.0:.6f}' for v in s.throttle] +
+                       [int(gain['custom']), gain['crc'] or ''] +
+                       [f'{v:.12g}' for v in gain['q']] + [f'{gain["r"]:.12g}'] +
+                       [f'{params[name]:.9g}' for name in sorted(params)])
+                writer.writerow(row)
 
     # -- tudo --
 

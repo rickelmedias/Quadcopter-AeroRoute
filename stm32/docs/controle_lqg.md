@@ -497,3 +497,46 @@ As linhas z e vz do B do ajustado agora usam o ω0 real (`LQG_AJ_Z_SCALE`,
 0,70), também na predição do Kalman (`lqg_dist_kalman_input`, coletivo) e no
 estimador de altura. Em simulação, num empurrão coletivo de 40 rad/s, o erro do
 vz estimado cai de 4,2 para 0,8 cm/s; Kz fica em ~110 e Kvz vai de 89,6 a 106,8.
+
+## 14. Fusão do fluxo com o acelerômetro (branch `hover-lqg-pi-better`, 08/11)
+
+**Por quê.** O gráfico X/Y do log não batia com o vídeo dos voos. Nas capturas
+pela USB (MTF, BNO e motores crus) o fluxo em voo tem desvio de ~7 cm/s de uma
+amostra para a próxima, e a compensação do giro estava no pareamento errado
+(corrigida com `FLOW_GYRO_XY/YX`). O acelerômetro do BNO é limpo em alta
+frequência, mas tem viés.
+
+**O que faz (`control/flow_fusion.h`, `FLOW_EKF = 1`).** Por eixo do corpo
+(frente, direita), um Kalman de dois estados, velocidade e viés do
+acelerômetro: a aceleração linear do BNO prediz a velocidade a cada 10 ms
+(com o termo de rotação da guinada), e a velocidade do fluxo a corrige, com
+gate de inovação de 3σ (recusa e, depois de 0,5 s de recusas, adota a medida).
+A saída substitui a velocidade do fluxo que vai para o LQG.
+
+- A aceleração usa o mesmo mapa dos giros: frente = `SNS_SGN_P` × eixo y do
+  BNO, direita = `SNS_SGN_Q` × eixo x. Conferido com o voo capturado: a
+  direita casa com +x do BNO (r = +0,42); a frente com −y, com o sinal certo,
+  mas fraco (o drone estava seguro pela frente).
+- No mesmo voo, rodado em Python sobre a captura, o ruído amostra a amostra
+  caiu de 7,0 para ~0,6 cm/s; o desvio total, de ~12 para ~9,5 cm/s (o resto
+  é movimento lento); o viés convergiu para < 0,05 m/s²; 2% a 3% das medidas
+  foram recusadas.
+- **Não corrige** erro de escala nem viés lento do fluxo, e a posição continua
+  sendo a integral da velocidade.
+
+**Kalman do LQG para a velocidade fundida.** Com `FLOW_EKF = 1`, o voo troca o
+M, L do LQG ajustado pelos de `RN_FUNDIDO` (`tools/lqg_ajustado.py`): vx e vy
+com desvio de 3 cm/s em vez de 11 cm/s. O ganho de correção de vx sobe de
+0,243 para 0,636. O raio espectral da malha planta + Kalman + LQR (modelo
+corrigido) é o mesmo de antes (~1, a posição x, y não medida). O
+`hover-test` com `--q` envia o Kalman do mesmo modo que o firmware usa.
+
+| Parâmetro | Padrão | Significado |
+|---|---|---|
+| `FLOW_EKF` | 0 | 1 = liga a fusão e o Kalman fundido (só desarmado) |
+| `FEKF_ACC_N` | 1,0 | Ruído da aceleração, m/s² |
+| `FEKF_BIAS_N` | 0,02 | Passeio do viés, m/s² por raiz de s |
+| `FEKF_FLOW_N` | 0,10 | Ruído da velocidade do fluxo, m/s |
+| `FEKF_GATE` | 3 | Gate de inovação, em desvios (0 desliga) |
+
+Não combinar com `FLOW_CENS` (os dois tratam a mesma medida).

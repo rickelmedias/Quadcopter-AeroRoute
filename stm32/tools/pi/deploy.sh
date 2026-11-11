@@ -26,7 +26,7 @@ rsync -aR --delete --exclude '__pycache__' --exclude '.venv' \
   reference/STM32_ert_rtw/STM32_data.c \
   App/Src/control/lqg_ert_model.c App/Src/control/lqg_ajustado_gains.c \
   tools/ert_import.py tools/lqg_ajustado.py tools/lqg_modelo.py \
-  tools/pi/dronectl tools/pi/missoes tools/pi/tests tools/pi/ensaios/ensaio_dronelink.py tools/pi/ensaios/assinatura_ag.py \
+  tools/pi/dronectl tools/pi/missoes tools/pi/tests tools/pi/ensaios/ensaio_dronelink.py tools/pi/ensaios/assinatura_ag.py tools/pi/buscar_real_log_kit.sh \
   tools/pi/requirements.txt tools/pi/README.md \
   "$HOST:$DEST/"
 
