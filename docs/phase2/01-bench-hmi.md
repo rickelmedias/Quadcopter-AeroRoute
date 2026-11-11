@@ -38,7 +38,7 @@ STM32 (firmware)  --USB CDC, DroneLink/MAVLink 2-->  hmi/server (Python, PC)  --
 | DShot value actually sent, EKF internals | new `DRONE_MOTOR_OUT`, existing `DRONE_CTRL_DEBUG` |
 
 - **Server (`hmi/server`)**: Python in the `aeroroute` conda env. pyserial plus pymavlink parse the link, a WebSocket pushes decoded data, and every message is written to a session file with timestamps.
-- **Web UI (`hmi/web`)**: plain HTML, CSS and TypeScript in a local browser page, with uPlot for high-rate charts. A web UI also lets us use **Impeccable** (`/impeccable critique`, `audit`, `polish`, `distill`) on the first versions. Install it when `hmi/web` exists: `npx impeccable install`, then `/impeccable init`.
+- **Web UI (`hmi/web`)**: plain HTML, CSS and JavaScript ES modules with no build step (`// @ts-check` and JSDoc types for checking), served by the Python server, with uPlot for high-rate charts. A web UI also lets us use **Impeccable** (`/impeccable critique`, `audit`, `polish`, `distill`) on the first versions. Install it when `hmi/web` exists: `npx impeccable install`, then `/impeccable init`.
 
 ## Motor safety (firmware, not the UI)
 
@@ -47,16 +47,23 @@ The UI only requests; the STM32 decides.
 - Disarmed means DShot value 0 on all four channels, sent continuously. This is the boot state.
 - Arming requires: DTR on, HMI heartbeat present, all motor commands at 0, sensors valid, battery above a minimum when measured.
 - Link loss (no HMI heartbeat for 300 ms), DTR drop, USB disconnect or a fault forces DShot 0 and disarms.
-- Motor test throttle is capped in firmware (start at 15 %) and every test has a duration limit.
+- Throttle is capped in firmware at 40 % (hard limit, compile-time). The UI cap slider can only lower it. Commands above the active cap are clamped, not rejected.
+- Direction changes are accepted only while disarmed, with all motors stopped.
 - The UI has a permanent **STOP** control (also the space bar) that sends disarm. The firmware disarms on its own if the UI freezes.
 - Agents never arm or spin motors. A person at the bench uses the HMI.
 
 ## Screen
 
 - **Top: live panel.** Groups for IMU, orientation, MTF-01, EKF, motors and ESC, and power. Each value shows its unit and a validity marker. Rolling charts are optional per value.
-- **Freeze.** Captures an N-second window (for example 2 s) rather than a single sample, and stores mean, standard deviation, min and max for each value. A freeze has a label ("ESC on, motors stopped").
-- **Bottom: frozen samples.** For each freeze, mean ± σ and the difference from live values (Δ and Δ/σ), highlighted when Δ exceeds 3σ. Two freezes can be compared with each other.
-- **Motor panel.** Arm/disarm, per-motor and all-motor sliders with the cap, step test (0 → x % in steps, hold, back to 0), DShot value sent and RPM received.
+- **Freeze.** One click saves the current values instantly, with no waiting. The saved row stays below until deleted. Alongside each value it also stores mean and σ of the last second already buffered, so noise can be compared. A freeze has an editable label ("ESC on, motors stopped").
+- **Bottom: frozen samples.** List of saved rows, each with the difference from live values (Δ), highlighted when Δ exceeds 3σ of that row. Two saved rows can be compared with each other.
+- **Motor panel.**
+  - Arm/disarm and STOP.
+  - **Cap slider** 0–40 %: maximum any motor slider can reach.
+  - **Four motor sliders** 0 to cap, each showing DShot value sent and RPM received.
+  - **Group:** checkboxes select which motors (any subset or all) follow one shared slider.
+  - **Direction per motor:** normal/reversed toggle, applied with AM32 DShot commands 7/8 while disarmed. By default not saved to the ESC (resets on power-up); a separate "save to ESC" button sends command 12. The current bench configuration (M1 and M4 reversed, `stm32/docs/guia_teste_motores.md`) is shown as the reference.
+  - Step test: selected motors 0 → x % in steps, hold, back to 0.
 - **Session.** Start/stop recording, file name, notes; export a CSV per message type plus a JSON with freezes and notes.
 - **Analysis view.** FFT of gyro and accel with motor RPM marked, so vibration peaks can be matched to rotor speed.
 
@@ -102,6 +109,6 @@ hmi/
 
 ## Open decisions
 
-- Freeze window length and which values get charts by default.
-- Initial motor-test throttle cap.
-- TypeScript build: none (plain ES modules) or Vite.
+- Which values get charts by default.
+
+Decided: freeze saves instantly and persists until deleted; firmware cap 40 % with a UI cap slider; per-motor sliders, any-subset grouping and direction toggles; no front-end build step.
