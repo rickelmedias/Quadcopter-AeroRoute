@@ -111,6 +111,7 @@ static void print_param(size_t index) {
 static void help(void) {
   log_text("bancada: arm | m <0-4> <pct> | sweep <0-4> [max] [passo] [seg]");
   log_text("rate <pct/s> | beep <1-4> | log on|off | status");
+  log_text("cap <pct>: limite da bancada (max 40) | dir <0-4> n|r [save]: sentido");
   log_text("voo: hover [h] | dry [h] | land | hold | lqg");
   log_text("goto <x> <y> <z> | move <dx> <dy> [dz] | yaw <graus>");
   log_text("sp <x> <y> <altura> <guinada graus>: setpoint (m, m, m)");
@@ -162,6 +163,32 @@ static bool bench_command(int argc, char **argv) {
     }
     motors_bench_rate((uint32_t)r * 10U);
     say("rate=%ld%%/s", r);
+    return true;
+  }
+  if (!strcmp(c, "cap")) {
+    if (argc < 2) {
+      say("uso: cap <pct>");
+      return true;
+    }
+    const uint16_t cap = motors_bench_cap(pct_to_permille(argv[1], 0U));
+    say("cap=%u%%", cap / 10U);
+    return true;
+  }
+  if (!strcmp(c, "dir")) {
+    const uint8_t mask = motor_mask(argc > 1 ? argv[1] : NULL);
+    const char *way = argc > 2 ? argv[2] : "";
+    if (!mask || (strcmp(way, "n") != 0 && strcmp(way, "r") != 0)) {
+      say("uso: dir <0-4> n|r [save]");
+      return true;
+    }
+    const bool save = argc > 3 && !strcmp(argv[3], "save");
+    const uint8_t reversed = !strcmp(way, "r") ? mask : 0U;
+    if (!motors_set_direction(mask, reversed, save)) {
+      say("dir so desarmado e parado");
+      return true;
+    }
+    say("dir mascara=0x%X %s%s", mask, !strcmp(way, "r") ? "invertido" : "normal",
+        save ? " (gravado no ESC)" : "");
     return true;
   }
   if (!strcmp(c, "beep")) {
@@ -518,8 +545,13 @@ static void console_task(void *argument) {
         line[used++] = c;
       }
     }
-    if (motors_owner() == MOTORS_OWNER_BENCH && !CDC_HostDTR()) {
-      motors_stop("porta USB fechada");
+    if (motors_owner() == MOTORS_OWNER_BENCH) {
+      if (CDC_HostDTR()) {
+        /* Esta task roda a cada <= 20 ms; se ela travar, a bancada desarma. */
+        motors_bench_keepalive();
+      } else {
+        motors_stop("porta USB fechada");
+      }
     }
     check_watchdog();
   }

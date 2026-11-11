@@ -6,8 +6,10 @@
  * ninguém armou, ela manda só zeros, que é o que o ESC precisa para armar.
  * Dois clientes podem armar a saída, um de cada vez:
  *
- * - ::MOTORS_OWNER_BENCH: teste de bancada pelo console USB. Cada motor segue
- *   um alvo em décimos de por cento, com rampa limitada, ou uma varredura.
+ * - ::MOTORS_OWNER_BENCH: teste de bancada pelo console USB ou pela IHM. Cada
+ *   motor segue um alvo em décimos de por cento, com rampa limitada, ou uma
+ *   varredura, nunca acima do limite ajustável (no máximo 40 %). Desarma sem
+ *   ::motors_bench_keepalive() por 300 ms.
  * - ::MOTORS_OWNER_FLIGHT: o controle de voo (control/flight_ctrl.h), que
  *   escreve a aceleração dos quatro motores a cada passo do LQG.
  *
@@ -24,20 +26,24 @@
 #ifndef MOTORS_H
 #define MOTORS_H
 
+#include "actuators/motor_arbiter.h"
+
 #include <stdbool.h>
 #include <stdint.h>
 
 /** Quantidade de motores. */
-#define MOTORS_COUNT              4U
-/** Limite de aceleração da bancada, em décimos de por cento (1000 = 100%). */
-#define MOTORS_BENCH_MAX_PERMILLE 1000U
+#define MOTORS_COUNT              MOTOR_ARB_COUNT
+/** Limite fixo de aceleração da bancada, em décimos de por cento (400 = 40 %). */
+#define MOTORS_BENCH_MAX_PERMILLE MOTOR_ARB_BENCH_HARD_MAX
 
 /** @brief Quem está com a saída armada. */
-typedef enum {
-  MOTORS_OWNER_NONE = 0, /**< Desarmado: só zeros. */
-  MOTORS_OWNER_BENCH,    /**< Teste de bancada (console USB). */
-  MOTORS_OWNER_FLIGHT    /**< Controle de voo. */
-} motors_owner_t;
+typedef motor_arb_owner_t motors_owner_t;
+/** Desarmado: só zeros. */
+#define MOTORS_OWNER_NONE   MOTOR_ARB_OWNER_NONE
+/** Teste de bancada (console USB ou IHM). */
+#define MOTORS_OWNER_BENCH  MOTOR_ARB_OWNER_BENCH
+/** Controle de voo. */
+#define MOTORS_OWNER_FLIGHT MOTOR_ARB_OWNER_FLIGHT
 
 /** @brief Fotografia da saída, para status e log. */
 typedef struct {
@@ -53,6 +59,14 @@ typedef struct {
   uint32_t bench_rate;
   /** Varredura da bancada em andamento. */
   bool sweeping;
+  /** Limite ajustável da bancada, em décimos de por cento. */
+  uint16_t bench_cap;
+  /** Último sentido pedido: bit i = motor i+1 invertido. */
+  uint8_t reversed;
+  /** Motores cujo sentido foi pedido desde o boot (os outros: o do ESC). */
+  uint8_t reversed_known;
+  /** Comandos especiais (beep, sentido) ainda na fila. */
+  uint8_t commands_pending;
 } motors_status_t;
 
 /**
@@ -119,6 +133,29 @@ bool motors_bench_sweep(uint8_t mask, uint16_t max_permille, uint16_t step_permi
  * @return false se armado.
  */
 bool motors_beep(uint8_t mask);
+
+/**
+ * @brief Renova o keepalive da bancada.
+ *
+ * Quem armou a bancada precisa chamar isto a cada < 300 ms (console: enquanto
+ * a porta tem DTR; IHM: a cada heartbeat). Sem isso a saída desarma.
+ */
+void motors_bench_keepalive(void);
+
+/**
+ * @brief Limite ajustável da bancada (até ::MOTORS_BENCH_MAX_PERMILLE).
+ * @return O limite aplicado, em décimos de por cento.
+ */
+uint16_t motors_bench_cap(uint16_t permille);
+
+/**
+ * @brief Sentido de rotação (comandos 7/8 do AM32; 12 grava na EEPROM do ESC).
+ * @param[in] mask      Motores a configurar (bit i = motor i+1).
+ * @param[in] reversed  Bit i = motor i+1 invertido.
+ * @param[in] save      Grava no ESC; sem isso o sentido volta ao ligar.
+ * @return false se armado, girando ou com fila cheia.
+ */
+bool motors_set_direction(uint8_t mask, uint8_t reversed, bool save);
 
 /** @brief Copia o estado atual. */
 void motors_get_status(motors_status_t *out);

@@ -13,6 +13,16 @@ A bench interface that tests everything from the STM32 onward, over USB, without
 
 The first experiment it serves is the sensor-noise study in `.opencode/knowledge/project-history.md`: BNO085 and MTF-01 with motors stopped, ESC powered, motors without props and with props.
 
+## Requirements from the bench plan
+
+`references/DroneLQG_revisao/BANCADA.md` (steps 2, 3 and 5 are this HMI's job) requires:
+
+- Per sample: STM32 monotonic time, sequence number, sample age and validity, state and reason, raw measurements (raw accel and gyro, not only the BNO's filtered attitude), EKF estimate, innovations, covariances and rejections, the four motor commands before and after limiting, saturation flags.
+- Actuators: eRPM converted with the motor pole count, synchronized voltage and current. A throttle value is never labeled as measured RPM.
+- Session metadata: firmware commit and HEX hash, parameters, matrices, sensor initial height, surface, lighting, interventions. No firmware changes within a comparable series.
+- **Markers**: one key/button marks the start and end of each movement or condition in the recording.
+- Bench steps: 60 s still with motors stopped; movements over known heights and distances; without props, check motor mapping, direction and arm/disarm; with props, only on a fixed, protected thrust stand, never held by hand.
+
 ## Architecture
 
 ```text
@@ -88,6 +98,7 @@ CubeIDE expects `stm32/App/{Inc,Src}`. Inside it, new code is grouped by respons
 
 ```text
 stm32/App/Src/
+  actuators/   motor_arbiter (pure: owner, ramp, caps, failsafes, DShot commands)
   drivers/     bno08x, mtf01, dshot, esc_telem, power
   estimation/  nav_ekf, range_filter, meas
   control/     lqg, mixer, trim, flight_ctrl
@@ -100,7 +111,7 @@ hmi/
 
 ## Plan
 
-1. Firmware: arming state machine and DShot 0 guarantee, with host tests.
+1. Firmware: arming state machine and DShot 0 guarantee, with host tests. **Done:** `actuators/motor_arbiter` (tested in `tests/test_motor_arbiter.c`, MISRA clean), 40 % hard cap, adjustable cap, 300 ms bench keepalive, direction commands; console `cap` and `dir`. Not yet run on hardware.
 2. Firmware: DroneLink over USB CDC with heartbeat and the standard messages above.
 3. Server: link, recorder and replay of recorded sessions (allows UI work without hardware).
 4. Web UI: live panel, freeze and comparison, then the motor panel.
