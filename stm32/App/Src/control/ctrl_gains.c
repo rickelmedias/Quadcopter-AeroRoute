@@ -17,14 +17,14 @@
 /** Quantidade de valores de um conjunto completo (48 + 16 + 108 + 108). */
 #define TOTAL_VALUES 280U
 /** Máscara com as 32 linhas recebidas. */
-#define ALL_ROWS 0xFFFFFFFFUL
+#define ALL_ROWS     0xFFFFFFFFUL
 
 /** @brief Forma de uma matriz e sua posição no formato canônico. */
 typedef struct {
-  uint8_t rows;        /**< Linhas. */
-  uint8_t cols;        /**< Colunas. */
-  uint16_t offset;     /**< Primeiro valor no vetor canônico. */
-  uint8_t first_row;   /**< Primeiro bit da matriz na máscara de linhas. */
+  uint8_t rows;      /**< Linhas. */
+  uint8_t cols;      /**< Colunas. */
+  uint16_t offset;   /**< Primeiro valor no vetor canônico. */
+  uint8_t first_row; /**< Primeiro bit da matriz na máscara de linhas. */
 } matrix_layout_t;
 
 /** Formato de cada matriz, na ordem Kd, Kfd, L, M. */
@@ -61,15 +61,15 @@ static lqg_gains_t incoming;
  */
 static lqg_real_t *matrix_data(lqg_gains_t *g, ctrl_gain_matrix_t m) {
   switch (m) {
-    case CTRL_GAIN_KD:
-      return &g->Kd[0][0];
-    case CTRL_GAIN_KFD:
-      return &g->Kfd[0][0];
-    case CTRL_GAIN_L:
-      return &g->L[0][0];
-    case CTRL_GAIN_M:
-    default:
-      return &g->M[0][0];
+  case CTRL_GAIN_KD:
+    return &g->Kd[0][0];
+  case CTRL_GAIN_KFD:
+    return &g->Kfd[0][0];
+  case CTRL_GAIN_L:
+    return &g->L[0][0];
+  case CTRL_GAIN_M:
+  default:
+    return &g->M[0][0];
   }
 }
 
@@ -92,8 +92,8 @@ uint32_t ctrl_crc32(uint32_t crc, const void *data, uint32_t len) {
 static uint32_t crc_float(uint32_t crc, float value) {
   uint32_t bits;
   memcpy(&bits, &value, sizeof(bits));
-  const uint8_t bytes[4] = {(uint8_t)bits, (uint8_t)(bits >> 8),
-                            (uint8_t)(bits >> 16), (uint8_t)(bits >> 24)};
+  const uint8_t bytes[4] = {(uint8_t)bits, (uint8_t)(bits >> 8), (uint8_t)(bits >> 16),
+                            (uint8_t)(bits >> 24)};
   return ctrl_crc32(crc, bytes, sizeof(bytes));
 }
 
@@ -137,32 +137,40 @@ bool ctrl_gains_shape(ctrl_gain_matrix_t m, uint8_t *rows, uint8_t *cols) {
   if ((unsigned)m >= CTRL_GAIN_COUNT) {
     return false;
   }
-  if (rows != NULL) *rows = LAYOUT[m].rows;
-  if (cols != NULL) *cols = LAYOUT[m].cols;
+  if (rows != NULL)
+    *rows = LAYOUT[m].rows;
+  if (cols != NULL)
+    *cols = LAYOUT[m].cols;
   return true;
 }
 
-uint32_t ctrl_gains_generation(void) { return generation; }
+uint32_t ctrl_gains_generation(void) {
+  return generation;
+}
 
 void ctrl_gains_copy_active(lqg_gains_t *out, uint32_t *gen) {
   CTRL_ENTER_CRITICAL();
   *out = active;
-  if (gen != NULL) *gen = generation;
+  if (gen != NULL)
+    *gen = generation;
   CTRL_EXIT_CRITICAL();
 }
 
-bool ctrl_gains_active_is_default(void) { return active_default; }
+bool ctrl_gains_active_is_default(void) {
+  return active_default;
+}
 
-uint32_t ctrl_gains_active_crc(void) { return active_crc; }
+uint32_t ctrl_gains_active_crc(void) {
+  return active_crc;
+}
 
-ctrl_gains_status_t ctrl_gains_stage_row(uint32_t session, ctrl_gain_matrix_t m,
-                                         uint8_t row, const float *values,
-                                         uint8_t count) {
+ctrl_gains_status_t ctrl_gains_stage_row(uint32_t session, ctrl_gain_matrix_t m, uint8_t row,
+                                         const float *values, uint8_t count) {
   if (session == 0U) {
     return CTRL_GAINS_BAD_SESSION;
   }
-  if ((unsigned)m >= CTRL_GAIN_COUNT || row >= LAYOUT[m].rows ||
-      count != LAYOUT[m].cols || values == NULL) {
+  if ((unsigned)m >= CTRL_GAIN_COUNT || row >= LAYOUT[m].rows || count != LAYOUT[m].cols ||
+      values == NULL) {
     return CTRL_GAINS_BAD_INDEX;
   }
   if (session != staged_session) {
@@ -177,12 +185,13 @@ ctrl_gains_status_t ctrl_gains_stage_row(uint32_t session, ctrl_gain_matrix_t m,
 }
 
 ctrl_gains_status_t ctrl_gains_commit(uint32_t session, uint32_t expected_crc,
-                                      uint32_t *computed_crc,
-                                      uint32_t *rows_received) {
+                                      uint32_t *computed_crc, uint32_t *rows_received) {
   const bool same_session = session != 0U && session == staged_session;
   const uint32_t crc = same_session ? staged_crc() : 0U;
-  if (rows_received != NULL) *rows_received = same_session ? staged_rows : 0U;
-  if (computed_crc != NULL) *computed_crc = crc;
+  if (rows_received != NULL)
+    *rows_received = same_session ? staged_rows : 0U;
+  if (computed_crc != NULL)
+    *computed_crc = crc;
   if (!same_session) {
     return CTRL_GAINS_BAD_SESSION;
   }

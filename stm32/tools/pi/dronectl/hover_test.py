@@ -33,6 +33,7 @@ O perfil só muda quando alguém pede (``hover-profile --apply-suggestion``,
 ``hover-profile --set`` ou ``hover-test --save``): a sugestão é uma conta,
 não uma decisão.
 """
+
 from __future__ import annotations
 
 import csv
@@ -47,8 +48,21 @@ from pathlib import Path
 from typing import Callable, Dict, List, Optional, Tuple
 
 from .gains import REPO_ROOT, Gains
-from .hover_report import (ARMED, FAILSAFE, HOLD, LEG, MOTOR_OF_INPUT, STANDBY, TAKEOFF,
-                           CSV_HEADER, Report, Sample, analyze, format_report, sample_row)
+from .hover_report import (
+    ARMED,
+    FAILSAFE,
+    HOLD,
+    LEG,
+    MOTOR_OF_INPUT,
+    STANDBY,
+    TAKEOFF,
+    CSV_HEADER,
+    Report,
+    Sample,
+    analyze,
+    format_report,
+    sample_row,
+)
 from .link import DroneLink, LinkError, state_name
 from .nav_report import analyze_nav, nav_notes, save_nav_log
 
@@ -100,14 +114,29 @@ CAPABILITY_ACTUATION = 32
 #: meas_flags que precisam estar presentes no chão: atitude, giro e altura.
 MEAS_NEEDED = 1 | 2 | 4
 #: Parâmetros gravados em todo ensaio (mesmo sem mudar), para a análise e o registro.
-RECORDED = ('CTL_W0', 'CTL_FF_TH', 'CTL_FF_PHI', 'CTL_FF_PSI', 'SNS_LVL_PHI', 'SNS_LVL_TH',
-            'CTL_XY', 'CTL_LQG_AJ', 'CTL_DIST', 'CTL_DIST_MAX', 'MOT_MAX', 'MOT_W_AT_0',
-            'MOT_W_AT_100', 'FLT_Z_RATE', 'FLT_TILT_MAX')
+RECORDED = (
+    'CTL_W0',
+    'CTL_FF_TH',
+    'CTL_FF_PHI',
+    'CTL_FF_PSI',
+    'SNS_LVL_PHI',
+    'SNS_LVL_TH',
+    'CTL_XY',
+    'CTL_LQG_AJ',
+    'CTL_DIST',
+    'CTL_DIST_MAX',
+    'MOT_MAX',
+    'MOT_W_AT_0',
+    'MOT_W_AT_100',
+    'FLT_Z_RATE',
+    'FLT_TILT_MAX',
+)
 #: Parâmetros que o próprio ensaio controla (não vêm do perfil).
 MANAGED = ('FLT_SIM', 'FLT_DRY_RUN', 'DBG_RATE_HZ')
 
 
 # ---- perfil --------------------------------------------------------------------
+
 
 @dataclass
 class Profile:
@@ -135,23 +164,32 @@ class Profile:
             return cls(path=path)
         data = json.loads(path.read_text(encoding='utf-8'))
         r = data.get('r')
-        return cls(path=path,
-                   params={k.upper(): float(v) for k, v in data.get('params', {}).items()},
-                   q={k: float(v) for k, v in data.get('q', {}).items()},
-                   r=float(r) if r is not None else None,
-                   height_cm=float(data.get('height_cm', DEFAULT_HEIGHT_CM)),
-                   time_s=float(data.get('time_s', DEFAULT_TIME_S)),
-                   suggestion={k: float(v) for k, v in data.get('suggestion', {}).items()},
-                   history=list(data.get('history', [])),
-                   boot_id=int(data.get('boot_id', 0)),
-                   boot_values={k: float(v) for k, v in data.get('boot_values', {}).items()})
+        return cls(
+            path=path,
+            params={k.upper(): float(v) for k, v in data.get('params', {}).items()},
+            q={k: float(v) for k, v in data.get('q', {}).items()},
+            r=float(r) if r is not None else None,
+            height_cm=float(data.get('height_cm', DEFAULT_HEIGHT_CM)),
+            time_s=float(data.get('time_s', DEFAULT_TIME_S)),
+            suggestion={k: float(v) for k, v in data.get('suggestion', {}).items()},
+            history=list(data.get('history', [])),
+            boot_id=int(data.get('boot_id', 0)),
+            boot_values={k: float(v) for k, v in data.get('boot_values', {}).items()},
+        )
 
     def save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        data = {'params': self.params, 'q': self.q, 'r': self.r, 'height_cm': self.height_cm,
-                'time_s': self.time_s, 'suggestion': self.suggestion,
-                'history': self.history[-HISTORY_MAX:], 'boot_id': self.boot_id,
-                'boot_values': self.boot_values}
+        data = {
+            'params': self.params,
+            'q': self.q,
+            'r': self.r,
+            'height_cm': self.height_cm,
+            'time_s': self.time_s,
+            'suggestion': self.suggestion,
+            'history': self.history[-HISTORY_MAX:],
+            'boot_id': self.boot_id,
+            'boot_values': self.boot_values,
+        }
         tmp = self.path.with_suffix('.tmp')
         tmp.write_text(json.dumps(data, indent=1, ensure_ascii=False), encoding='utf-8')
         tmp.replace(self.path)
@@ -165,14 +203,25 @@ class Profile:
 
     def text(self) -> str:
         lines = [f'perfil {self.path}', f'altura {self.height_cm:g} cm, tempo {self.time_s:g} s']
-        lines.append('parâmetros: ' + (', '.join(f'{k}={v:g}' for k, v in sorted(self.params.items()))
-                                       or '(os de fábrica do firmware)'))
-        lines.append('pesos Q: ' + (', '.join(f'{k}={v:g}' for k, v in self.q.items())
-                                    or '(os do LQG ajustado do firmware)')
-                     + (f', R={self.r:g}' if self.r is not None else ''))
+        lines.append(
+            'parâmetros: '
+            + (
+                ', '.join(f'{k}={v:g}' for k, v in sorted(self.params.items()))
+                or '(os de fábrica do firmware)'
+            )
+        )
+        lines.append(
+            'pesos Q: '
+            + (
+                ', '.join(f'{k}={v:g}' for k, v in self.q.items())
+                or '(os do LQG ajustado do firmware)'
+            )
+            + (f', R={self.r:g}' if self.r is not None else '')
+        )
         if self.suggestion:
-            lines.append('última sugestão: ' +
-                         ', '.join(f'{k}={v:g}' for k, v in self.suggestion.items()))
+            lines.append(
+                'última sugestão: ' + ', '.join(f'{k}={v:g}' for k, v in self.suggestion.items())
+            )
         if self.history:
             lines.append('últimos ensaios:')
             for h in self.history[-8:]:
@@ -198,12 +247,14 @@ def parse_assignments(items: Optional[List[str]], upper: bool = True) -> Dict[st
 
 # ---- ganhos do LQG ajustado ---------------------------------------------------
 
+
 def _ajustado():
     """Módulo tools/lqg_ajustado.py (Python puro, o mesmo que gera a tabela do firmware)."""
     tools = str(REPO_ROOT / 'tools')
     if tools not in sys.path:
         sys.path.insert(0, tools)
     import lqg_ajustado
+
     return lqg_ajustado
 
 
@@ -212,12 +263,14 @@ def check_q_names(q: Dict[str, float]) -> None:
     names = _ajustado().lp.ESTADOS
     unknown = set(q) - set(names)
     if unknown:
-        raise ValueError(f'estado(s) desconhecido(s) nos pesos Q: {sorted(unknown)} '
-                         f'(use {", ".join(names)})')
+        raise ValueError(
+            f'estado(s) desconhecido(s) nos pesos Q: {sorted(unknown)} (use {", ".join(names)})'
+        )
 
 
-def adjusted_gains(q_override: Dict[str, float], r: Optional[float],
-                   fused: bool = False) -> Tuple[Gains, List[float], float]:
+def adjusted_gains(
+    q_override: Dict[str, float], r: Optional[float], fused: bool = False
+) -> Tuple[Gains, List[float], float]:
     """Kd/Kfd do dlqr do ajustado com os pesos Q pedidos e o Kalman do ajustado.
 
     ``q_override`` usa os nomes dos estados (x, y, z, phi, theta, psi, vx, vy,
@@ -242,13 +295,14 @@ def adjusted_gains(q_override: Dict[str, float], r: Optional[float],
 
 # ---- ensaio --------------------------------------------------------------------
 
+
 @dataclass
 class Options:
     """O que este ensaio vai fazer."""
 
     height_m: float
     time_s: float
-    mode: str                              # 'motors', 'sim' ou 'dry'
+    mode: str  # 'motors', 'sim' ou 'dry'
     params: Dict[str, float] = field(default_factory=dict)
     q: Dict[str, float] = field(default_factory=dict)
     r: Optional[float] = None
@@ -263,8 +317,10 @@ class Options:
         if self.mode not in ('motors', 'sim', 'dry'):
             raise ValueError(f'modo desconhecido: {self.mode}')
         if not MIN_HEIGHT_CM <= self.height_m * 100 <= MAX_HEIGHT_CM:
-            raise ValueError(f'altura de {self.height_m * 100:g} cm fora de {MIN_HEIGHT_CM:g} a '
-                             f'{MAX_HEIGHT_CM:g} cm (a altura é em cm)')
+            raise ValueError(
+                f'altura de {self.height_m * 100:g} cm fora de {MIN_HEIGHT_CM:g} a '
+                f'{MAX_HEIGHT_CM:g} cm (a altura é em cm)'
+            )
         if not 0 < self.time_s <= 300:
             raise ValueError('tempo de hover entre 0 e 300 s')
         if not 0 < self.rate_hz <= 50:
@@ -288,8 +344,13 @@ def _safe_print(text: str) -> None:
 class HoverTest:
     """Um ensaio de hover sobre um enlace já aberto."""
 
-    def __init__(self, link: DroneLink, opts: Options, profile: Profile,
-                 say: Callable[[str], None] = _safe_print) -> None:
+    def __init__(
+        self,
+        link: DroneLink,
+        opts: Options,
+        profile: Profile,
+        say: Callable[[str], None] = _safe_print,
+    ) -> None:
         opts.check()
         self.link = link
         self.opts = opts
@@ -333,8 +394,9 @@ class HoverTest:
 
     def _request_stop(self, signum, _frame) -> None:
         if self.stop_reason is None:
-            self.stop_reason = {signal.SIGINT: 'Ctrl+C',
-                                signal.SIGTERM: 'SIGTERM'}.get(signum, 'SIGHUP (SSH caiu)')
+            self.stop_reason = {signal.SIGINT: 'Ctrl+C', signal.SIGTERM: 'SIGTERM'}.get(
+                signum, 'SIGHUP (SSH caiu)'
+            )
         elif signum == signal.SIGINT:
             self.kill = True
 
@@ -366,8 +428,9 @@ class HoverTest:
     def _set(self, name: str, value: float) -> float:
         got = self.link.param_set(name, value)
         if not math.isclose(got, value, rel_tol=1e-4, abs_tol=1e-4):
-            raise LinkError(f'{name}: pedido {value:g}, o STM32 ficou com {got:g} '
-                            '(fora dos limites?)')
+            raise LinkError(
+                f'{name}: pedido {value:g}, o STM32 ficou com {got:g} (fora dos limites?)'
+            )
         self.applied[name] = got
         return got
 
@@ -400,10 +463,15 @@ class HoverTest:
         self._set('FLT_DRY_RUN', 0.0 if o.mode == 'motors' else 1.0)
         for name in touched:
             self._set(name, wanted.get(name, boot[name]))
-        changed = {k: self.applied[k] for k in touched
-                   if not math.isclose(self.applied[k], boot[k], rel_tol=1e-4, abs_tol=1e-4)}
-        self.say('fora de fábrica neste ensaio: ' +
-                 (', '.join(f'{k}={v:g}' for k, v in sorted(changed.items())) or 'nada'))
+        changed = {
+            k: self.applied[k]
+            for k in touched
+            if not math.isclose(self.applied[k], boot[k], rel_tol=1e-4, abs_tol=1e-4)
+        }
+        self.say(
+            'fora de fábrica neste ensaio: '
+            + (', '.join(f'{k}={v:g}' for k, v in sorted(changed.items())) or 'nada')
+        )
         self.profile.save()  # guarda os valores de fábrica lidos
 
     def _flow_ekf_on(self) -> bool:
@@ -432,10 +500,17 @@ class HoverTest:
         except ValueError as exc:
             raise LinkError(str(exc)) from exc
         crc = self.link.upload_gains(gains)
-        self.gains_info = {'custom': True, 'q_changed': q, 'q': q_used, 'r': r_used,
-                           'fused': fused, 'crc': f'{crc:08X}'}
-        self.say(f'ganhos do ajustado com Q {q or "de fábrica"} e R={r_used:g} em uso '
-                 f'(crc {crc:08X})')
+        self.gains_info = {
+            'custom': True,
+            'q_changed': q,
+            'q': q_used,
+            'r': r_used,
+            'fused': fused,
+            'crc': f'{crc:08X}',
+        }
+        self.say(
+            f'ganhos do ajustado com Q {q or "de fábrica"} e R={r_used:g} em uso (crc {crc:08X})'
+        )
 
     def _snapshot_for_log(self) -> None:
         """Lê a configuração completa que ficará repetida no CSV do ensaio.
@@ -456,8 +531,9 @@ class HoverTest:
             self.link.arm(False)
             state = self._fresh_state()
         if state != STANDBY:
-            raise LinkError(f'o drone precisa estar desarmado no chão (STANDBY); agora: '
-                            f'{state_name(state)}')
+            raise LinkError(
+                f'o drone precisa estar desarmado no chão (STANDBY); agora: {state_name(state)}'
+            )
         self._apply_params()
         self._apply_gains()
         if o.mode == 'motors':
@@ -466,8 +542,9 @@ class HoverTest:
             while time.monotonic() < end and not self.link.capabilities & CAPABILITY_ACTUATION:
                 time.sleep(0.1)
             if not self.link.capabilities & CAPABILITY_ACTUATION:
-                raise LinkError('o STM32 não liberou os motores (LQG_FLIGHT_ENABLED = 0 no '
-                                'firmware?)')
+                raise LinkError(
+                    'o STM32 não liberou os motores (LQG_FLIGHT_ENABLED = 0 no firmware?)'
+                )
 
         self._set('DBG_RATE_HZ', o.rate_hz)
         self._snapshot_for_log()
@@ -476,27 +553,36 @@ class HoverTest:
         if s is None:
             raise LinkError('sem DRONE_CTRL_DEBUG: a telemetria não chegou')
         if (s.meas_flags & MEAS_NEEDED) != MEAS_NEEDED:
-            raise LinkError(f'sensores incompletos no chão (meas=0x{s.meas_flags:X}: '
-                            'precisa de atitude, giro e altura)')
+            raise LinkError(
+                f'sensores incompletos no chão (meas=0x{s.meas_flags:X}: '
+                'precisa de atitude, giro e altura)'
+            )
         tilt = math.degrees(max(abs(s.y[1]), abs(s.y[2])))
         if tilt > GROUND_TILT_MAX_DEG:
             raise LinkError(f'drone inclinado {tilt:.0f}° no chão: nivele antes de decolar')
-        pool = [x.y[0] for _, x in self.samples[-int(o.rate_hz):]
-                if x.state == STANDBY and x.meas_flags & 4]
+        pool = [
+            x.y[0]
+            for _, x in self.samples[-int(o.rate_hz) :]
+            if x.state == STANDBY and x.meas_flags & 4
+        ]
         if not pool:
             raise LinkError('sem altura medida no chão')
         self.ground = sum(pool) / len(pool)
-        self.say(f'chão: sensor a {-self.ground * 100:.1f} cm do piso (variação '
-                 f'{(max(pool) - min(pool)) * 100:.1f} cm em {len(pool)} amostras)')
+        self.say(
+            f'chão: sensor a {-self.ground * 100:.1f} cm do piso (variação '
+            f'{(max(pool) - min(pool)) * 100:.1f} cm em {len(pool)} amostras)'
+        )
 
     # -- voo --
 
     def _countdown(self) -> None:
         o = self.opts
         if o.mode == 'motors' and o.countdown_s > 0:
-            self.say(f'MOTORES VÃO GIRAR: decolando em {o.countdown_s:.0f} s (Ctrl+C cancela; '
-                     'perto do chão na decolagem corta; acima disso pousa; '
-                     'Ctrl+C de novo corta os motores)')
+            self.say(
+                f'MOTORES VÃO GIRAR: decolando em {o.countdown_s:.0f} s (Ctrl+C cancela; '
+                'perto do chão na decolagem corta; acima disso pousa; '
+                'Ctrl+C de novo corta os motores)'
+            )
             end = time.monotonic() + o.countdown_s
             while time.monotonic() < end and not self.stop_reason:
                 time.sleep(0.05)
@@ -539,20 +625,29 @@ class HoverTest:
             over = over + 1 if h_top > o.height_m + OVERSHOOT_M else 0
             outside = outside + 1 if off > o.geofence_m else 0
             if over >= GUARD_CHECKS:
-                land_reason = (f'altura {h_top * 100:.0f} cm, mais de '
-                               f'{OVERSHOOT_M * 100:.0f} cm acima do alvo')
+                land_reason = (
+                    f'altura {h_top * 100:.0f} cm, mais de {OVERSHOOT_M * 100:.0f} cm acima do alvo'
+                )
             elif outside >= GUARD_CHECKS:
-                land_reason = (f'{off * 100:.0f} cm do ponto de decolagem '
-                               f'(cerca de {o.geofence_m * 100:.0f} cm)')
-            elif reached_at is None and abs(h - o.height_m) <= REACHED_M and \
-                    s.state in (TAKEOFF, HOLD, LEG):
+                land_reason = (
+                    f'{off * 100:.0f} cm do ponto de decolagem '
+                    f'(cerca de {o.geofence_m * 100:.0f} cm)'
+                )
+            elif (
+                reached_at is None
+                and abs(h - o.height_m) <= REACHED_M
+                and s.state in (TAKEOFF, HOLD, LEG)
+            ):
                 reached_at = now
-                self.say(f'chegou a {h * 100:.0f} cm em {now - t_takeoff:.1f} s: '
-                         f'segurando {o.time_s:g} s')
+                self.say(
+                    f'chegou a {h * 100:.0f} cm em {now - t_takeoff:.1f} s: '
+                    f'segurando {o.time_s:g} s'
+                )
             elif reached_at is not None and now - reached_at >= o.time_s:
                 land_reason = 'fim do tempo de hover'
-            elif reached_at is None and o.mode == 'dry' and \
-                    now - t_takeoff >= o.time_s + DRY_EXTRA_S:
+            elif (
+                reached_at is None and o.mode == 'dry' and now - t_takeoff >= o.time_s + DRY_EXTRA_S
+            ):
                 land_reason = 'fim do ensaio a seco'
             elif reached_at is None and o.mode != 'dry' and now - t_takeoff > climb_limit:
                 land_reason = f'não chegou a {o.height_m * 100:.0f} cm em {climb_limit:.0f} s'
@@ -568,11 +663,12 @@ class HoverTest:
         motors = [0.0] * 4
         for i, m in enumerate(MOTOR_OF_INPUT):
             motors[m - 1] = s.throttle[i] * 100
-        return (f'{t:5.1f}s {state_name(s.state):<8} h={h * 100:5.1f} cm  '
-                f'x={s.x_hat[0] * 100:+5.1f} y={s.x_hat[1] * 100:+5.1f} cm  '
-                f'φ={math.degrees(s.y[1]):+5.1f} θ={math.degrees(s.y[2]):+5.1f} '
-                f'ψ={math.degrees(s.y[3]):+6.1f}  M1..M4=' +
-                ' '.join(f'{v:3.0f}' for v in motors))
+        return (
+            f'{t:5.1f}s {state_name(s.state):<8} h={h * 100:5.1f} cm  '
+            f'x={s.x_hat[0] * 100:+5.1f} y={s.x_hat[1] * 100:+5.1f} cm  '
+            f'φ={math.degrees(s.y[1]):+5.1f} θ={math.degrees(s.y[2]):+5.1f} '
+            f'ψ={math.degrees(s.y[3]):+6.1f}  M1..M4=' + ' '.join(f'{v:3.0f}' for v in motors)
+        )
 
     def _disarm_now(self, why: str) -> None:
         self.say(f'CORTANDO OS MOTORES: {why}')
@@ -591,10 +687,16 @@ class HoverTest:
         # amostra recente, altura medida e estimada baixas; em voo mais alto,
         # o primeiro Ctrl+C continua pedindo pouso.
         s = self._last()
-        if (self.stop_reason == 'Ctrl+C' and self.opts.mode == 'motors' and
-                self._state() == TAKEOFF and self.ground is not None and s is not None and
-                self.samples and time.monotonic() - self.samples[-1][0] < 0.2 and
-                s.meas_flags & 4):
+        if (
+            self.stop_reason == 'Ctrl+C'
+            and self.opts.mode == 'motors'
+            and self._state() == TAKEOFF
+            and self.ground is not None
+            and s is not None
+            and self.samples
+            and time.monotonic() - self.samples[-1][0] < 0.2
+            and s.meas_flags & 4
+        ):
             h_meas, h_est = self._height(s)
             if h_meas < LOW_ABORT_MEAS_M and h_est < LOW_ABORT_EST_M:
                 self._disarm_now('Ctrl+C durante a decolagem, perto do chão')
@@ -660,13 +762,21 @@ class HoverTest:
 
     def meta(self) -> Dict:
         o = self.opts
-        return {'date': datetime.now().isoformat(timespec='seconds'), 'label': o.label,
-                'mode': o.mode, 'height_m': o.height_m, 'time_s': o.time_s,
-                'params': self.params_snapshot or self.applied, 'set_this_test': o.params,
-                'gains': self.gains_info,
-                'boot_id': self.link.boot_id, 'ground_y_z': self.ground,
-                'land_reason': self.land_reason, 'stop_reason': self.stop_reason,
-                'error': self.error}
+        return {
+            'date': datetime.now().isoformat(timespec='seconds'),
+            'label': o.label,
+            'mode': o.mode,
+            'height_m': o.height_m,
+            'time_s': o.time_s,
+            'params': self.params_snapshot or self.applied,
+            'set_this_test': o.params,
+            'gains': self.gains_info,
+            'boot_id': self.link.boot_id,
+            'ground_y_z': self.ground,
+            'land_reason': self.land_reason,
+            'stop_reason': self.stop_reason,
+            'error': self.error,
+        }
 
     def save(self, folder: Path) -> Report:
         folder.mkdir(parents=True, exist_ok=True)
@@ -679,15 +789,32 @@ class HoverTest:
                 w.writerow(sample_row(t_pi, s))
         self._save_real_log(folder, samples)
         self._save_gains(folder)
-        (folder / 'textos.txt').write_text(''.join(f'{t:.3f}\t{txt}\n' for t, txt in texts),
-                                           encoding='utf-8')
+        (folder / 'textos.txt').write_text(
+            ''.join(f'{t:.3f}\t{txt}\n' for t, txt in texts), encoding='utf-8'
+        )
         meta = self.meta()
-        (folder / 'meta.json').write_text(json.dumps(meta, indent=1, ensure_ascii=False),
-                                          encoding='utf-8')
-        report = analyze([Sample(t=s.time_ms / 1000.0, state=s.state, meas=s.meas_flags,
-                                 flags=s.ctrl_flags, y=list(s.y), x=list(s.x_hat),
-                                 du=list(s.du), ref=list(s.ref), thr=list(s.throttle), t_pi=t_pi)
-                          for t_pi, s in samples], texts, meta)
+        (folder / 'meta.json').write_text(
+            json.dumps(meta, indent=1, ensure_ascii=False), encoding='utf-8'
+        )
+        report = analyze(
+            [
+                Sample(
+                    t=s.time_ms / 1000.0,
+                    state=s.state,
+                    meas=s.meas_flags,
+                    flags=s.ctrl_flags,
+                    y=list(s.y),
+                    x=list(s.x_hat),
+                    du=list(s.du),
+                    ref=list(s.ref),
+                    thr=list(s.throttle),
+                    t_pi=t_pi,
+                )
+                for t_pi, s in samples
+            ],
+            texts,
+            meta,
+        )
         if self.land_reason and self.land_reason != 'fim do tempo de hover':
             report.notes.insert(0, f'fim do voo: {self.land_reason}')
         if self.error:
@@ -698,10 +825,16 @@ class HoverTest:
             report.metrics['nav'] = analyze_nav([n for _, n in nav], [s for _, s in samples])
             report.notes.extend(nav_notes(report.metrics['nav']))
         (folder / 'resumo.json').write_text(
-            json.dumps({'metrics': report.metrics, 'suggestion': report.suggestion,
-                        'notes': report.notes}, indent=1, ensure_ascii=False), encoding='utf-8')
-        (folder / 'linha_do_tempo.txt').write_text('\n'.join(report.timeline) + '\n',
-                                                   encoding='utf-8')
+            json.dumps(
+                {'metrics': report.metrics, 'suggestion': report.suggestion, 'notes': report.notes},
+                indent=1,
+                ensure_ascii=False,
+            ),
+            encoding='utf-8',
+        )
+        (folder / 'linha_do_tempo.txt').write_text(
+            '\n'.join(report.timeline) + '\n', encoding='utf-8'
+        )
         return report
 
     def _gain_snapshot(self) -> Dict:
@@ -710,15 +843,24 @@ class HoverTest:
         r = self.gains_info.get('r')
         fused = bool(self.gains_info.get('fused', self.applied.get('FLOW_EKF', 0.0) >= 0.5))
         gains, q, r_used = adjusted_gains(q_changed, r, fused)
-        return {'custom': bool(self.gains_info.get('custom')), 'crc': self.gains_info.get('crc'),
-                'kalman': 'fundido (FLOW_EKF)' if fused else 'ajustado',
-                'q': q, 'r': r_used, 'state_names': _ajustado().lp.ESTADOS,
-                'Kd': gains.Kd, 'Kfd': gains.Kfd, 'L': gains.L, 'M': gains.M}
+        return {
+            'custom': bool(self.gains_info.get('custom')),
+            'crc': self.gains_info.get('crc'),
+            'kalman': 'fundido (FLOW_EKF)' if fused else 'ajustado',
+            'q': q,
+            'r': r_used,
+            'state_names': _ajustado().lp.ESTADOS,
+            'Kd': gains.Kd,
+            'Kfd': gains.Kfd,
+            'L': gains.L,
+            'M': gains.M,
+        }
 
     def _save_gains(self, folder: Path) -> None:
         """Salva as matrizes uma vez; o CSV guarda CRC, Q e R em cada linha."""
         (folder / 'gains.json').write_text(
-            json.dumps(self._gain_snapshot(), indent=1, ensure_ascii=False), encoding='utf-8')
+            json.dumps(self._gain_snapshot(), indent=1, ensure_ascii=False), encoding='utf-8'
+        )
 
     def _save_real_log(self, folder: Path, samples: List[Tuple[float, object]]) -> None:
         """CSV de planilha, com cabeçalhos físicos e contexto repetido em cada amostra.
@@ -731,19 +873,66 @@ class HoverTest:
         gain = self._gain_snapshot()
         params = self.params_snapshot or self.applied
         header = (
-            ['t_pi_s', 't_stm32_ms', 'step', 'state', 'meas_flags', 'ctrl_flags',
-             'mode', 'boot_id', 'target_height_m', 'ground_y_z_m',
-             'm1_pct', 'm2_pct', 'm3_pct', 'm4_pct'] +
-            ['y_z_m', 'y_phi_rad', 'y_theta_rad', 'y_psi_rad', 'y_vx_m_s', 'y_vy_m_s',
-             'y_p_rad_s', 'y_q_rad_s', 'y_r_rad_s'] +
-            ['x_m', 'y_m', 'z_m', 'phi_rad', 'theta_rad', 'psi_rad', 'vx_m_s', 'vy_m_s',
-             'vz_m_s', 'p_rad_s', 'q_rad_s', 'r_rad_s'] +
-            ['du_u1_rad_s', 'du_u2_rad_s', 'du_u3_rad_s', 'du_u4_rad_s',
-             'ref_x_m', 'ref_y_m', 'ref_z_m', 'ref_psi_rad',
-             'thr_u1_pct', 'thr_u2_pct', 'thr_u3_pct', 'thr_u4_pct',
-             'gain_custom', 'gain_crc'] +
-            [f'q_{name}' for name in state_names] + ['r_lqr'] +
-            [f'param_{name}' for name in sorted(params)]
+            [
+                't_pi_s',
+                't_stm32_ms',
+                'step',
+                'state',
+                'meas_flags',
+                'ctrl_flags',
+                'mode',
+                'boot_id',
+                'target_height_m',
+                'ground_y_z_m',
+                'm1_pct',
+                'm2_pct',
+                'm3_pct',
+                'm4_pct',
+            ]
+            + [
+                'y_z_m',
+                'y_phi_rad',
+                'y_theta_rad',
+                'y_psi_rad',
+                'y_vx_m_s',
+                'y_vy_m_s',
+                'y_p_rad_s',
+                'y_q_rad_s',
+                'y_r_rad_s',
+            ]
+            + [
+                'x_m',
+                'y_m',
+                'z_m',
+                'phi_rad',
+                'theta_rad',
+                'psi_rad',
+                'vx_m_s',
+                'vy_m_s',
+                'vz_m_s',
+                'p_rad_s',
+                'q_rad_s',
+                'r_rad_s',
+            ]
+            + [
+                'du_u1_rad_s',
+                'du_u2_rad_s',
+                'du_u3_rad_s',
+                'du_u4_rad_s',
+                'ref_x_m',
+                'ref_y_m',
+                'ref_z_m',
+                'ref_psi_rad',
+                'thr_u1_pct',
+                'thr_u2_pct',
+                'thr_u3_pct',
+                'thr_u4_pct',
+                'gain_custom',
+                'gain_crc',
+            ]
+            + [f'q_{name}' for name in state_names]
+            + ['r_lqr']
+            + [f'param_{name}' for name in sorted(params)]
         )
         with open(folder / 'real_log.csv', 'w', newline='', encoding='utf-8') as f:
             writer = csv.writer(f, delimiter=';')
@@ -752,16 +941,30 @@ class HoverTest:
                 motors = [0.0] * 4
                 for input_index, motor in enumerate(MOTOR_OF_INPUT):
                     motors[motor - 1] = s.throttle[input_index] * 100.0
-                row = ([f'{t_pi:.6f}', s.time_ms, s.step, s.state, s.meas_flags, s.ctrl_flags,
-                        self.opts.mode, self.link.boot_id, f'{self.opts.height_m:.6g}',
-                        '' if self.ground is None else f'{self.ground:.6g}'] +
-                       [f'{v:.6f}' for v in motors] +
-                       [f'{v:.8g}' for v in s.y] + [f'{v:.8g}' for v in s.x_hat] +
-                       [f'{v:.8g}' for v in s.du] + [f'{v:.8g}' for v in s.ref] +
-                       [f'{v * 100.0:.6f}' for v in s.throttle] +
-                       [int(gain['custom']), gain['crc'] or ''] +
-                       [f'{v:.12g}' for v in gain['q']] + [f'{gain["r"]:.12g}'] +
-                       [f'{params[name]:.9g}' for name in sorted(params)])
+                row = (
+                    [
+                        f'{t_pi:.6f}',
+                        s.time_ms,
+                        s.step,
+                        s.state,
+                        s.meas_flags,
+                        s.ctrl_flags,
+                        self.opts.mode,
+                        self.link.boot_id,
+                        f'{self.opts.height_m:.6g}',
+                        '' if self.ground is None else f'{self.ground:.6g}',
+                    ]
+                    + [f'{v:.6f}' for v in motors]
+                    + [f'{v:.8g}' for v in s.y]
+                    + [f'{v:.8g}' for v in s.x_hat]
+                    + [f'{v:.8g}' for v in s.du]
+                    + [f'{v:.8g}' for v in s.ref]
+                    + [f'{v * 100.0:.6f}' for v in s.throttle]
+                    + [int(gain['custom']), gain['crc'] or '']
+                    + [f'{v:.12g}' for v in gain['q']]
+                    + [f'{gain["r"]:.12g}']
+                    + [f'{params[name]:.9g}' for name in sorted(params)]
+                )
                 writer.writerow(row)
 
     # -- tudo --
@@ -769,15 +972,20 @@ class HoverTest:
     def run(self) -> Tuple[Path, Report]:
         """Prepara, voa, volta ao estado seguro, grava, analisa e guarda no perfil."""
         self.folder = self.opts.out_dir / f'hover_{datetime.now():%Y%m%d_%H%M%S}'
-        handlers = {sig: signal.signal(sig, self._request_stop)
-                    for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)}
+        handlers = {
+            sig: signal.signal(sig, self._request_stop)
+            for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)
+        }
         try:
             try:
                 self.prepare()
                 self.fly()
             except Exception as exc:  # qualquer falha: primeiro pôr o drone no chão
-                self.error = str(exc) if isinstance(exc, (LinkError, OSError)) else \
-                    f'{type(exc).__name__}: {exc}'
+                self.error = (
+                    str(exc)
+                    if isinstance(exc, (LinkError, OSError))
+                    else f'{type(exc).__name__}: {exc}'
+                )
                 self.say(f'erro: {self.error}')
                 try:
                     self.abort()
@@ -803,17 +1011,24 @@ class HoverTest:
         if self.error:
             parts.append(f'erro: {self.error}')
         self.profile.suggestion = dict(self.report.suggestion)
-        self.profile.history.append({'folder': self.folder.name, 'mode': self.opts.mode,
-                                     'label': self.opts.label,
-                                     'height_cm': round(self.opts.height_m * 100, 1),
-                                     'set': self.opts.params, 'q': self.opts.q,
-                                     'summary': ', '.join(parts),
-                                     'suggestion': self.report.suggestion})
+        self.profile.history.append(
+            {
+                'folder': self.folder.name,
+                'mode': self.opts.mode,
+                'label': self.opts.label,
+                'height_cm': round(self.opts.height_m * 100, 1),
+                'set': self.opts.params,
+                'q': self.opts.q,
+                'summary': ', '.join(parts),
+                'suggestion': self.report.suggestion,
+            }
+        )
         self.profile.save()
 
 
-def run_hover_test(link: DroneLink, opts: Options, profile: Profile,
-                   say: Callable[[str], None] = _safe_print) -> HoverTest:
+def run_hover_test(
+    link: DroneLink, opts: Options, profile: Profile, say: Callable[[str], None] = _safe_print
+) -> HoverTest:
     """Roda um ensaio e imprime a análise; devolve o ensaio (pasta, relatório, erro)."""
     test = HoverTest(link, opts, profile, say)
     folder, report = test.run()

@@ -101,8 +101,7 @@ float attitude_wrap_pi(float angle);
  * @param[in]  measured   Atitude medida.
  * @param[out] error      Erro angular normalizado.
  */
-void attitude_euler_error(const euler_t *reference, const euler_t *measured,
-                          euler_t *error);
+void attitude_euler_error(const euler_t *reference, const euler_t *measured, euler_t *error);
 
 /**
  * @brief Mede a atitude em relação a uma posição de referência (zero).
@@ -115,8 +114,7 @@ void attitude_euler_error(const euler_t *reference, const euler_t *measured,
  * @param[in]  measured  Atitude medida.
  * @param[out] relative  Atitude relativa ao zero; pode ser o próprio @p measured.
  */
-void attitude_euler_relative(const euler_t *zero, const euler_t *measured,
-                             euler_t *relative);
+void attitude_euler_relative(const euler_t *zero, const euler_t *measured, euler_t *relative);
 
 /**
  * @brief Calcula o cosseno da inclinação em relação à vertical.
@@ -162,8 +160,8 @@ void attitude_rotate_to_world(const float q[4], const float body[3], float world
 /** Gira corpo -> mundo e então expressa o plano horizontal no referencial
  * local cujo yaw zero é @p yaw_origin. Assim aceleração e fluxo usam os
  * mesmos eixos mesmo quando o BNO inicia apontando longe do norte. */
-void attitude_rotate_to_local(const float q[4], float yaw_origin,
-                              const float body[3], float local[2]);
+void attitude_rotate_to_local(const float q[4], float yaw_origin, const float body[3],
+                              float local[2]);
 
 /**
  * @brief Converte radianos em graus, para logs e leitura humana.

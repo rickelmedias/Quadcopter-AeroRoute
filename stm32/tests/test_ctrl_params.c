@@ -28,7 +28,8 @@ static void test_table_is_consistent(void) {
     assert(strlen(d->name) <= CTRL_PARAM_NAME_MAX);
     assert(d->min <= d->def && d->def <= d->max);
     assert(ctrl_params_get(i) == d->def);
-    for (size_t j = i + 1U; j < n; ++j) assert(strcmp(d->name, ctrl_params_desc(j)->name) != 0);
+    for (size_t j = i + 1U; j < n; ++j)
+      assert(strcmp(d->name, ctrl_params_desc(j)->name) != 0);
   }
   assert(ctrl_params_desc(n) == NULL);
   assert(isnan(ctrl_params_get(n)));
@@ -50,7 +51,7 @@ static void test_find(void) {
 static void test_set_rules(void) {
   ctrl_params_init();
   const size_t w0 = idx("CTL_W0");
-  assert(ctrl_params_set(w0, 650.0F, true) == CTRL_PARAM_OK);  /* ajustável em voo */
+  assert(ctrl_params_set(w0, 650.0F, true) == CTRL_PARAM_OK); /* ajustável em voo */
   assert(ctrl_params_get(w0) == 650.0F);
   assert(ctrl_params_set(w0, 99.0F, false) == CTRL_PARAM_OUT_OF_RANGE);
   assert(ctrl_params_set(w0, NAN, false) == CTRL_PARAM_OUT_OF_RANGE);

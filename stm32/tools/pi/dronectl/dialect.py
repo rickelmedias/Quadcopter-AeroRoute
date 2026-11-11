@@ -5,6 +5,7 @@ O módulo é gerado com o pymavlink a partir de ``protocol/drone_controller.xml`
 ``~/.cache/dronectl``. Ele só é refeito quando o XML muda, então a Pi nunca
 fala uma versão do protocolo diferente da que está no repositório.
 """
+
 from __future__ import annotations
 
 import contextlib
@@ -37,8 +38,9 @@ def load() -> ModuleType:
         for name in ('common.xml', 'standard.xml', 'minimal.xml'):
             shutil.copy(definitions / name, work / name)
         shutil.copy(DIALECT_XML, work / DIALECT_XML.name)
-        opts = mavgen.Opts(output=str(target), wire_protocol='2.0', language='Python3',
-                           validate=False)
+        opts = mavgen.Opts(
+            output=str(target), wire_protocol='2.0', language='Python3', validate=False
+        )
         log = io.StringIO()
         with contextlib.redirect_stdout(log):
             ok = mavgen.mavgen(opts, [str(work / DIALECT_XML.name)])

@@ -41,10 +41,12 @@ typedef struct {
  *         posição não mudou (inclusive no evento duplicado) ou está fora da
  *         faixa.
  */
-static inline unsigned dma_ring_segments(uint16_t last_position, uint16_t position,
-                                         uint16_t size, dma_ring_segment_t out[2]) {
-  if (position > size || last_position > size) return 0;
-  if (position == last_position) return 0;
+static inline unsigned dma_ring_segments(uint16_t last_position, uint16_t position, uint16_t size,
+                                         dma_ring_segment_t out[2]) {
+  if (position > size || last_position > size)
+    return 0;
+  if (position == last_position)
+    return 0;
 
   unsigned count = 0;
   if (position < last_position) {
@@ -52,8 +54,16 @@ static inline unsigned dma_ring_segments(uint16_t last_position, uint16_t positi
        exatamente na borda, que é o que a proteção contra evento duplicado
        acima deixa em last_position. */
     const uint16_t tail = (uint16_t)(size - last_position);
-    if (tail) { out[count].offset = last_position; out[count].length = tail; ++count; }
-    if (position) { out[count].offset = 0; out[count].length = position; ++count; }
+    if (tail) {
+      out[count].offset = last_position;
+      out[count].length = tail;
+      ++count;
+    }
+    if (position) {
+      out[count].offset = 0;
+      out[count].length = position;
+      ++count;
+    }
   } else {
     out[count].offset = last_position;
     out[count].length = (uint16_t)(position - last_position);

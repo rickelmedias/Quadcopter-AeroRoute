@@ -55,7 +55,7 @@ static void test_height(void) {
 static void test_inverted_mount_zero(void) {
   ctrl_params_init();
   ctrl_params_t p;
-  ctrl_params_snapshot(&p);  /* zero padrão: roll -174,5 e pitch -2,9 graus */
+  ctrl_params_snapshot(&p); /* zero padrão: roll -174,5 e pitch -2,9 graus */
   const float deg = 0.017453293F;
   meas_state_t s;
   meas_reset(&s);
@@ -65,7 +65,7 @@ static void test_inverted_mount_zero(void) {
   meas_input_t in = level(0.5F);
   in.roll = -174.5F * deg;
   in.pitch = -2.9F * deg;
-  in.q[0] = 0.0F;  /* quatérnio invertido: o cosseno dele seria -1 */
+  in.q[0] = 0.0F; /* quatérnio invertido: o cosseno dele seria -1 */
   in.q[1] = 1.0F;
   assert(meas_update(&s, &in, &p, y) & MEAS_RANGE);
   assert(NEAR(y[LQG_Y_PHI], 0.0, 1e-5) && NEAR(y[LQG_Y_THETA], 0.0, 1e-5));
@@ -94,13 +94,13 @@ static void test_bench_measured_signs(void) {
   meas_reset(&s);
   lqg_real_t y[LQG_NY];
   meas_input_t in = level(0.5F);
-  in.roll = (-174.5F + 4.0F) * deg;    /* roll do sensor +4: frente para cima */
-  in.pitch = (-2.9F - 3.0F) * deg;     /* pitch do sensor -3: lado direito para cima */
+  in.roll = (-174.5F + 4.0F) * deg; /* roll do sensor +4: frente para cima */
+  in.pitch = (-2.9F - 3.0F) * deg;  /* pitch do sensor -3: lado direito para cima */
   in.yaw = 0.0F;
   (void)meas_update(&s, &in, &p, y);
   assert(y[LQG_Y_THETA] > 0.0 && NEAR(y[LQG_Y_THETA], 4.0 * deg, 1e-5));
   assert(y[LQG_Y_PHI] < 0.0 && NEAR(y[LQG_Y_PHI], -3.0 * deg, 1e-5));
-  in.yaw = 10.0F * deg;                /* girou à esquerda: guinada do sensor sobe */
+  in.yaw = 10.0F * deg; /* girou à esquerda: guinada do sensor sobe */
   (void)meas_update(&s, &in, &p, y);
   assert(y[LQG_Y_PSI] < 0.0 && NEAR(y[LQG_Y_PSI], -10.0 * deg, 1e-5));
 }
@@ -112,7 +112,7 @@ static void test_rearm_keeps_yaw_origin(void) {
   meas_reset(&s);
   lqg_real_t y[LQG_NY];
   meas_input_t in = level(0.5F);
-  in.yaw = 1.0F;                       /* energização: este é o zero */
+  in.yaw = 1.0F; /* energização: este é o zero */
   (void)meas_update(&s, &in, &p, y);
   in.yaw = 1.5F;
   (void)meas_update(&s, &in, &p, y);
@@ -131,7 +131,7 @@ static void test_attitude_signs_and_yaw_unwrap(void) {
   meas_input_t in = level(0.5F);
   in.roll = 0.1F;
   in.pitch = 0.2F;
-  in.yaw = 3.0F;  /* origem */
+  in.yaw = 3.0F; /* origem */
   in.gyro[0] = 0.01F;
   in.gyro[1] = 0.02F;
   in.gyro[2] = 0.03F;
@@ -140,17 +140,17 @@ static void test_attitude_signs_and_yaw_unwrap(void) {
   assert(NEAR(y[LQG_Y_PHI], p.sgn_roll * 0.2F, 1e-7));
   assert(NEAR(y[LQG_Y_THETA], p.sgn_pitch * 0.1F, 1e-7));
   assert(NEAR(y[LQG_Y_PSI], 0.0, 1e-7));
-  assert(NEAR(y[LQG_Y_P], p.sgn_p * 0.02F, 1e-7));  /* giro y */
-  assert(NEAR(y[LQG_Y_Q], p.sgn_q * 0.01F, 1e-7));  /* giro x */
+  assert(NEAR(y[LQG_Y_P], p.sgn_p * 0.02F, 1e-7)); /* giro y */
+  assert(NEAR(y[LQG_Y_Q], p.sgn_q * 0.01F, 1e-7)); /* giro x */
   assert(NEAR(y[LQG_Y_R], p.sgn_r * 0.03F, 1e-7));
 
   /* Passar por +-pi não pode virar um salto de 2*pi. */
   in.yaw = 3.1F;
   (void)meas_update(&s, &in, &p, y);
-  in.yaw = -3.1F;  /* = 3.1832 */
+  in.yaw = -3.1F; /* = 3.1832 */
   (void)meas_update(&s, &in, &p, y);
   assert(NEAR(y[LQG_Y_PSI], p.sgn_yaw * (2.0 * 3.14159265 - 3.1 - 3.0), 1e-4));
-  in.yaw = -2.0F;  /* mais uma volta parcial */
+  in.yaw = -2.0F; /* mais uma volta parcial */
   (void)meas_update(&s, &in, &p, y);
   assert(NEAR(y[LQG_Y_PSI], p.sgn_yaw * (2.0 * 3.14159265 - 2.0 - 3.0), 1e-4));
 
@@ -170,21 +170,21 @@ static void test_flow_gate(void) {
   lqg_real_t y[LQG_NY];
   meas_input_t in = level(1.0F);
   in.flow_x = 0.2F;
-  in.flow_quality = 20U;  /* abaixo do limiar de ligar (30): ainda recusado */
+  in.flow_quality = 20U; /* abaixo do limiar de ligar (30): ainda recusado */
   assert((meas_update(&s, &in, &p, y) & MEAS_FLOW) == 0U);
   in.flow_quality = 40U;
   assert((meas_update(&s, &in, &p, y) & MEAS_FLOW) != 0U);
-  in.flow_quality = 20U;  /* histerese: acima de 15 continua ligado */
+  in.flow_quality = 20U; /* histerese: acima de 15 continua ligado */
   assert((meas_update(&s, &in, &p, y) & MEAS_FLOW) != 0U);
-  in.flow_quality = 10U;  /* abaixo de 15 desliga */
+  in.flow_quality = 10U; /* abaixo de 15 desliga */
   assert((meas_update(&s, &in, &p, y) & MEAS_FLOW) == 0U);
   in.flow_quality = 50U;
-  in.flow_x = 5.0F;       /* acima de 4,2 rad/s: corrompido */
+  in.flow_x = 5.0F; /* acima de 4,2 rad/s: corrompido */
   assert((meas_update(&s, &in, &p, y) & MEAS_FLOW) == 0U);
   in.flow_x = 0.2F;
-  in.roll = 0.7F;         /* inclinado ~40°: a distância não é a altura */
+  in.roll = 0.7F; /* inclinado ~40°: a distância não é a altura */
   assert((meas_update(&s, &in, &p, y) & MEAS_FLOW) == 0U);
-  p.flow_gate = 0.0F;     /* desligado: aceita tudo, como antes */
+  p.flow_gate = 0.0F; /* desligado: aceita tudo, como antes */
   assert((meas_update(&s, &in, &p, y) & MEAS_FLOW) != 0U);
 }
 
@@ -259,7 +259,7 @@ static void test_flow_ekf(void) {
       in.mtf_time_ms = 10U * (uint32_t)k;
       seed = seed * 1103515245UL + 12345UL;
       const float jitter = ((float)((seed >> 8) & 0xFFFFU) / 65535.0F - 0.5F) * 2.0F;
-      in.flow_x = 0.6F + jitter;  /* 0,6 rad/s a 15 cm = 9 cm/s, com ±1 rad/s de ruído */
+      in.flow_x = 0.6F + jitter; /* 0,6 rad/s a 15 cm = 9 cm/s, com ±1 rad/s de ruído */
       (void)meas_update(&s, &in, &p, y);
       if (k > 500) {
         acc += ((double)y[LQG_Y_VX] - 0.09) * ((double)y[LQG_Y_VX] - 0.09);
@@ -269,7 +269,7 @@ static void test_flow_ekf(void) {
     var[fuse] = acc / n;
     assert(fuse == 0 || (s.diag.flags & MEAS_DIAG_XY_TO_LQG) != 0U);
   }
-  assert(var[1] < var[0] / 9.0);  /* desvio pelo menos 3 vezes menor */
+  assert(var[1] < var[0] / 9.0); /* desvio pelo menos 3 vezes menor */
 
   /* O mesmo quadro repetido não corrige o EKF de novo. */
   meas_state_t s;
@@ -287,7 +287,8 @@ static void test_flow_ekf(void) {
      velocidade x do EKF crescer sem fluxo. */
   in.flow_valid = false;
   in.lin_accel[1] = p.sgn_p * 1.0F;
-  for (int k = 0; k < 20; ++k) (void)meas_update(&s, &in, &p, y);
+  for (int k = 0; k < 20; ++k)
+    (void)meas_update(&s, &in, &p, y);
   assert(s.nav.h[0].x[1] > 0.15F && fabsf(s.nav.h[1].x[1]) < 1e-4F);
 }
 
@@ -304,7 +305,8 @@ static void test_z_ekf(void) {
       in.accel_valid = true;
       in.mtf_frame = (uint32_t)k + 1U;
       in.mtf_time_ms = 10U * (uint32_t)k;
-      if (k == 150) in.range_m = 0.60F;  /* reflexo isolado */
+      if (k == 150)
+        in.range_m = 0.60F; /* reflexo isolado */
       (void)meas_update(&s, &in, &p, y);
       if (k == 150) {
         if (use) {
@@ -334,7 +336,7 @@ static void test_flow_bias_and_censoring(void) {
   in.flow_x = 0.4F;
   p.flow_bias_x = 0.1F;
   (void)meas_update(&s, &in, &p, y);
-  assert(NEAR(y[LQG_Y_VX], 0.3, 1e-6));  /* viés de 0,1 rad/s a 1 m = 0,1 m/s tirado */
+  assert(NEAR(y[LQG_Y_VX], 0.3, 1e-6)); /* viés de 0,1 rad/s a 1 m = 0,1 m/s tirado */
   p.flow_bias_x = 0.0F;
 
   /* Censura: contagem zero. A predição dentro de ±0,1 m/s (a 1 m) é aceita. */
@@ -413,7 +415,7 @@ static void test_flow_velocity(void) {
   in.gyro[0] = in.gyro[1] = 0.0F;
   in.gyro[2] = 1.0F;
   const float r = p.sgn_r * 1.0F;
-  in.flow_y = 0.09F * r / (p.sgn_vy * 1.0F);  /* o que o sensor vê girando, a 1 m */
+  in.flow_y = 0.09F * r / (p.sgn_vy * 1.0F); /* o que o sensor vê girando, a 1 m */
   (void)meas_update(&s, &in, &p, y);
   assert(NEAR(y[LQG_Y_VX], 0.0, 1e-5) && NEAR(y[LQG_Y_VY], 0.0, 1e-5));
   in.gyro[2] = 0.0F;

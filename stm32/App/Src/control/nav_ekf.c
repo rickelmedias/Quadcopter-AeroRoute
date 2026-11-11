@@ -9,9 +9,9 @@
 #include <string.h>
 
 /** Incerteza inicial da posição, em m². A posição começa na origem, por definição. */
-#define INITIAL_POS_VAR 0.0F
+#define INITIAL_POS_VAR  0.0F
 /** Incerteza inicial da velocidade, em (m/s)². */
-#define INITIAL_VEL_VAR 1.0F
+#define INITIAL_VEL_VAR  1.0F
 /** Incerteza inicial do viés, em (m/s²)². */
 #define INITIAL_BIAS_VAR 0.25F
 
@@ -71,7 +71,8 @@ static void predict_axis(nav_ekf_axis_t *a, float accel, float dt, float accel_n
   const float G[3] = {h, dt, 0.0F};
   const float qa = accel_noise * accel_noise;
   for (int i = 0; i < 3; ++i) {
-    for (int j = 0; j < 3; ++j) a->P[i][j] += qa * G[i] * G[j];
+    for (int j = 0; j < 3; ++j)
+      a->P[i][j] += qa * G[i] * G[j];
   }
   a->P[2][2] += bias_noise * bias_noise * dt;
 }
@@ -84,19 +85,25 @@ static float innov_var(const nav_ekf_axis_t *a, int k, float R) {
 /** @brief Fusão escalar da medida @p z do estado @p k, com variância @p R. */
 static void fuse(nav_ekf_axis_t *a, int k, float z, float R) {
   const float S = a->P[k][k] + R;
-  if (!(S > 0.0F)) return;
+  if (!(S > 0.0F))
+    return;
   const float innov = z - a->x[k];
   float K[3];
-  for (int i = 0; i < 3; ++i) K[i] = a->P[i][k] / S;
-  for (int i = 0; i < 3; ++i) a->x[i] += K[i] * innov;
+  for (int i = 0; i < 3; ++i)
+    K[i] = a->P[i][k] / S;
+  for (int i = 0; i < 3; ++i)
+    a->x[i] += K[i] * innov;
   float row[3];
-  for (int j = 0; j < 3; ++j) row[j] = a->P[k][j];
+  for (int j = 0; j < 3; ++j)
+    row[j] = a->P[k][j];
   for (int i = 0; i < 3; ++i) {
-    for (int j = 0; j < 3; ++j) a->P[i][j] -= K[i] * row[j];
+    for (int j = 0; j < 3; ++j)
+      a->P[i][j] -= K[i] * row[j];
   }
   /* Mantém simétrica e com diagonal não negativa apesar do arredondamento. */
   for (int i = 0; i < 3; ++i) {
-    if (a->P[i][i] < 0.0F) a->P[i][i] = 0.0F;
+    if (a->P[i][i] < 0.0F)
+      a->P[i][i] = 0.0F;
     for (int j = i + 1; j < 3; ++j) {
       const float m = 0.5F * (a->P[i][j] + a->P[j][i]);
       a->P[i][j] = a->P[j][i] = m;
@@ -107,7 +114,8 @@ static void fuse(nav_ekf_axis_t *a, int k, float z, float R) {
 /** @brief Adota a medida do estado @p k: valor medido e incerteza da medida, sem correlação. */
 static void adopt(nav_ekf_axis_t *a, int k, float z, float R) {
   a->x[k] = z;
-  for (int j = 0; j < 3; ++j) a->P[k][j] = a->P[j][k] = 0.0F;
+  for (int j = 0; j < 3; ++j)
+    a->P[k][j] = a->P[j][k] = 0.0F;
   a->P[k][k] = R;
 }
 
@@ -119,7 +127,8 @@ static uint16_t age_step(uint16_t age) {
 void nav_ekf_zero_position(nav_ekf_t *f) {
   for (int i = 0; i < 2; ++i) {
     f->h[i].x[0] = 0.0F;
-    for (int j = 0; j < 3; ++j) f->h[i].P[0][j] = f->h[i].P[j][0] = 0.0F;
+    for (int j = 0; j < 3; ++j)
+      f->h[i].P[0][j] = f->h[i].P[j][0] = 0.0F;
   }
 }
 
@@ -127,17 +136,20 @@ void nav_ekf_predict(nav_ekf_t *f, float ax, float ay, float a_down, float dt,
                      const nav_ekf_config_t *cfg) {
   f->flow_age = age_step(f->flow_age);
   f->z_age = age_step(f->z_age);
-  if (!(dt > 0.0F) || !isfinite(dt)) return;
+  if (!(dt > 0.0F) || !isfinite(dt))
+    return;
   if (isfinite(ax) && isfinite(ay)) {
     predict_axis(&f->h[0], ax, dt, cfg->accel_noise, cfg->bias_noise);
     predict_axis(&f->h[1], ay, dt, cfg->accel_noise, cfg->bias_noise);
   }
-  if (isfinite(a_down)) predict_axis(&f->z, a_down, dt, cfg->accel_noise_z, cfg->bias_noise);
+  if (isfinite(a_down))
+    predict_axis(&f->z, a_down, dt, cfg->accel_noise_z, cfg->bias_noise);
 }
 
 bool nav_ekf_update_flow(nav_ekf_t *f, float vx, float vy, float range_m, float half_x,
                          float half_y, const nav_ekf_config_t *cfg) {
-  if (!isfinite(vx) || !isfinite(vy) || !isfinite(range_m) || range_m <= 0.0F) return false;
+  if (!isfinite(vx) || !isfinite(vy) || !isfinite(range_m) || range_m <= 0.0F)
+    return false;
   /* O mesmo erro angular vira um erro de velocidade maior quanto mais alto. A
      quantização soma variância uniforme (h²/3), sem zona morta: tratar a
      célula toda como inovação zero deixava o viés integrar livremente. */
@@ -145,9 +157,11 @@ bool nav_ekf_update_flow(nav_ekf_t *f, float vx, float vy, float range_m, float 
   const float z[2] = {vx, vy};
   const float half[2] = {fmaxf(half_x, 0.0F), fmaxf(half_y, 0.0F)};
   float R[2];
-  for (int i = 0; i < 2; ++i) R[i] = sigma * sigma + half[i] * half[i] / 3.0F;
+  for (int i = 0; i < 2; ++i)
+    R[i] = sigma * sigma + half[i] * half[i] / 3.0F;
   if (!f->h_started) {
-    for (int i = 0; i < 2; ++i) adopt(&f->h[i], 1, z[i], R[i]);
+    for (int i = 0; i < 2; ++i)
+      adopt(&f->h[i], 1, z[i], R[i]);
     f->h_started = true;
     f->flow_age = 0U;
     return true;
@@ -158,29 +172,34 @@ bool nav_ekf_update_flow(nav_ekf_t *f, float vx, float vy, float range_m, float 
     const float S = innov_var(&f->h[i], 1, R[i]);
     f->flow_innov[i] = z[i] - f->h[i].x[1];
     const float ratio = S > 0.0F ? f->flow_innov[i] * f->flow_innov[i] / S : INFINITY;
-    if (ratio > worst) worst = ratio;
+    if (ratio > worst)
+      worst = ratio;
   }
   const float g2 = cfg->gate * cfg->gate;
   f->flow_ratio = g2 > 0.0F ? worst / g2 : 0.0F;
   if (g2 > 0.0F && worst > g2) {
     ++f->flow_rejected;
-    if (++f->flow_run < NAV_EKF_MAX_REJECT) return false;
+    if (++f->flow_run < NAV_EKF_MAX_REJECT)
+      return false;
     /* Discordância persistente: acreditar no sensor, não em nós mesmos. */
-    for (int i = 0; i < 2; ++i) adopt(&f->h[i], 1, z[i], R[i]);
+    for (int i = 0; i < 2; ++i)
+      adopt(&f->h[i], 1, z[i], R[i]);
     f->flow_run = 0U;
     ++f->flow_resets;
     f->flow_age = 0U;
     return true;
   }
   f->flow_run = 0U;
-  for (int i = 0; i < 2; ++i) fuse(&f->h[i], 1, z[i], R[i]);
+  for (int i = 0; i < 2; ++i)
+    fuse(&f->h[i], 1, z[i], R[i]);
   ++f->flow_updates;
   f->flow_age = 0U;
   return true;
 }
 
 bool nav_ekf_update_z(nav_ekf_t *f, float z_meas, const nav_ekf_config_t *cfg) {
-  if (!isfinite(z_meas)) return false;
+  if (!isfinite(z_meas))
+    return false;
   const float R = cfg->range_noise * cfg->range_noise;
   if (!f->z_started) {
     adopt(&f->z, 0, z_meas, R);
@@ -195,7 +214,8 @@ bool nav_ekf_update_z(nav_ekf_t *f, float z_meas, const nav_ekf_config_t *cfg) {
   f->z_ratio = g2 > 0.0F ? ratio / g2 : 0.0F;
   if (g2 > 0.0F && ratio > g2) {
     ++f->z_rejected;
-    if (++f->z_run < NAV_EKF_MAX_REJECT) return false;
+    if (++f->z_run < NAV_EKF_MAX_REJECT)
+      return false;
     adopt(&f->z, 0, z_meas, R);
     f->z_run = 0U;
     ++f->z_resets;

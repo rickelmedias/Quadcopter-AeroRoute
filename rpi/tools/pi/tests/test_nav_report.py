@@ -2,6 +2,7 @@
 
 Rodar a partir de tools/pi:  python3 -m unittest tests.test_nav_report
 """
+
 import csv
 import os
 import sys
@@ -12,15 +13,45 @@ from types import SimpleNamespace
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from dronectl.nav_report import (FLOW_FUSED, NEW_FRAME, XY_USABLE, Z_USABLE,  # noqa: E402
-                                 NavSample, analyze_nav, nav_line, nav_notes, save_nav_log)
+from dronectl.nav_report import (
+    FLOW_FUSED,
+    NEW_FRAME,
+    XY_USABLE,
+    Z_USABLE,  # noqa: E402
+    NavSample,
+    analyze_nav,
+    nav_line,
+    nav_notes,
+    save_nav_log,
+)
 
 
-def nav(t_ms, z=-0.12, vz=0.0, x=0.0, range_rejected=0, flags=NEW_FRAME | FLOW_FUSED | XY_USABLE
-        | Z_USABLE):
-    return NavSample(t_ms, [0.0, 0.0], [0.0, 0.0], 0.12, 0.12, [x, 0.0, z], [0.0, 0.0, vz],
-                     [0.01, -0.02, 0.0], [0.0, 0.0, 0.0], 0.1, 0.2, 0, 0, range_rejected, flags,
-                     60)
+def nav(
+    t_ms,
+    z=-0.12,
+    vz=0.0,
+    x=0.0,
+    range_rejected=0,
+    flags=NEW_FRAME | FLOW_FUSED | XY_USABLE | Z_USABLE,
+):
+    return NavSample(
+        t_ms,
+        [0.0, 0.0],
+        [0.0, 0.0],
+        0.12,
+        0.12,
+        [x, 0.0, z],
+        [0.0, 0.0, vz],
+        [0.01, -0.02, 0.0],
+        [0.0, 0.0, 0.0],
+        0.1,
+        0.2,
+        0,
+        0,
+        range_rejected,
+        flags,
+        60,
+    )
 
 
 def ctrl(t_ms, z=-0.12, vz=0.0, x=0.0, state=5):
@@ -29,7 +60,6 @@ def ctrl(t_ms, z=-0.12, vz=0.0, x=0.0, state=5):
 
 
 class NavReportTest(unittest.TestCase):
-
     def test_lqg_sees_a_climb_the_ekf_does_not(self):
         # Altura parada: o LQG acha que sobe 2,5 cm/s (vz NED negativo), o EKF não.
         n = [nav(1000 + 100 * k, range_rejected=65534 + k) for k in range(50)]

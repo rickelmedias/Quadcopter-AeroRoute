@@ -19,6 +19,7 @@ Etapas (cada uma imprime o resultado e tudo vai para um JSON em
 6. perda do HEARTBEAT: o processo que comanda o voo morre no meio de um
    trecho, e um leitor passivo (que não transmite) registra o que o STM32 faz.
 """
+
 from __future__ import annotations
 
 import json
@@ -38,8 +39,19 @@ from dronectl.missao import Missao  # noqa: E402
 
 PORTA = os.environ.get('DRONECTL_PORT', '/dev/serial0')
 SAIDA = Path(__file__).resolve().parent / 'resultados'
-ESTADOS = ['BOOT', 'SELF_TEST', 'STANDBY', 'PREARM', 'ARMED', 'TAKEOFF', 'HOLD', 'LEG', 'LAND',
-           'FAILSAFE', 'TERMINATION']
+ESTADOS = [
+    'BOOT',
+    'SELF_TEST',
+    'STANDBY',
+    'PREARM',
+    'ARMED',
+    'TAKEOFF',
+    'HOLD',
+    'LEG',
+    'LAND',
+    'FAILSAFE',
+    'TERMINATION',
+]
 
 
 def nome_estado(s: int) -> str:
@@ -110,8 +122,21 @@ class Trechos:
         self.comando = 0
         self.indice = 0
 
-    def enviar(self, acao, x=0.0, y=0.0, z=0.0, yaw=0.0, *, frame=None, boot=None,
-               comando=None, indice=None, alvo_comp=1, timeout_ms=30000):
+    def enviar(
+        self,
+        acao,
+        x=0.0,
+        y=0.0,
+        z=0.0,
+        yaw=0.0,
+        *,
+        frame=None,
+        boot=None,
+        comando=None,
+        indice=None,
+        alvo_comp=1,
+        timeout_ms=30000,
+    ):
         """Envia e devolve (comando, índice, primeira resposta ou None)."""
         m = self.mod
         frame = m.MAV_FRAME_BODY_FRD if frame is None else frame
@@ -121,12 +146,35 @@ class Trechos:
         indice = self.indice + 1 if indice is None else indice
         boot = self.link.boot_id if boot is None else boot
         since = self.link._mark()
-        self.link.mav.drone_leg_command_send(boot, self.missao, comando, timeout_ms, x, y, z, yaw,
-                                             0.0, 0.0, 0.0, 0.0, indice, 0, acao, frame, 1,
-                                             alvo_comp)
-        ack = self.link._wait(lambda a: a.get_type() == 'DRONE_LEG_ACK' and
-                              a.command_id == comando and a.mission_id == self.missao,
-                              since, 1.5)
+        self.link.mav.drone_leg_command_send(
+            boot,
+            self.missao,
+            comando,
+            timeout_ms,
+            x,
+            y,
+            z,
+            yaw,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            indice,
+            0,
+            acao,
+            frame,
+            1,
+            alvo_comp,
+        )
+        ack = self.link._wait(
+            lambda a: (
+                a.get_type() == 'DRONE_LEG_ACK'
+                and a.command_id == comando
+                and a.mission_id == self.missao
+            ),
+            since,
+            1.5,
+        )
         if ack is not None and ack.result in (m.MAV_RESULT_ACCEPTED, m.MAV_RESULT_IN_PROGRESS):
             self.indice = indice
         return comando, indice, ack
@@ -139,17 +187,31 @@ class Trechos:
         """
         m = self.mod
         finais = (m.MAV_RESULT_ACCEPTED, m.MAV_RESULT_FAILED, 6)  # 6 = MAV_RESULT_CANCELLED
-        return self.link._wait(lambda a: a.get_type() == 'DRONE_LEG_ACK' and
-                               a.command_id == comando and a.mission_id == self.missao and
-                               a.result in finais, 0, tempo_s)
+        return self.link._wait(
+            lambda a: (
+                a.get_type() == 'DRONE_LEG_ACK'
+                and a.command_id == comando
+                and a.mission_id == self.missao
+                and a.result in finais
+            ),
+            0,
+            tempo_s,
+        )
 
 
 def resposta(link, ack) -> str:
     """Resultado MAVLink / motivo (texto do dronectl, em português)."""
     if ack is None:
         return 'sem resposta'
-    nomes = {0: 'ACCEPTED', 1: 'TEMPORARILY_REJECTED', 2: 'DENIED', 3: 'UNSUPPORTED',
-             4: 'FAILED', 5: 'IN_PROGRESS', 6: 'CANCELLED'}
+    nomes = {
+        0: 'ACCEPTED',
+        1: 'TEMPORARILY_REJECTED',
+        2: 'DENIED',
+        3: 'UNSUPPORTED',
+        4: 'FAILED',
+        5: 'IN_PROGRESS',
+        6: 'CANCELLED',
+    }
     return f'{nomes.get(ack.result, ack.result)} / {reason_text(ack.reason)}'
 
 
@@ -170,8 +232,9 @@ def posicao(link):
 
 def decolar(link, tr, altura=0.3):
     link.arm(True)
-    c, _, ack = tr.enviar(tr.mod.DRONE_ACTION_TAKEOFF_RELATIVE, z=-altura,
-                          frame=tr.mod.MAV_FRAME_LOCAL_FRD)
+    c, _, ack = tr.enviar(
+        tr.mod.DRONE_ACTION_TAKEOFF_RELATIVE, z=-altura, frame=tr.mod.MAV_FRAME_LOCAL_FRD
+    )
     fim = tr.fim(c, 30)
     return resposta(link, ack), resposta(link, fim)
 
@@ -184,6 +247,7 @@ def pousar(link, tr):
 
 # ---- etapas ------------------------------------------------------------------
 
+
 def etapa_enlace(link, reg, segundos=20.0):
     reg.zerar()
     erros0 = link.mav.total_receive_errors
@@ -194,14 +258,17 @@ def etapa_enlace(link, reg, segundos=20.0):
     # Perdidos = números que faltam entre o primeiro e o último recebidos.
     reg.perdidos = (max(reg.seqs) - min(reg.seqs) + 1 - len(reg.seqs)) if reg.seqs else 0
     total = len(reg.seqs) + reg.perdidos
-    return {'duracao_s': segundos, 'mensagens': reg.recebidos,
-            'taxa_por_tipo_hz': tipos,
-            'bytes_por_s': round((link.mav.total_bytes_received - bytes0) / segundos, 1),
-            'perdidas_seq': reg.perdidos,
-            'fora_de_ordem': reg.repetidos,
-            'perda_pct': round(100 * reg.perdidos / total, 3) if total else 0.0,
-            'erros_crc': link.mav.total_receive_errors - erros0,
-            'descartes_no_stm32': reg.erros_stm32 - stm0}
+    return {
+        'duracao_s': segundos,
+        'mensagens': reg.recebidos,
+        'taxa_por_tipo_hz': tipos,
+        'bytes_por_s': round((link.mav.total_bytes_received - bytes0) / segundos, 1),
+        'perdidas_seq': reg.perdidos,
+        'fora_de_ordem': reg.repetidos,
+        'perda_pct': round(100 * reg.perdidos / total, 3) if total else 0.0,
+        'erros_crc': link.mav.total_receive_errors - erros0,
+        'descartes_no_stm32': reg.erros_stm32 - stm0,
+    }
 
 
 def etapa_latencia(link, n=100):
@@ -215,11 +282,15 @@ def etapa_latencia(link, n=100):
             rtts.append((time.perf_counter() - t0) * 1000.0)
         time.sleep(0.05)
     rtts.sort()
-    return {'amostras': len(rtts), 'pedidos': n,
-            'media_ms': round(sum(rtts) / len(rtts), 1),
-            'mediana_ms': round(rtts[len(rtts) // 2], 1),
-            'p95_ms': round(rtts[int(len(rtts) * 0.95) - 1], 1),
-            'min_ms': round(rtts[0], 1), 'max_ms': round(rtts[-1], 1)}
+    return {
+        'amostras': len(rtts),
+        'pedidos': n,
+        'media_ms': round(sum(rtts) / len(rtts), 1),
+        'mediana_ms': round(rtts[len(rtts) // 2], 1),
+        'p95_ms': round(rtts[int(len(rtts) * 0.95) - 1], 1),
+        'min_ms': round(rtts[0], 1),
+        'max_ms': round(rtts[-1], 1),
+    }
 
 
 def etapa_recusas(link):
@@ -234,20 +305,25 @@ def etapa_recusas(link):
         print(f"  {'OK ' if ok else 'ERRO'} {nome}: {r}")
 
     T = m.DRONE_ACTION_TRANSLATE_RELATIVE
-    caso('trecho sem autorização do operador', 'sem autorização do operador',
-         tr.enviar(T, 0.2)[2])
+    caso('trecho sem autorização do operador', 'sem autorização do operador', tr.enviar(T, 0.2)[2])
     link.start_session()
     caso('trecho com o drone no chão', 'estado errado', tr.enviar(T, 0.2)[2])
-    caso('identidade de boot errada', 'boot diferente',
-         tr.enviar(T, 0.2, boot=link.boot_id + 1)[2])
+    caso('identidade de boot errada', 'boot diferente', tr.enviar(T, 0.2, boot=link.boot_id + 1)[2])
     caso('destino errado (componente 7)', 'destino errado', tr.enviar(T, 0.2, alvo_comp=7)[2])
     caso('índice de trecho fora de ordem', 'sequência errada', tr.enviar(T, 0.2, indice=5)[2])
     caso('número inválido (NaN)', 'número inválido', tr.enviar(T, float('nan'))[2])
 
     d0, d1 = decolar(link, tr)
     print(f'  decolagem: {d0} -> {d1}')
-    casos.append({'caso': 'decolar 30 cm', 'esperado': 'ACCEPTED', 'resposta': d1,
-                  'ok': 'ACCEPTED' in d1, 'obs': d0})
+    casos.append(
+        {
+            'caso': 'decolar 30 cm',
+            'esperado': 'ACCEPTED',
+            'resposta': d1,
+            'ok': 'ACCEPTED' in d1,
+            'obs': d0,
+        }
+    )
 
     c, _, ack = tr.enviar(m.DRONE_ACTION_ROTATE_RELATIVE, yaw=math.radians(90))
     caso('girar 90°', 'IN_PROGRESS', ack)
@@ -269,22 +345,38 @@ def etapa_recusas(link):
     p1 = posicao(link)
     andou = math.dist(p0[:2], p1[:2])
     ok = abs(andou - 0.3) < 0.05
-    casos.append({'caso': 'pedido repetido executado uma só vez', 'esperado': '0,30 m',
-                  'resposta': f'{andou:.3f} m', 'ok': ok, 'obs': ''})
-    print(f"  {'OK ' if ok else 'ERRO'} deslocamento após pedido repetido: {andou:.3f} m (esperado 0,30)")
+    casos.append(
+        {
+            'caso': 'pedido repetido executado uma só vez',
+            'esperado': '0,30 m',
+            'resposta': f'{andou:.3f} m',
+            'ok': ok,
+            'obs': '',
+        }
+    )
+    print(
+        f"  {'OK ' if ok else 'ERRO'} deslocamento após pedido repetido: {andou:.3f} m (esperado 0,30)"
+    )
 
     c, i, ack = tr.enviar(T, 1.0)
     time.sleep(1.0)
     link.mav.drone_leg_cancel_send(link.boot_id, tr.missao, c, i, 1, 1)
     caso('cancelar trecho em andamento', 'cancel', tr.fim(c, 5))
     esperar_estado(link, ('HOLD',), 5)
-    casos.append({'caso': 'estado após cancelar', 'esperado': 'HOLD',
-                  'resposta': nome_estado(link.flight_state),
-                  'ok': nome_estado(link.flight_state) == 'HOLD', 'obs': ''})
+    casos.append(
+        {
+            'caso': 'estado após cancelar',
+            'esperado': 'HOLD',
+            'resposta': nome_estado(link.flight_state),
+            'ok': nome_estado(link.flight_state) == 'HOLD',
+            'obs': '',
+        }
+    )
 
     p_ack, pousou = pousar(link, tr)
-    casos.append({'caso': 'pousar', 'esperado': 'STANDBY', 'resposta': p_ack,
-                  'ok': pousou, 'obs': ''})
+    casos.append(
+        {'caso': 'pousar', 'esperado': 'STANDBY', 'resposta': p_ack, 'ok': pousou, 'obs': ''}
+    )
     print(f'  pouso: {p_ack}, desarmou: {pousou}')
     link.end_session()
     return casos
@@ -293,8 +385,11 @@ def etapa_recusas(link):
 def etapa_missao(link):
     saida = []
     missao = Missao(link, saida=lambda s: (saida.append(s), print('  ' + s)))
-    linhas = (Path(__file__).resolve().parents[1] / 'missoes' / 'quadrado_40cm.txt'
-              ).read_text(encoding='utf-8').splitlines()
+    linhas = (
+        (Path(__file__).resolve().parents[1] / 'missoes' / 'quadrado_40cm.txt')
+        .read_text(encoding='utf-8')
+        .splitlines()
+    )
     t0 = time.monotonic()
     ok = missao.executar_linhas(linhas)
     return {'ok': ok, 'duracao_s': round(time.monotonic() - t0, 1), 'saida': saida}
@@ -338,6 +433,7 @@ def _filho_perde_enlace(fila):
 
 def etapa_heartbeat():
     import serial
+
     mod = dialect.load()
     ctx = mp.get_context('spawn')  # fork depois de threads pode travar o filho
     # Pipe, não Queue: a Queue envia por uma thread que o os._exit do filho mata.
@@ -363,8 +459,9 @@ def etapa_heartbeat():
                 chave = (msg.custom_mode, armado)
                 if chave != ultimo:
                     ultimo = chave
-                    eventos.append((round(time.time() - t_morte, 2), nome_estado(msg.custom_mode),
-                                    armado))
+                    eventos.append(
+                        (round(time.time() - t_morte, 2), nome_estado(msg.custom_mode), armado)
+                    )
     s.close()
     return {'eventos_s': eventos}
 

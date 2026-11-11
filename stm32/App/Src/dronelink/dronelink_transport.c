@@ -74,13 +74,11 @@ bool dronelink_transport_init(UART_HandleTypeDef *uart) {
 }
 
 /** @brief Lê bytes recebidos com espera limitada (ver dronelink_transport.h). */
-size_t dronelink_transport_receive(uint8_t *destination, size_t capacity,
-                                   uint32_t timeout_ms) {
+size_t dronelink_transport_receive(uint8_t *destination, size_t capacity, uint32_t timeout_ms) {
   if (rx_stream == NULL || destination == NULL || capacity == 0U) {
     return 0U;
   }
-  return xStreamBufferReceive(rx_stream, destination, capacity,
-                              pdMS_TO_TICKS(timeout_ms));
+  return xStreamBufferReceive(rx_stream, destination, capacity, pdMS_TO_TICKS(timeout_ms));
 }
 
 /** @brief Enfileira um frame sem esperar (ver dronelink_transport.h). */
@@ -91,9 +89,7 @@ bool dronelink_transport_send(const uint8_t *data, uint16_t length,
   }
   tx_frame_t frame = {.length = length};
   memcpy(frame.data, data, length);
-  QueueHandle_t queue = priority == DRONELINK_TX_CRITICAL
-                            ? tx_critical_queue
-                            : tx_normal_queue;
+  QueueHandle_t queue = priority == DRONELINK_TX_CRITICAL ? tx_critical_queue : tx_normal_queue;
   if (queue == NULL || xQueueSend(queue, &frame, 0U) != pdPASS) {
     ++tx_dropped;
     return false;
@@ -122,8 +118,7 @@ void dronelink_transport_service_tx(void) {
   }
   if (received == pdPASS) {
     tx_busy = true;
-    if (HAL_UART_Transmit_DMA(link_uart, tx_active_frame.data,
-                              tx_active_frame.length) != HAL_OK) {
+    if (HAL_UART_Transmit_DMA(link_uart, tx_active_frame.data, tx_active_frame.length) != HAL_OK) {
       tx_busy = false;
       ++tx_dropped;
     }
@@ -131,9 +126,13 @@ void dronelink_transport_service_tx(void) {
 }
 
 /** @brief Contador de perdas na recepção (ver dronelink_transport.h). */
-uint32_t dronelink_transport_rx_dropped(void) { return rx_dropped; }
+uint32_t dronelink_transport_rx_dropped(void) {
+  return rx_dropped;
+}
 /** @brief Contador de perdas na transmissão (ver dronelink_transport.h). */
-uint32_t dronelink_transport_tx_dropped(void) { return tx_dropped; }
+uint32_t dronelink_transport_tx_dropped(void) {
+  return tx_dropped;
+}
 
 /**
  * @brief Callback da HAL para recepção por DMA (linha ociosa, metade ou fim
@@ -156,8 +155,7 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *uart, uint16_t position) {
      reenviar o buffer inteiro - o mesmo defeito que tinha sido corrigido só
      em mtf01.c. */
   dma_ring_segment_t seg[2];
-  const unsigned count = dma_ring_segments(rx_last_position, position,
-                                           DRONELINK_RX_DMA_SIZE, seg);
+  const unsigned count = dma_ring_segments(rx_last_position, position, DRONELINK_RX_DMA_SIZE, seg);
   BaseType_t higher_priority_task_woken = pdFALSE;
   for (unsigned i = 0U; i < count; ++i) {
     const size_t length = seg[i].length;

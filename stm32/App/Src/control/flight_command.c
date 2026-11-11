@@ -29,7 +29,9 @@ flight_request_result_t flight_request_leg(const flight_leg_t *leg) {
   return flight_ctrl_leg(leg);
 }
 
-flight_request_result_t flight_request_cancel(void) { return flight_ctrl_cancel(); }
+flight_request_result_t flight_request_cancel(void) {
+  return flight_ctrl_cancel();
+}
 
 flight_request_result_t flight_request_hold(flight_reason_t reason) {
   return flight_ctrl_hold(reason);

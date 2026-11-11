@@ -1,7 +1,8 @@
 """Testes da parte de protocolo de tools/controle_gui.py (sem tela, sem placa).
 
-    python3 tests/test_controle_gui.py
+python3 tests/test_controle_gui.py
 """
+
 import os
 import pty
 import re
@@ -17,9 +18,11 @@ import serial  # noqa: E402
 import controle_gui as g  # noqa: E402
 
 #: Linha EST de exemplo: estado SEGURANDO(6), BNO+MTF ok (7), y z=-0.165 φ=0.010 θ=-0.020 ψ=0.030.
-EST = ("EST;1000;6;7;0;-165;10;-20;30;0;0;1;2;3;"
-       "-1;-2;-165;10;-20;30;0;0;0;1;2;3;"
-       "-65;25;-40;0;0;0;-165;0")
+EST = (
+    "EST;1000;6;7;0;-165;10;-20;30;0;0;1;2;3;"
+    "-1;-2;-165;10;-20;30;0;0;0;1;2;3;"
+    "-65;25;-40;0;0;0;-165;0"
+)
 
 
 def test_interpretar_est():
@@ -37,7 +40,12 @@ def test_interpretar_est():
 
 def test_interpretar_mot():
     m = g.interpretar_mot("MOT;10;1;0;100;250;0;0;204;550;0")
-    assert m is not None and m.armado and m.permille == [0, 100, 250, 0] and m.dshot == [0, 204, 550, 0]
+    assert (
+        m is not None
+        and m.armado
+        and m.permille == [0, 100, 250, 0]
+        and m.dshot == [0, 204, 550, 0]
+    )
     assert g.interpretar_mot("MOT;1;1;0") is None
 
 
@@ -45,7 +53,9 @@ def test_du_por_motor_segue_o_mixer_do_firmware():
     """u1->M4, u2->M2, u3->M1, u4->M3, igual ao firmware (App/Src/control/mixer.c)."""
     codigo = (RAIZ / "App/Src/control/mixer.c").read_text()
     tabela = re.search(r"MOTOR_OF_INPUT\[MIXER_COUNT\]\s*=\s*\{([^}]*)\}", codigo).group(1)
-    firmware = [int(x.strip().rstrip("U")) + 1 for x in tabela.split(",")]  # índice 0-based -> M1..M4
+    firmware = [
+        int(x.strip().rstrip("U")) + 1 for x in tabela.split(",")
+    ]  # índice 0-based -> M1..M4
     assert firmware == [g.MOTOR_DA_ENTRADA[i] for i in (1, 2, 3, 4)]
     assert g.du_por_motor([1.0, 2.0, 3.0, 4.0]) == [3.0, 2.0, 4.0, 1.0]
 
@@ -57,13 +67,27 @@ def test_comando_ligar():
     # Padrão: LQG melhorado (ajustado + estimador), com o desequilíbrio fixo.
     cmds = g.comando_ligar(True, ff_th=-90)
     assert cmds[-1] == "hover 0.50"
-    assert params(cmds) == {"FLT_DRY_RUN": "1", "CTL_TRIM": "0",
-                            "CTL_LQG_AJ": "1", "CTL_DIST": "1", "CTL_FF_TH": "-90", "CTL_FF_PHI": "0",
-                            "CTL_XY": "0", "FLT_PRESO": "0"}
+    assert params(cmds) == {
+        "FLT_DRY_RUN": "1",
+        "CTL_TRIM": "0",
+        "CTL_LQG_AJ": "1",
+        "CTL_DIST": "1",
+        "CTL_FF_TH": "-90",
+        "CTL_FF_PHI": "0",
+        "CTL_XY": "0",
+        "FLT_PRESO": "0",
+    }
     # Original: o LQG do TCC puro, sem desequilíbrio fixo mesmo que o painel tenha um.
     assert params(g.comando_ligar(False, "original", ff_th=-90)) == {
-        "FLT_DRY_RUN": "0", "CTL_TRIM": "0", "CTL_LQG_AJ": "0", "CTL_DIST": "0",
-        "CTL_FF_TH": "0", "CTL_FF_PHI": "0", "CTL_XY": "0", "FLT_PRESO": "0"}
+        "FLT_DRY_RUN": "0",
+        "CTL_TRIM": "0",
+        "CTL_LQG_AJ": "0",
+        "CTL_DIST": "0",
+        "CTL_FF_TH": "0",
+        "CTL_FF_PHI": "0",
+        "CTL_XY": "0",
+        "FLT_PRESO": "0",
+    }
     # Segurar posição e detector de subida presa saem das caixas do painel.
     com_xy = params(g.comando_ligar(False, "melhorado", ff_th=-90, xy=True, preso=True))
     assert com_xy["CTL_XY"] == "1" and com_xy["FLT_PRESO"] == "1"
@@ -74,8 +98,16 @@ def test_comando_ligar():
 
 def test_modos_do_painel_existem_no_firmware():
     params = (RAIZ / "App/Src/control/ctrl_params.c").read_text()
-    for nome in ("CTL_TRIM", "CTL_DIST_MAX", "CTL_LQG_AJ", "CTL_DIST", "CTL_FF_TH", "CTL_FF_PHI", "CTL_XY",
-                 "FLT_PRESO"):
+    for nome in (
+        "CTL_TRIM",
+        "CTL_DIST_MAX",
+        "CTL_LQG_AJ",
+        "CTL_DIST",
+        "CTL_FF_TH",
+        "CTL_FF_PHI",
+        "CTL_XY",
+        "FLT_PRESO",
+    ):
         assert f'"{nome}"' in params, nome
     assert set(g.MODOS) == {"original", "ajustado", "melhorado"}
     assert '"CTL_LQI"' not in params
@@ -130,6 +162,7 @@ def test_envio_de_ganhos_cabe_no_console_e_reconstroi_o_crc():
     STM32 chega nos mesmos float32 que entraram no CRC do commit."""
     import struct
     import zlib
+
     q = list(g.lqg_ajustado.Q_AJUSTADO)
     q[0], q[6] = 100.0, 50.0  # x e vx mais firmes que o padrão (50, 20)
     kd, kfd = g.lqg_ajustado.ganhos_lqg(q, 0.2)
@@ -168,7 +201,9 @@ def test_setpoint_e_ganhos_existem_no_firmware():
     assert limite == g.SETPOINT_XY_MAX_M
     config = (RAIZ / "App/Inc/flight_config.h").read_text()
     for nome, painel in (("TH", g.FF_TH_PADRAO), ("PHI", g.FF_PHI_PADRAO)):
-        valor = float(re.search(rf"#define DEFAULT_CTL_FF_{nome}\s+\(?(-?[0-9.]+)F", config).group(1))
+        valor = float(
+            re.search(rf"#define DEFAULT_CTL_FF_{nome}\s+\(?(-?[0-9.]+)F", config).group(1)
+        )
         assert valor == painel, nome
 
 
@@ -177,7 +212,9 @@ def test_enlace_com_porta_virtual():
     tty.setraw(mestre)
     enlace = g.Enlace(serial.Serial(os.ttyname(escravo), 115200, timeout=0.05))
     try:
-        os.write(mestre, ("# console\r\n" + EST + "\r\nMOT;10;0;0;0;0;0;0;0;0;0\r\nlixo\r\n").encode())
+        os.write(
+            mestre, ("# console\r\n" + EST + "\r\nMOT;10;0;0;0;0;0;0;0;0;0\r\nlixo\r\n").encode()
+        )
         tipos = []
         fim = time.time() + 1.0
         while time.time() < fim and len(tipos) < 5:

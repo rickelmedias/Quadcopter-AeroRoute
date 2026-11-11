@@ -62,9 +62,9 @@ void dronelink_protocol_tick(uint32_t now_ms);
  * @param[in] remaining_distance  Distância restante, em m, ou NaN.
  * @param[in] eta_ms              Tempo restante estimado, em ms, ou UINT32_MAX.
  */
-void dronelink_protocol_publish_leg_result(
-    uint32_t mission_id, uint32_t command_id, uint16_t leg_index,
-    uint8_t result, uint16_t reason, uint8_t progress,
-    float remaining_distance, uint32_t eta_ms);
+void dronelink_protocol_publish_leg_result(uint32_t mission_id, uint32_t command_id,
+                                           uint16_t leg_index, uint8_t result, uint16_t reason,
+                                           uint8_t progress, float remaining_distance,
+                                           uint32_t eta_ms);
 
 #endif

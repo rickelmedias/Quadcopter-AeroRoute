@@ -5,6 +5,7 @@ Cada linha digitada é um comando. Os pesos do LQR e do Kalman ficam na Pi;
 todos de uma vez no próximo passo de 10 ms. Os parâmetros do STM32 mudam na
 hora com ``set``.
 """
+
 from __future__ import annotations
 
 import math
@@ -32,8 +33,14 @@ estados: x y z phi theta psi vx vy vz p q r   medidas: z phi theta psi vx vy p q
 class TuningShell:
     """Lê comandos e os aplica pelo enlace."""
 
-    def __init__(self, link: DroneLink, stats: FilterStats, weights: Optional[Weights] = None,
-                 flying: bool = False, say: Callable[[str], None] = print) -> None:
+    def __init__(
+        self,
+        link: DroneLink,
+        stats: FilterStats,
+        weights: Optional[Weights] = None,
+        flying: bool = False,
+        say: Callable[[str], None] = print,
+    ) -> None:
         self.link = link
         self.stats = stats
         self.weights = weights or Weights()
@@ -58,8 +65,10 @@ class TuningShell:
 
     def _apply(self) -> None:
         gains, info = design(self.weights)
-        self.say(f'maior polo: controle {info["controle_maior_polo"]:.6f}, '
-                 f'estimador {info["estimador_maior_polo"]:.6f}')
+        self.say(
+            f'maior polo: controle {info["controle_maior_polo"]:.6f}, '
+            f'estimador {info["estimador_maior_polo"]:.6f}'
+        )
         if info['controle_maior_polo'] >= 1.0 or info['estimador_maior_polo'] >= 1.0:
             raise ValueError('projeto instável; nada foi enviado')
         crc = self.link.upload_gains(gains)

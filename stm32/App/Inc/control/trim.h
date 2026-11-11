@@ -44,19 +44,19 @@
 
 /** @brief Termos acumulados, em rad/s. */
 typedef struct {
-  float z;      /**< Hover: somado igualmente nas quatro entradas. */
-  float theta;  /**< Arfagem: + na frente (u1, u2), - atrás (u3, u4). */
-  float phi;    /**< Rolagem: + na esquerda (u1, u4), - na direita (u2, u3). */
+  float z;     /**< Hover: somado igualmente nas quatro entradas. */
+  float theta; /**< Arfagem: + na frente (u1, u2), - atrás (u3, u4). */
+  float phi;   /**< Rolagem: + na esquerda (u1, u4), - na direita (u2, u3). */
 } trim_state_t;
 
 /** @brief Ganhos e limites. */
 typedef struct {
-  float ki_z;        /**< Ganho do hover, em rad/s por (m·s) de erro de altura. */
-  float ki_att;      /**< Ganho da atitude, em rad/s por (rad·s) de erro de ângulo. */
-  float ground_rate; /**< Rampa de `z` enquanto o drone não se soltou do chão, em rad/s por s. */
-  float settled_vz;  /**< `z` só integra no ar com |vz| abaixo disto, em m/s (assentado). */
-  float max_z;       /**< Limite de |z|, em rad/s. */
-  float max_att;     /**< Limite de |theta| e |phi|, em rad/s. */
+  float ki_z;          /**< Ganho do hover, em rad/s por (m·s) de erro de altura. */
+  float ki_att;        /**< Ganho da atitude, em rad/s por (rad·s) de erro de ângulo. */
+  float ground_rate;   /**< Rampa de `z` enquanto o drone não se soltou do chão, em rad/s por s. */
+  float settled_vz;    /**< `z` só integra no ar com |vz| abaixo disto, em m/s (assentado). */
+  float max_z;         /**< Limite de |z|, em rad/s. */
+  float max_att;       /**< Limite de |theta| e |phi|, em rad/s. */
   float att_error_max; /**< No ar, o erro de ângulo integrado é limitado a ± isto, em rad. */
 } trim_config_t;
 
@@ -79,9 +79,8 @@ void trim_reset(trim_state_t *t);
  * @param[in]     phi       Rolagem estimada, em rad.
  * @param[in]     theta     Arfagem estimada, em rad.
  */
-void trim_update(trim_state_t *t, const trim_config_t *cfg, bool enabled, float dt,
-                 bool grounded, float vz, float z_error, float phi,
-                 float theta);
+void trim_update(trim_state_t *t, const trim_config_t *cfg, bool enabled, float dt, bool grounded,
+                 float vz, float z_error, float phi, float theta);
 
 /**
  * @brief Soma por entrada do modelo (u1..u4), em rad/s, a ser acrescentada ao du.

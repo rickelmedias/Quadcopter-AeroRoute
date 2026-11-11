@@ -34,7 +34,8 @@ static mtf_sample_t published;
 
 /** @brief Repassa bytes novos do DMA para a task (ver mtf01.h). */
 void mtf_rx_event(UART_HandleTypeDef *uart, uint16_t position) {
-  if (uart != &huart2 || !stream || position > DMA_SIZE || restart) return;
+  if (uart != &huart2 || !stream || position > DMA_SIZE || restart)
+    return;
   /* O cálculo dos trechos fica em dma_ring.h para que os dois caminhos de
      recepção das USARTs usem uma única implementação testada - antes não
      usavam, e um deles tinha um defeito de dados duplicados que o outro já
@@ -52,13 +53,18 @@ void mtf_rx_event(UART_HandleTypeDef *uart, uint16_t position) {
 
 /** @brief Conta um erro da USART2 e pede o reinício da recepção (ver mtf01.h). */
 void mtf_uart_error(UART_HandleTypeDef *uart) {
-  if (uart == &huart2) { ++errors; restart = true; }
+  if (uart == &huart2) {
+    ++errors;
+    restart = true;
+  }
 }
 
 /** @brief Cópia segura da última amostra, com validade por idade (ver mtf01.h). */
 void mtf_get_sample(mtf_sample_t *out) {
-  taskENTER_CRITICAL(); *out = published; taskEXIT_CRITICAL();
-  if ((uint32_t)(HAL_GetTick()-out->received_ms) > 250U) {
+  taskENTER_CRITICAL();
+  *out = published;
+  taskEXIT_CRITICAL();
+  if ((uint32_t)(HAL_GetTick() - out->received_ms) > 250U) {
     out->range_valid = out->flow_valid = false;
   }
 }
@@ -83,31 +89,38 @@ static void mtf_task(void *argument) {
       parser.sample.range_valid = parser.sample.flow_valid = false;
       restart = false;
       if (HAL_UARTEx_ReceiveToIdle_DMA(&huart2, dma_buffer, DMA_SIZE) != HAL_OK) {
-        ++errors; restart = true; vTaskDelay(pdMS_TO_TICKS(100));
+        ++errors;
+        restart = true;
+        vTaskDelay(pdMS_TO_TICKS(100));
       }
     }
     size_t n = xStreamBufferReceive(stream, bytes, sizeof(bytes), pdMS_TO_TICKS(5));
     if (previous_dropped != dropped) {
       previous_dropped = dropped;
       /* Descarta o fluxo descontínuo antes de aceitar outro frame. */
-      restart = true; n = 0;
+      restart = true;
+      n = 0;
     }
-    for (size_t i=0; i<n; ++i) {
+    for (size_t i = 0; i < n; ++i) {
       /* Cada frame aceito é registrado aqui, e não a partir de uma
          fotografia: este é o único lugar que vê todos os frames. */
       if (mtf_parser_byte(&parser, bytes[i], HAL_GetTick())) {
-        parser.sample.received_us = HAL_GetTick()*1000U;
-        parser.sample.uart_errors = errors; parser.sample.dropped_bytes = dropped;
+        parser.sample.received_us = HAL_GetTick() * 1000U;
+        parser.sample.uart_errors = errors;
+        parser.sample.dropped_bytes = dropped;
         log_mtf(&parser.sample);
       }
     }
-    parser.sample.uart_errors = errors; parser.sample.dropped_bytes = dropped;
-    taskENTER_CRITICAL(); published = parser.sample; taskEXIT_CRITICAL();
+    parser.sample.uart_errors = errors;
+    parser.sample.dropped_bytes = dropped;
+    taskENTER_CRITICAL();
+    published = parser.sample;
+    taskEXIT_CRITICAL();
   }
 }
 
 /** @brief Cria o stream buffer e a task (ver mtf01.h). */
 bool mtf_start(void) {
   stream = xStreamBufferCreate(1024, 1);
-  return stream && xTaskCreate(mtf_task, "MTF01", 512, NULL, tskIDLE_PRIORITY+3, NULL) == pdPASS;
+  return stream && xTaskCreate(mtf_task, "MTF01", 512, NULL, tskIDLE_PRIORITY + 3, NULL) == pdPASS;
 }

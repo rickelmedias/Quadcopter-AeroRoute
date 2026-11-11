@@ -13,14 +13,14 @@
 /** Entra na seção crítica (nada no PC). */
 #define CTRL_ENTER_CRITICAL() ((void)0)
 /** Sai da seção crítica (nada no PC). */
-#define CTRL_EXIT_CRITICAL() ((void)0)
+#define CTRL_EXIT_CRITICAL()  ((void)0)
 #else
 #include "FreeRTOS.h"
 #include "task.h"
 /** Entra na seção crítica do FreeRTOS (sem troca de task nem interrupções). */
 #define CTRL_ENTER_CRITICAL() taskENTER_CRITICAL()
 /** Sai da seção crítica do FreeRTOS. */
-#define CTRL_EXIT_CRITICAL() taskEXIT_CRITICAL()
+#define CTRL_EXIT_CRITICAL()  taskEXIT_CRITICAL()
 #endif
 
 #endif

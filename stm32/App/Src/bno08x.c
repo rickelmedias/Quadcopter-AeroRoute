@@ -54,7 +54,8 @@ static volatile bool i2c_ok;
 
 /** @brief Fim de recepção I2C (interrupção): acorda a task do BNO. */
 void HAL_I2C_MasterRxCpltCallback(I2C_HandleTypeDef *h) {
-  if (h != &hi2c2 || !i2c_waiter) return;
+  if (h != &hi2c2 || !i2c_waiter)
+    return;
   BaseType_t wake = pdFALSE;
   i2c_ok = true;
   vTaskNotifyGiveFromISR(i2c_waiter, &wake);
@@ -63,7 +64,8 @@ void HAL_I2C_MasterRxCpltCallback(I2C_HandleTypeDef *h) {
 
 /** @brief Erro I2C (interrupção): acorda a task do BNO com falha. */
 void HAL_I2C_ErrorCallback(I2C_HandleTypeDef *h) {
-  if (h != &hi2c2 || !i2c_waiter) return;
+  if (h != &hi2c2 || !i2c_waiter)
+    return;
   BaseType_t wake = pdFALSE;
   i2c_ok = false;
   vTaskNotifyGiveFromISR(i2c_waiter, &wake);
@@ -83,7 +85,8 @@ static bool i2c_receive(uint8_t *buffer, uint16_t length, uint32_t timeout_ms) {
   i2c_waiter = xTaskGetCurrentTaskHandle();
   (void)ulTaskNotifyTake(pdTRUE, 0);
   i2c_ok = false;
-  if (HAL_I2C_Master_Receive_IT(&hi2c2, address, buffer, length) != HAL_OK) return false;
+  if (HAL_I2C_Master_Receive_IT(&hi2c2, address, buffer, length) != HAL_OK)
+    return false;
   if (!ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(timeout_ms))) {
     /* Sem resposta: a sessão será refeita, e o caminho de erro reinicia o
        periférico (HAL_I2C_DeInit/Init) antes da próxima tentativa. */
@@ -102,8 +105,10 @@ static void publish(void) {
      da seção crítica mantém a trava curta. */
   bno_sample_t next = sample;
   next.euler_valid = next.rotation.seen && next.angular.seen &&
-      attitude_build_euler_state(next.q, next.gyro, &next.euler);
-  taskENTER_CRITICAL(); published = next; taskEXIT_CRITICAL();
+                     attitude_build_euler_state(next.q, next.gyro, &next.euler);
+  taskENTER_CRITICAL();
+  published = next;
+  taskEXIT_CRITICAL();
 }
 
 /**
@@ -112,7 +117,8 @@ static void publish(void) {
  * @param[in] fault  Motivo.
  */
 static void fail(bno_fault_t fault) {
-  if (sample.fault == BNO_FAULT_NONE) sample.fault = fault;
+  if (sample.fault == BNO_FAULT_NONE)
+    sample.fault = fault;
   ++sample.errors;
 }
 
@@ -140,8 +146,8 @@ static void i2c2_bus_recovery(void) {
   HAL_GPIO_Init(BNO085_SCL_GPIO_Port, &gpio);
   gpio.Pin = BNO085_SDA_Pin;
   HAL_GPIO_Init(BNO085_SDA_GPIO_Port, &gpio);
-  for (int i = 0; i < 9 &&
-       HAL_GPIO_ReadPin(BNO085_SDA_GPIO_Port, BNO085_SDA_Pin) == GPIO_PIN_RESET; ++i) {
+  for (int i = 0; i < 9 && HAL_GPIO_ReadPin(BNO085_SDA_GPIO_Port, BNO085_SDA_Pin) == GPIO_PIN_RESET;
+       ++i) {
     HAL_GPIO_WritePin(BNO085_SCL_GPIO_Port, BNO085_SCL_Pin, GPIO_PIN_RESET);
     vTaskDelay(1);
     HAL_GPIO_WritePin(BNO085_SCL_GPIO_Port, BNO085_SCL_Pin, GPIO_PIN_SET);
@@ -164,7 +170,10 @@ static void i2c2_bus_recovery(void) {
  * @param[in] self  Não usado.
  * @return Tick atual convertido para us.
  */
-static uint32_t now_us(sh2_Hal_t *self) { (void)self; return HAL_GetTick()*1000U; }
+static uint32_t now_us(sh2_Hal_t *self) {
+  (void)self;
+  return HAL_GetTick() * 1000U;
+}
 
 /**
  * @brief Callback de interrupção externa da HAL: registra o instante da borda
@@ -173,7 +182,8 @@ static uint32_t now_us(sh2_Hal_t *self) { (void)self; return HAL_GetTick()*1000U
  * @param[in] pin  Pino que gerou a interrupção.
  */
 void HAL_GPIO_EXTI_Callback(uint16_t pin) {
-  if (pin == BNO085_INT_Pin) irq_us = HAL_GetTick()*1000U;
+  if (pin == BNO085_INT_Pin)
+    irq_us = HAL_GetTick() * 1000U;
 }
 
 /**
@@ -202,17 +212,18 @@ static int hub_open(sh2_Hal_t *self) {
   uint32_t started = HAL_GetTick();
   do {
     for (unsigned a = 0x4A; a <= 0x4B; ++a) {
-      if (HAL_I2C_IsDeviceReady(&hi2c2, a<<1, 2, 20) == HAL_OK) {
-        address = (uint16_t)(a<<1);
+      if (HAL_I2C_IsDeviceReady(&hi2c2, a << 1, 2, 20) == HAL_OK) {
+        address = (uint16_t)(a << 1);
         sample.address = (uint8_t)a;
-        sample.probe_ms = (uint16_t)(HAL_GetTick()-started);
+        sample.probe_ms = (uint16_t)(HAL_GetTick() - started);
         publish();
         return SH2_OK;
       }
     }
     vTaskDelay(pdMS_TO_TICKS(10));
-  } while (HAL_GetTick()-started < PROBE_WINDOW_MS);
-  fail(BNO_FAULT_NO_DEVICE); publish();
+  } while (HAL_GetTick() - started < PROBE_WINDOW_MS);
+  fail(BNO_FAULT_NO_DEVICE);
+  publish();
   return SH2_ERR_IO;
 }
 
@@ -244,36 +255,53 @@ static int hub_read(sh2_Hal_t *self, uint8_t *buffer, unsigned capacity, uint32_
   (void)self;
   /* O INT é ativo em nível baixo: alto significa que o sensor não tem nada
      na fila. */
-  if (transport_failed ||
-      HAL_GPIO_ReadPin(BNO085_INT_GPIO_Port, BNO085_INT_Pin) == GPIO_PIN_SET) {
+  if (transport_failed || HAL_GPIO_ReadPin(BNO085_INT_GPIO_Port, BNO085_INT_Pin) == GPIO_PIN_SET) {
     vTaskDelay(1);
     return 0;
   }
   uint8_t header[4];
   *timestamp = irq_us;
   if (!i2c_receive(header, 4, 20)) {
-    fail(BNO_FAULT_TRANSPORT); goto failed;
+    fail(BNO_FAULT_TRANSPORT);
+    goto failed;
   }
-  unsigned length = ((unsigned)header[0] | (unsigned)header[1]<<8) & 0x7FFFU;
-  if (length == 0) { vTaskDelay(1); return 0; }
-  if (length < 4 || length > capacity) { fail(BNO_FAULT_PROTOCOL); goto failed; }
+  unsigned length = ((unsigned)header[0] | (unsigned)header[1] << 8) & 0x7FFFU;
+  if (length == 0) {
+    vTaskDelay(1);
+    return 0;
+  }
+  if (length < 4 || length > capacity) {
+    fail(BNO_FAULT_PROTOCOL);
+    goto failed;
+  }
   /* Limita o canal antes que o pacote chegue ao parser SHTP incorporado - ver
      bno_i2c_header_channel_valid(). A leitura completa abaixo é conferida
      contra este mesmo cabeçalho por bno_i2c_header_matches(), que exige o
      byte 2 idêntico, então validar o cabeçalho espiado cobre o pacote que o
      parser realmente recebe. */
-  if (!bno_i2c_header_channel_valid(header)) { fail(BNO_FAULT_PROTOCOL); goto failed; }
-  if (length == 4) { memcpy(buffer, header, 4); return 4; }
+  if (!bno_i2c_header_channel_valid(header)) {
+    fail(BNO_FAULT_PROTOCOL);
+    goto failed;
+  }
+  if (length == 4) {
+    memcpy(buffer, header, 4);
+    return 4;
+  }
   /* Toda transferência I2C repete o cabeçalho SHTP, então se lê o tamanho
      completo, e não tamanho-4, e nunca como leitura de registrador
      (Mem_Read). */
   if (!i2c_receive(buffer, (uint16_t)length, 40)) {
-    fail(BNO_FAULT_TRANSPORT); goto failed;
+    fail(BNO_FAULT_TRANSPORT);
+    goto failed;
   }
-  if (!bno_i2c_header_matches(header, buffer)) { fail(BNO_FAULT_PROTOCOL); goto failed; }
+  if (!bno_i2c_header_matches(header, buffer)) {
+    fail(BNO_FAULT_PROTOCOL);
+    goto failed;
+  }
   return (int)length;
 failed:
-  transport_failed = true; publish();
+  transport_failed = true;
+  publish();
   return SH2_ERR_IO;
 }
 
@@ -287,10 +315,14 @@ failed:
  */
 static int hub_write(sh2_Hal_t *self, uint8_t *buffer, unsigned length) {
   (void)self;
-  if (transport_failed) { vTaskDelay(1); return SH2_ERR_IO; }
+  if (transport_failed) {
+    vTaskDelay(1);
+    return SH2_ERR_IO;
+  }
   if (HAL_I2C_Master_Transmit(&hi2c2, address, buffer, length, 40) != HAL_OK) {
     fail(BNO_FAULT_TRANSPORT);
-    transport_failed = true; publish();
+    transport_failed = true;
+    publish();
     return SH2_ERR_IO;
   }
   return (int)length;
@@ -311,7 +343,8 @@ static sh2_Hal_t hub = {hub_open, hub_close, hub_read, hub_write, now_us};
 static void event(void *cookie, sh2_AsyncEvent_t *e) {
   (void)cookie;
   if (e->eventId == SH2_RESET) {
-    reset_seen = true; ++sample.resets;
+    reset_seen = true;
+    ++sample.resets;
     sample.rotation.seen = sample.angular.seen = sample.acceleration.seen = false;
   }
 }
@@ -327,8 +360,10 @@ static void event(void *cookie, sh2_AsyncEvent_t *e) {
 static bool update_stats(bno_report_stats_t *s, const sh2_SensorValue_t *v) {
   if (s->seen) {
     uint8_t delta = (uint8_t)(v->sequence - s->sequence);
-    if (!delta) return false;
-    if (delta < 128) s->gaps += delta - 1U; /* senão, assume reordenação e não perda */
+    if (!delta)
+      return false;
+    if (delta < 128)
+      s->gaps += delta - 1U; /* senão, assume reordenação e não perda */
   }
   s->seen = true;
   ++s->count;
@@ -348,24 +383,35 @@ static bool update_stats(bno_report_stats_t *s, const sh2_SensorValue_t *v) {
 static void sensor_event(void *cookie, sh2_SensorEvent_t *e) {
   (void)cookie;
   sh2_SensorValue_t v;
-  if (sh2_decodeSensorEvent(&v, e) != SH2_OK) { ++sample.errors; return; }
+  if (sh2_decodeSensorEvent(&v, e) != SH2_OK) {
+    ++sample.errors;
+    return;
+  }
   if (v.sensorId == SH2_ROTATION_VECTOR) {
     sh2_RotationVectorWAcc_t *q = &v.un.rotationVector;
     /* Um quatérnio muito longe da esfera unitária está corrompido, não só
        impreciso. */
-    float norm = q->real*q->real + q->i*q->i + q->j*q->j + q->k*q->k;
-    if (!isfinite(norm) || norm < 0.8F || norm > 1.2F) { ++sample.errors; return; }
-    if (!update_stats(&sample.rotation, &v)) return;
-    float scale = 1.0F/sqrtf(norm);
-    sample.q[0] = q->real*scale; sample.q[1] = q->i*scale;
-    sample.q[2] = q->j*scale;    sample.q[3] = q->k*scale;
+    float norm = q->real * q->real + q->i * q->i + q->j * q->j + q->k * q->k;
+    if (!isfinite(norm) || norm < 0.8F || norm > 1.2F) {
+      ++sample.errors;
+      return;
+    }
+    if (!update_stats(&sample.rotation, &v))
+      return;
+    float scale = 1.0F / sqrtf(norm);
+    sample.q[0] = q->real * scale;
+    sample.q[1] = q->i * scale;
+    sample.q[2] = q->j * scale;
+    sample.q[3] = q->k * scale;
   } else if (v.sensorId == SH2_GYROSCOPE_CALIBRATED) {
-    if (!update_stats(&sample.angular, &v)) return;
+    if (!update_stats(&sample.angular, &v))
+      return;
     sample.gyro[0] = v.un.gyroscope.x;
     sample.gyro[1] = v.un.gyroscope.y;
     sample.gyro[2] = v.un.gyroscope.z;
   } else if (v.sensorId == SH2_LINEAR_ACCELERATION) {
-    if (!update_stats(&sample.acceleration, &v)) return;
+    if (!update_stats(&sample.acceleration, &v))
+      return;
     sample.lin_accel[0] = v.un.linearAcceleration.x;
     sample.lin_accel[1] = v.un.linearAcceleration.y;
     sample.lin_accel[2] = v.un.linearAcceleration.z;
@@ -404,8 +450,7 @@ static bool configure(void) {
  */
 static bool reports_stalled(const bno_sample_t *s, uint32_t now, uint32_t limit) {
   return !s->rotation.seen || !s->angular.seen || !s->acceleration.seen ||
-         now - s->rotation.last_ms     > limit ||
-         now - s->angular.last_ms      > limit ||
+         now - s->rotation.last_ms > limit || now - s->angular.last_ms > limit ||
          now - s->acceleration.last_ms > limit;
 }
 
@@ -413,7 +458,9 @@ static bool reports_stalled(const bno_sample_t *s, uint32_t now, uint32_t limit)
 
 /** @brief Cópia segura da amostra, com @c online recalculado (ver bno08x.h). */
 void bno_get_sample(bno_sample_t *out) {
-  taskENTER_CRITICAL(); *out = published; taskEXIT_CRITICAL();
+  taskENTER_CRITICAL();
+  *out = published;
+  taskEXIT_CRITICAL();
   out->online = out->online && !reports_stalled(out, HAL_GetTick(), ONLINE_STALE_MS);
 }
 
@@ -449,7 +496,8 @@ static void bno_task(void *argument) {
           reset_seen = false;
           publish();
           sample.online = configure();
-          if (!sample.online) fail(BNO_FAULT_CONFIG);
+          if (!sample.online)
+            fail(BNO_FAULT_CONFIG);
         }
       }
 
@@ -474,15 +522,16 @@ static void bno_task(void *argument) {
         /* Publica só quando chegou relatório novo. hub_read() já dorme 1 ms
            quando o INT diz que não há nada, então este laço não gira em vão,
            e com dado pendente ele lê o próximo pacote sem esperar o tick. */
-        const uint32_t total = sample.rotation.count + sample.angular.count +
-                               sample.acceleration.count;
+        const uint32_t total =
+            sample.rotation.count + sample.angular.count + sample.acceleration.count;
         if (total != last_total) {
           last_total = total;
           publish();
           if (sample.rotation.count != last_rotation) {
             last_rotation = sample.rotation.count;
             log_bno(&sample);
-            if (listener) xTaskNotifyGive(listener);
+            if (listener)
+              xTaskNotifyGive(listener);
           }
         }
       }
@@ -500,9 +549,11 @@ static void bno_task(void *argument) {
   }
 }
 
-void bno_set_listener(void *task) { listener = (TaskHandle_t)task; }
+void bno_set_listener(void *task) {
+  listener = (TaskHandle_t)task;
+}
 
 /** @brief Cria a task do BNO08x (ver bno08x.h). */
 bool bno_start(void) {
-  return xTaskCreate(bno_task, "BNO08X", 1024, NULL, tskIDLE_PRIORITY+2, NULL) == pdPASS;
+  return xTaskCreate(bno_task, "BNO08X", 1024, NULL, tskIDLE_PRIORITY + 2, NULL) == pdPASS;
 }

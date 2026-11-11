@@ -3,6 +3,7 @@ contra o STM32 simulado (tests/fake_fc.py com o modelo de voo).
 
 Rodar a partir de tools/pi:  python3 -m unittest discover -s tests
 """
+
 import csv
 import json
 import math
@@ -18,19 +19,42 @@ from types import SimpleNamespace
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from dronectl.gains import REPO_ROOT  # noqa: E402
-from dronectl.hover_report import (ARMED, HOLD, LAND, STANDBY, TAKEOFF, Sample,  # noqa: E402
-                                   analyze, format_report, parse_dist, report_folder)
-from dronectl.hover_test import (Options, Profile, adjusted_gains,  # noqa: E402
-                                 parse_assignments)
+from dronectl.hover_report import (
+    ARMED,
+    HOLD,
+    LAND,
+    STANDBY,
+    TAKEOFF,
+    Sample,  # noqa: E402
+    analyze,
+    format_report,
+    parse_dist,
+    report_folder,
+)
+from dronectl.hover_test import (
+    Options,
+    Profile,
+    adjusted_gains,  # noqa: E402
+    parse_assignments,
+)
 
 GROUND = -0.08
-PARAMS = {'CTL_W0': 1050.0, 'CTL_FF_TH': -50.0, 'CTL_FF_PHI': -40.0, 'CTL_FF_PSI': 50.0,
-          'SNS_LVL_PHI': 0.0, 'SNS_LVL_TH': 0.0, 'CTL_XY': 1.0, 'MOT_W_AT_0': 0.0,
-          'MOT_W_AT_100': 1755.0}
+PARAMS = {
+    'CTL_W0': 1050.0,
+    'CTL_FF_TH': -50.0,
+    'CTL_FF_PHI': -40.0,
+    'CTL_FF_PSI': 50.0,
+    'SNS_LVL_PHI': 0.0,
+    'SNS_LVL_TH': 0.0,
+    'CTL_XY': 1.0,
+    'MOT_W_AT_0': 0.0,
+    'MOT_W_AT_100': 1755.0,
+}
 
 
-def synthetic_flight(phi_deg=0.4, theta_deg=-0.3, xy=(0.05, -0.08), target=0.30,
-                     hover_s=20.0, rate=50.0):
+def synthetic_flight(
+    phi_deg=0.4, theta_deg=-0.3, xy=(0.05, -0.08), target=0.30, hover_s=20.0, rate=50.0
+):
     """Amostras de um voo: chão, partida, rampa, hover parado e pouso.
 
     Returns:
@@ -43,11 +67,20 @@ def synthetic_flight(phi_deg=0.4, theta_deg=-0.3, xy=(0.05, -0.08), target=0.30,
     def add(state, h, x=0.0, y=0.0, phi=0.0, theta=0.0):
         z = GROUND - h
         att = [math.radians(phi), math.radians(theta)]
-        samples.append(Sample(t=t[0], state=state, meas=15, flags=1,
-                              y=[z] + att + [0.0] * 6,
-                              x=[x, y, z] + att + [0.0] * 7, du=[0.0] * 4,
-                              ref=[0.0, 0.0, z, 0.0], thr=[0.62, 0.60, 0.53, 0.61],
-                              t_pi=1000.0 + t[0]))
+        samples.append(
+            Sample(
+                t=t[0],
+                state=state,
+                meas=15,
+                flags=1,
+                y=[z] + att + [0.0] * 6,
+                x=[x, y, z] + att + [0.0] * 7,
+                du=[0.0] * 4,
+                ref=[0.0, 0.0, z, 0.0],
+                thr=[0.62, 0.60, 0.53, 0.61],
+                t_pi=1000.0 + t[0],
+            )
+        )
         t[0] += dt
 
     for _ in range(int(rate)):
@@ -75,8 +108,7 @@ def synthetic_flight(phi_deg=0.4, theta_deg=-0.3, xy=(0.05, -0.08), target=0.30,
 
 def flight_texts(t_mid, t_end):
     # Durante o hover e depois do pouso (z já descontado pelo pouso).
-    return [(t_mid, 'dist z=35 th=-12 phi=8 psi=20'),
-            (t_end, 'dist z=5 th=-12 phi=8 psi=20 rad/s')]
+    return [(t_mid, 'dist z=35 th=-12 phi=8 psi=20'), (t_end, 'dist z=5 th=-12 phi=8 psi=20 rad/s')]
 
 
 class HoverReportTest(unittest.TestCase):
@@ -87,8 +119,8 @@ class HoverReportTest(unittest.TestCase):
 
         commands = []
         test = object.__new__(HoverTest)
-        sample = SimpleNamespace(state=TAKEOFF, meas_flags=4, y=[-0.164],
-                                 x_hat=[0.0, 0.0, -0.165])
+        sample = SimpleNamespace(state=TAKEOFF, meas_flags=4, y=[-0.164], x_hat=[0.0, 0.0, -0.165])
+
         def arm(armed):
             commands.append(('arm', armed))
             sample.state = STANDBY
@@ -106,15 +138,14 @@ class HoverReportTest(unittest.TestCase):
         from dronectl.hover_test import HoverTest
 
         commands = []
-        sample = SimpleNamespace(state=TAKEOFF, meas_flags=4, y=[-0.28],
-                                 x_hat=[0.0, 0.0, -0.28])
+        sample = SimpleNamespace(state=TAKEOFF, meas_flags=4, y=[-0.28], x_hat=[0.0, 0.0, -0.28])
+
         def land():
             commands.append(('land',))
             sample.state = STANDBY
 
         test = object.__new__(HoverTest)
-        test.link = SimpleNamespace(arm=lambda armed: commands.append(('arm', armed)),
-                                    land=land)
+        test.link = SimpleNamespace(arm=lambda armed: commands.append(('arm', armed)), land=land)
         test.opts = SimpleNamespace(mode='motors')
         test.say = lambda message: None
         test.stop_reason = 'Ctrl+C'
@@ -125,8 +156,11 @@ class HoverReportTest(unittest.TestCase):
 
     def test_metrics_and_suggestion(self):
         samples, t_mid, t_end = synthetic_flight()
-        rep = analyze(samples, flight_texts(t_mid, t_end),
-                      {'height_m': 0.30, 'params': PARAMS, 'ground_y_z': GROUND})
+        rep = analyze(
+            samples,
+            flight_texts(t_mid, t_end),
+            {'height_m': 0.30, 'params': PARAMS, 'ground_y_z': GROUND},
+        )
         m = rep.metrics
         self.assertIsNotNone(m['phases_s']['reached'])
         self.assertGreater(m['window_s'], 15.0)
@@ -149,7 +183,7 @@ class HoverReportTest(unittest.TestCase):
 
     def test_lost_samples_are_counted(self):
         samples, t_mid, t_end = synthetic_flight()
-        kept = [s for i, s in enumerate(samples) if not 100 <= i < 110]   # 10 perdidas
+        kept = [s for i, s in enumerate(samples) if not 100 <= i < 110]  # 10 perdidas
         rep = analyze(kept, [], {'height_m': 0.30, 'params': PARAMS})
         self.assertEqual(rep.metrics['link']['rate_hz'], 50.0)
         self.assertAlmostEqual(rep.metrics['link']['lost_pct'], 100 * 10 / len(samples), places=1)
@@ -164,8 +198,11 @@ class HoverReportTest(unittest.TestCase):
 
     def test_no_level_without_xy(self):
         samples, t_mid, t_end = synthetic_flight()
-        rep = analyze(samples, flight_texts(t_mid, t_end),
-                      {'height_m': 0.30, 'params': dict(PARAMS, CTL_XY=0.0)})
+        rep = analyze(
+            samples,
+            flight_texts(t_mid, t_end),
+            {'height_m': 0.30, 'params': dict(PARAMS, CTL_XY=0.0)},
+        )
         self.assertNotIn('SNS_LVL_PHI', rep.suggestion)
         self.assertTrue(any('CTL_XY = 0' in n for n in rep.notes))
 
@@ -175,16 +212,30 @@ class HoverReportTest(unittest.TestCase):
         self.assertEqual(rep.suggestion, {})
 
     def test_never_lifted(self):
-        samples = [Sample(t=i * 0.02, state=TAKEOFF if i > 50 else STANDBY, meas=15, flags=1,
-                          y=[GROUND] + [0.0] * 8, x=[0.0, 0.0, GROUND] + [0.0] * 9,
-                          du=[0.0] * 4, ref=[0.0] * 4, thr=[0.0] * 4) for i in range(300)]
+        samples = [
+            Sample(
+                t=i * 0.02,
+                state=TAKEOFF if i > 50 else STANDBY,
+                meas=15,
+                flags=1,
+                y=[GROUND] + [0.0] * 8,
+                x=[0.0, 0.0, GROUND] + [0.0] * 9,
+                du=[0.0] * 4,
+                ref=[0.0] * 4,
+                thr=[0.0] * 4,
+            )
+            for i in range(300)
+        ]
         rep = analyze(samples, [], {'height_m': 0.30, 'params': PARAMS})
         self.assertTrue(any('não saiu do chão' in n for n in rep.notes))
         self.assertEqual(rep.suggestion, {})
 
     def test_parse_dist(self):
-        texts = [(1.0, 'dist z=-12 th=3 phi=-4'), (2.0, 'voo: pousando'),
-                 (3.0, 'dist z=40 th=-1 phi=2 psi=-7 rad/s')]
+        texts = [
+            (1.0, 'dist z=-12 th=3 phi=-4'),
+            (2.0, 'voo: pousando'),
+            (3.0, 'dist z=40 th=-1 phi=2 psi=-7 rad/s'),
+        ]
         self.assertEqual(parse_dist(texts), {'z': 40.0, 'theta': -1.0, 'phi': 2.0, 'psi': -7.0})
         self.assertEqual(parse_dist(texts[:1])['psi'], 0.0)
         self.assertIsNone(parse_dist([(0.0, 'nada')]))
@@ -210,17 +261,19 @@ class ProfileTest(unittest.TestCase):
             self.assertIn('CTL_W0=1085', back.text())
 
     def test_assignments(self):
-        self.assertEqual(parse_assignments(['ctl_w0=1080,CTL_FF_TH=-40', 'CTL_XY=1']),
-                         {'CTL_W0': 1080.0, 'CTL_FF_TH': -40.0, 'CTL_XY': 1.0})
+        self.assertEqual(
+            parse_assignments(['ctl_w0=1080,CTL_FF_TH=-40', 'CTL_XY=1']),
+            {'CTL_W0': 1080.0, 'CTL_FF_TH': -40.0, 'CTL_XY': 1.0},
+        )
         self.assertEqual(parse_assignments(['x=60,vx=25'], upper=False), {'x': 60.0, 'vx': 25.0})
         with self.assertRaises(ValueError):
             parse_assignments(['CTL_W0'])
 
     def test_options_refuse_bad_tests(self):
         with self.assertRaises(ValueError):
-            Options(height_m=0.003, time_s=20, mode='dry').check()   # 0,3 cm: era em m
+            Options(height_m=0.003, time_s=20, mode='dry').check()  # 0,3 cm: era em m
         with self.assertRaises(ValueError):
-            Options(height_m=0.6, time_s=20, mode='dry').check()     # acima do teto
+            Options(height_m=0.6, time_s=20, mode='dry').check()  # acima do teto
         with self.assertRaises(ValueError):
             Options(height_m=0.3, time_s=20, mode='dry', params={'FLT_SIM': 1}).check()
         with self.assertRaises(ValueError):
@@ -231,6 +284,7 @@ class ProfileTest(unittest.TestCase):
 def _c_table(name, rows, cols):
     sys.path.insert(0, str(REPO_ROOT / 'tools'))
     import lqg_modelo
+
     text = (REPO_ROOT / 'App/Src/control/lqg_ajustado_gains.c').read_text(encoding='utf-8')
     return lqg_modelo._ler_tabela(text, name, rows, cols)
 
@@ -287,8 +341,9 @@ class HoverTestRunTest(unittest.TestCase):
     def _run(self, **kw):
         from dronectl.hover_test import HoverTest
 
-        opts = dict(height_m=0.30, time_s=1.0, mode='sim', countdown_s=0.0,
-                    out_dir=self.dir / 'ensaios')
+        opts = dict(
+            height_m=0.30, time_s=1.0, mode='sim', countdown_s=0.0, out_dir=self.dir / 'ensaios'
+        )
         opts.update(kw)
         self.lines.clear()
         test = HoverTest(self.link, Options(**opts), self.profile, self.lines.append)
@@ -298,19 +353,28 @@ class HoverTestRunTest(unittest.TestCase):
 
     def _when(self, cond, action, timeout=10.0):
         """Roda ``action`` numa thread assim que ``cond`` valer."""
+
         def watch():
             end = time.monotonic() + timeout
             while time.monotonic() < end and not cond():
                 time.sleep(0.01)
             action()
+
         threading.Thread(target=watch, daemon=True).start()
 
     def test_sim_flight_records_analyzes_and_restores(self):
         test = self._run(label='primeiro')
         self.assertIsNone(test.error, self.lines)
         self.assertEqual(test.land_reason, 'fim do tempo de hover')
-        for name in ('real_log.csv', 'gains.json', 'telemetria.csv', 'textos.txt', 'meta.json',
-                     'resumo.json', 'linha_do_tempo.txt'):
+        for name in (
+            'real_log.csv',
+            'gains.json',
+            'telemetria.csv',
+            'textos.txt',
+            'meta.json',
+            'resumo.json',
+            'linha_do_tempo.txt',
+        ):
             self.assertTrue((test.folder / name).exists(), name)
         with open(test.folder / 'real_log.csv', newline='', encoding='utf-8') as f:
             rows = list(csv.DictReader(f, delimiter=';'))
@@ -386,8 +450,9 @@ class HoverTestRunTest(unittest.TestCase):
         from dronectl.hover_test import HoverTest
 
         self.fc.land_rate = 0.0  # o pouso nunca termina
-        opts = Options(height_m=0.30, time_s=30.0, mode='sim', countdown_s=0.0,
-                       out_dir=self.dir / 'ensaios')
+        opts = Options(
+            height_m=0.30, time_s=30.0, mode='sim', countdown_s=0.0, out_dir=self.dir / 'ensaios'
+        )
         test = HoverTest(self.link, opts, self.profile, self.lines.append)
         self._when(lambda: self.fc.state == 6, lambda: test._request_stop(signal.SIGINT, None))
         self._when(lambda: self.fc.state == 8, lambda: test._request_stop(signal.SIGINT, None))

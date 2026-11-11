@@ -33,7 +33,8 @@
  */
 static size_t total_length(const dma_ring_segment_t *seg, unsigned count) {
   size_t n = 0;
-  for (unsigned i = 0; i < count; ++i) n += seg[i].length;
+  for (unsigned i = 0; i < count; ++i)
+    n += seg[i].length;
   return n;
 }
 

@@ -51,6 +51,6 @@ static void dronelink_task(void *argument) {
 
 /** @brief Cria a task do DroneLink (ver dronelink_app.h). */
 bool dronelink_app_init(void) {
-  return xTaskCreate(dronelink_task, "DroneLink", DRONELINK_TASK_STACK_WORDS,
-                     NULL, DRONELINK_TASK_PRIORITY, &dronelink_task_handle) == pdPASS;
+  return xTaskCreate(dronelink_task, "DroneLink", DRONELINK_TASK_STACK_WORDS, NULL,
+                     DRONELINK_TASK_PRIORITY, &dronelink_task_handle) == pdPASS;
 }

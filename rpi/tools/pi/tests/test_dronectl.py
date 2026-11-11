@@ -2,6 +2,7 @@
 
 Rodar a partir de tools/pi:  python3 -m unittest discover -s tests
 """
+
 import os
 import sys
 import time

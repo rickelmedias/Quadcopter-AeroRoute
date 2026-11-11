@@ -36,9 +36,8 @@ static void innovation(const lqg_real_t x_pred[LQG_NX], const lqg_real_t y[LQG_N
   }
 }
 
-void lqg_ert_output(lqg_ert_t *s, const lqg_gains_t *g,
-                    const lqg_real_t y[LQG_NY], const lqg_real_t r[LQG_NR],
-                    lqg_real_t du[LQG_NU]) {
+void lqg_ert_output(lqg_ert_t *s, const lqg_gains_t *g, const lqg_real_t y[LQG_NY],
+                    const lqg_real_t r[LQG_NR], lqg_real_t du[LQG_NU]) {
   /* Delay MemoryX: no primeiro passo a estimativa parte de zero. */
   if (s->ic_load) {
     memset(s->x_pred, 0, sizeof(s->x_pred));
@@ -69,8 +68,7 @@ void lqg_ert_output(lqg_ert_t *s, const lqg_gains_t *g,
   }
 }
 
-void lqg_ert_update(lqg_ert_t *s, const lqg_gains_t *g,
-                    const lqg_real_t du_applied[LQG_NU]) {
+void lqg_ert_update(lqg_ert_t *s, const lqg_gains_t *g, const lqg_real_t du_applied[LQG_NU]) {
   s->ic_load = false;
 
   lqg_real_t next[LQG_NX];
@@ -93,9 +91,8 @@ void lqg_ert_update(lqg_ert_t *s, const lqg_gains_t *g,
   memcpy(s->x_pred, next, sizeof(next));
 }
 
-void lqg_ert_step(lqg_ert_t *s, const lqg_gains_t *g,
-                  const lqg_real_t y[LQG_NY], const lqg_real_t r[LQG_NR],
-                  lqg_real_t du[LQG_NU]) {
+void lqg_ert_step(lqg_ert_t *s, const lqg_gains_t *g, const lqg_real_t y[LQG_NY],
+                  const lqg_real_t r[LQG_NR], lqg_real_t du[LQG_NU]) {
   lqg_ert_output(s, g, y, r, du);
   lqg_ert_update(s, g, du);
 }

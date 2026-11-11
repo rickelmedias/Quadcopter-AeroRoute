@@ -14,6 +14,7 @@ Gera: ``tempo_resolver.png``, ``memoria_exato.png``, ``qualidade_rotas.png``,
 ``rotas_3d_n10.png``, ``rotas_3d_n20.png``, ``rotas_3d_n25.png`` e
 ``convergencia_genetico.png``. Os números vêm de ``docs/resultados_rotas/pc``.
 """
+
 from __future__ import annotations
 
 import csv
@@ -47,8 +48,16 @@ TEXTO, TEXTO2, GRADE, EIXO, FUNDO = '#0b0b0b', '#52514e', '#e1e0d9', '#c3c2b7', 
 LARGURA = 16 / 2.54
 ANO_S = 365.25 * 86400
 
-plt.rcParams.update({'font.size': 9, 'axes.titlesize': 9, 'axes.labelsize': 9,
-                     'xtick.labelsize': 8, 'ytick.labelsize': 8, 'legend.fontsize': 8})
+plt.rcParams.update(
+    {
+        'font.size': 9,
+        'axes.titlesize': 9,
+        'axes.labelsize': 9,
+        'xtick.labelsize': 8,
+        'ytick.labelsize': 8,
+        'legend.fontsize': 8,
+    }
+)
 
 
 def _eixo(ax, xlabel, ylabel):
@@ -80,6 +89,7 @@ def _dados():
 
 # ---- tempo e memória ------------------------------------------------------------------
 
+
 def tempo_resolver(saida, resumo, limite):
     tab = resumo['tabela']
     corte_hk = max(m['n'] for m in limite['medidos'] if m['tempo_s'] <= limite['tempo_max_s'])
@@ -88,43 +98,99 @@ def tempo_resolver(saida, resumo, limite):
     fig, ax = plt.subplots(figsize=(LARGURA, 4.3), facecolor=FUNDO)
     _eixo(ax, 'pontos a visitar (N)', 'tempo por instância (s, escala log)')
     ax.set_yscale('log')
-    for segundos, texto in ((1, '1 s'), (60, '1 min'), (3600, '1 h'), (86400, '1 dia'),
-                            (ANO_S, '1 ano'), (1000 * ANO_S, '1000 anos')):
+    for segundos, texto in (
+        (1, '1 s'),
+        (60, '1 min'),
+        (3600, '1 h'),
+        (86400, '1 dia'),
+        (ANO_S, '1 ano'),
+        (1000 * ANO_S, '1000 anos'),
+    ):
         ax.axhline(segundos, color=EIXO, linewidth=0.8, linestyle=':')
         ax.text(30.9, segundos, texto, fontsize=7, color=TEXTO2, va='center')
     for nome in ('guloso', 'genetico'):
         rot, cor, marca = ESTILO[nome]
         pts = [(t['n'], t['tempo_medio_ms'] / 1000.0) for t in tab if t['algoritmo'] == nome]
-        ax.plot(*zip(*pts), color=cor, linewidth=1.8, marker=marca, markersize=3.5,
-                markeredgecolor=FUNDO, markeredgewidth=0.5, label=f'{rot} (medido)')
-    for nome, med, prev, modelo in (('forca-bruta', limite['forca_bruta']['medidos'],
-                                     limite['forca_bruta']['previsao'], 'c·N!'),
-                                    ('exato', limite['medidos'], limite['previsao'], 'c·N²·2ᴺ')):
+        ax.plot(
+            *zip(*pts),
+            color=cor,
+            linewidth=1.8,
+            marker=marca,
+            markersize=3.5,
+            markeredgecolor=FUNDO,
+            markeredgewidth=0.5,
+            label=f'{rot} (medido)',
+        )
+    for nome, med, prev, modelo in (
+        (
+            'forca-bruta',
+            limite['forca_bruta']['medidos'],
+            limite['forca_bruta']['previsao'],
+            'c·N!',
+        ),
+        ('exato', limite['medidos'], limite['previsao'], 'c·N²·2ᴺ'),
+    ):
         rot, cor, marca = ESTILO[nome]
-        ax.plot([m['n'] for m in med], [m['tempo_s'] for m in med], color=cor, linewidth=1.8,
-                marker=marca, markersize=4.5, markeredgecolor=FUNDO, markeredgewidth=0.5,
-                label=f'{rot} (medido)')
-        pts = [(med[-1]['n'], med[-1]['tempo_s'])] + [(p['n'], p['tempo_s']) for p in prev
-                                                      if p['tempo_s'] <= teto * 10]
-        ax.plot(*zip(*pts), color=cor, linewidth=1.8, linestyle='--',
-                label=f'{rot} (previsto, {modelo})')
+        ax.plot(
+            [m['n'] for m in med],
+            [m['tempo_s'] for m in med],
+            color=cor,
+            linewidth=1.8,
+            marker=marca,
+            markersize=4.5,
+            markeredgecolor=FUNDO,
+            markeredgewidth=0.5,
+            label=f'{rot} (medido)',
+        )
+        pts = [(med[-1]['n'], med[-1]['tempo_s'])] + [
+            (p['n'], p['tempo_s']) for p in prev if p['tempo_s'] <= teto * 10
+        ]
+        ax.plot(
+            *zip(*pts),
+            color=cor,
+            linewidth=1.8,
+            linestyle='--',
+            label=f'{rot} (previsto, {modelo})',
+        )
     fb20 = next(p['tempo_s'] for p in limite['forca_bruta']['previsao'] if p['n'] == 20)
     seta = dict(arrowstyle='->', color=TEXTO2, linewidth=0.7)
-    ax.annotate(f'força bruta, 20 pontos:\n≈ {fb20 / ANO_S / 1000:.0f} mil anos', (20, fb20),
-                xytext=(11.3, 3e11), ha='left', va='center', fontsize=7.5, color=TEXTO,
-                arrowprops=seta)
+    ax.annotate(
+        f'força bruta, 20 pontos:\n≈ {fb20 / ANO_S / 1000:.0f} mil anos',
+        (20, fb20),
+        xytext=(11.3, 3e11),
+        ha='left',
+        va='center',
+        fontsize=7.5,
+        color=TEXTO,
+        arrowprops=seta,
+    )
     hk30 = next(p['tempo_s'] for p in limite['previsao'] if p['n'] == 30)
-    ax.annotate(f'Held-Karp, 30 pontos:\n≈ {hk30 / 3600:.0f} h e 290 GB de RAM', (30, hk30),
-                xytext=(23.2, 3e6), ha='left', va='center', fontsize=7.5, color=TEXTO,
-                arrowprops=seta)
-    for x, texto in ((corte_fb, f'força bruta\nsai (N ≥ {corte_fb + 1})'),
-                     (corte_hk, f'Held-Karp\nsai (N ≥ {corte_hk + 1})')):
+    ax.annotate(
+        f'Held-Karp, 30 pontos:\n≈ {hk30 / 3600:.0f} h e 290 GB de RAM',
+        (30, hk30),
+        xytext=(23.2, 3e6),
+        ha='left',
+        va='center',
+        fontsize=7.5,
+        color=TEXTO,
+        arrowprops=seta,
+    )
+    for x, texto in (
+        (corte_fb, f'força bruta\nsai (N ≥ {corte_fb + 1})'),
+        (corte_hk, f'Held-Karp\nsai (N ≥ {corte_hk + 1})'),
+    ):
         ax.axvline(x + 0.5, color=TEXTO2, linewidth=0.8, linestyle='--')
         ax.text(x + 0.7, 1.5e-6, texto, fontsize=7.5, color=TEXTO2, va='bottom')
     ax.set_xlim(2.5, 30.8)
     ax.set_ylim(1e-6, teto)
-    ax.legend(frameon=False, loc='upper center', bbox_to_anchor=(0.5, -0.16), ncol=3,
-              handlelength=2.4, columnspacing=1.2)
+    ax.legend(
+        frameon=False,
+        loc='upper center',
+        bbox_to_anchor=(0.5, -0.16),
+        ncol=3,
+        handlelength=2.4,
+        columnspacing=1.2,
+    )
     fig.tight_layout()
     _salvar(fig, saida, 'tempo_resolver.png')
 
@@ -135,17 +201,43 @@ def memoria_exato(saida, limite):
     _eixo(ax, 'pontos a visitar (N)', 'memória (MB, escala log)')
     ax.set_yscale('log')
     rot, cor, marca = ESTILO['exato']
-    ax.plot(ns, [n * 2 ** n * 9 / 1e6 for n in ns], color=cor, linewidth=1.8, linestyle='--',
-            label=f'{rot}: tabela de N·2ᴺ estados (calculada)')
+    ax.plot(
+        ns,
+        [n * 2**n * 9 / 1e6 for n in ns],
+        color=cor,
+        linewidth=1.8,
+        linestyle='--',
+        label=f'{rot}: tabela de N·2ᴺ estados (calculada)',
+    )
     med = [m for m in limite['medidos'] if m['n'] >= 16]
-    ax.plot([m['n'] for m in med], [m['pico_mb'] for m in med], color=cor, linewidth=0,
-            marker=marca, markersize=5, markeredgecolor=FUNDO, label=f'{rot}: pico medido do processo')
+    ax.plot(
+        [m['n'] for m in med],
+        [m['pico_mb'] for m in med],
+        color=cor,
+        linewidth=0,
+        marker=marca,
+        markersize=5,
+        markeredgecolor=FUNDO,
+        label=f'{rot}: pico medido do processo',
+    )
     rot, cor, marca = ESTILO['genetico']
-    ax.plot(ns, [120 * 2 * n * 8 / 1e6 for n in ns], color=cor, linewidth=1.8, marker=marca,
-            markersize=3, markeredgecolor=FUNDO, label=f'{rot}: duas populações de 120 rotas')
-    for mb, texto in ((512, 'RAM do Raspberry Pi Zero W (512 MB)'),
-                      (limite['ram_total_mb'],
-                       f"RAM total do computador ({limite['ram_total_mb'] / 1000:.1f} GB)".replace('.', ','))):
+    ax.plot(
+        ns,
+        [120 * 2 * n * 8 / 1e6 for n in ns],
+        color=cor,
+        linewidth=1.8,
+        marker=marca,
+        markersize=3,
+        markeredgecolor=FUNDO,
+        label=f'{rot}: duas populações de 120 rotas',
+    )
+    for mb, texto in (
+        (512, 'RAM do Raspberry Pi Zero W (512 MB)'),
+        (
+            limite['ram_total_mb'],
+            f"RAM total do computador ({limite['ram_total_mb'] / 1000:.1f} GB)".replace('.', ','),
+        ),
+    ):
         ax.axhline(mb, color=TEXTO2, linewidth=0.8, linestyle=':')
         ax.text(3.2, mb * 1.4, texto, fontsize=7.5, color=TEXTO2)
     ax.set_xlim(2.5, 30.5)
@@ -155,6 +247,7 @@ def memoria_exato(saida, limite):
 
 
 # ---- qualidade da rota ------------------------------------------------------------------
+
 
 def qualidade_rotas(saida, linhas):
     """Qualidade = referência / distância × 100 %: 100 % é a rota ótima; maior é melhor."""
@@ -176,10 +269,22 @@ def qualidade_rotas(saida, linhas):
         ax.bar(xs, ys, width=largura - 0.03, color=cor, label=rot)
         # Valor dentro do topo da barra, para não brigar com a linha dos 100 %.
         for x, y in zip(xs, ys):
-            ax.text(x, y - 1.5, f'{y:.0f}', ha='center', va='top', fontsize=6.5,
-                    color=TEXTO if nome == 'genetico' else '#ffffff')
-    ax.axhline(100, color=TEXTO, linewidth=0.9, linestyle='--',
-               label='rota ótima (ou melhor conhecida) = 100 %')
+            ax.text(
+                x,
+                y - 1.5,
+                f'{y:.0f}',
+                ha='center',
+                va='top',
+                fontsize=6.5,
+                color=TEXTO if nome == 'genetico' else '#ffffff',
+            )
+    ax.axhline(
+        100,
+        color=TEXTO,
+        linewidth=0.9,
+        linestyle='--',
+        label='rota ótima (ou melhor conhecida) = 100 %',
+    )
     ax.set_xticks(range(len(ns)), [str(n) for n in ns])
     ax.set_ylim(0, 105)
     ax.legend(frameon=False, loc='upper center', bbox_to_anchor=(0.5, -0.2), ncol=4)
@@ -189,6 +294,7 @@ def qualidade_rotas(saida, linhas):
 
 
 # ---- rotas em 3D --------------------------------------------------------------------------
+
 
 def _rota_3d(ax, pontos, ordem, nome, ref):
     rot, cor, _ = ESTILO[nome]
@@ -205,8 +311,7 @@ def _rota_3d(ax, pontos, ordem, nome, ref):
             ax.text(px[i], py[i], pz[i] + 0.07, str(passo), fontsize=6.5, color=TEXTO2)
     d = rotas.custo(ordem, pontos) / 100.0
     extra = 'menor' if d <= ref + 1e-9 else f'+{100 * (d / ref - 1):.1f} %'
-    ax.set_title(f'{rot}: {d:.2f} m ({extra})'.replace('.', ','), color=TEXTO, fontsize=8.5,
-                 pad=0)
+    ax.set_title(f'{rot}: {d:.2f} m ({extra})'.replace('.', ','), color=TEXTO, fontsize=8.5, pad=0)
     ax.set_xlabel('x (m)', color=TEXTO2, fontsize=7, labelpad=-6)
     ax.set_ylabel('y (m)', color=TEXTO2, fontsize=7, labelpad=-6)
     ax.set_zlabel('z (m)', color=TEXTO2, fontsize=7, labelpad=-8)
@@ -225,19 +330,26 @@ def rotas_3d(saida, n, semente, nomes, arquivo, aviso=None):
         if nome is None:
             ax = fig.add_subplot(2, 2, k)
             ax.axis('off')
-            ax.text(0.5, 0.5, aviso, ha='center', va='center', fontsize=8.5, color=TEXTO2,
-                    wrap=True)
+            ax.text(
+                0.5, 0.5, aviso, ha='center', va='center', fontsize=8.5, color=TEXTO2, wrap=True
+            )
             continue
         ax = fig.add_subplot(2, 2, k, projection='3d')
         ax.set_facecolor(FUNDO)
         _rota_3d(ax, pontos, ordens[nome], nome, ref)
     fig.subplots_adjust(left=0.0, right=0.97, top=0.95, bottom=0.03, wspace=0.08, hspace=0.12)
     _salvar(fig, saida, arquivo)
-    return {nome: {'distancia_m': round(rotas.custo(ordens[nome], pontos) / 100.0, 2),
-                   'ordem': [i + 1 for i in ordens[nome]]} for nome in nomes}
+    return {
+        nome: {
+            'distancia_m': round(rotas.custo(ordens[nome], pontos) / 100.0, 2),
+            'ordem': [i + 1 for i in ordens[nome]],
+        }
+        for nome in nomes
+    }
 
 
 # ---- convergência do AG -------------------------------------------------------------------
+
 
 def convergencia(saida, conv):
     ns = ['10', '15', '20', '30']
@@ -247,13 +359,17 @@ def convergencia(saida, conv):
         ref = c['referencia_cm']
         hist = [100 * (v / ref - 1) for v in c['genetico']]
         _eixo(ax, 'geração', 'acima da referência (%)')
-        ax.set_title(f'N = {n} (referência: {"ótimo global" if c["referencia"] == "otimo" else "melhor rota conhecida"})',
-                     color=TEXTO, fontsize=8.5)
+        ax.set_title(
+            f'N = {n} (referência: {"ótimo global" if c["referencia"] == "otimo" else "melhor rota conhecida"})',
+            color=TEXTO,
+            fontsize=8.5,
+        )
         rot, cor, _ = ESTILO['genetico']
         ax.plot(range(len(hist)), hist, color=cor, linewidth=1.8, label=rot)
         rot, cor, _ = ESTILO['guloso']
-        ax.axhline(100 * (c['guloso_cm'] / ref - 1), color=cor, linewidth=1.4, linestyle=':',
-                   label=rot)
+        ax.axhline(
+            100 * (c['guloso_cm'] / ref - 1), color=cor, linewidth=1.4, linestyle=':', label=rot
+        )
         ax.axhline(0, color=TEXTO, linewidth=0.8, linestyle='--')
         ax.set_ylim(-2, 60)
     eixos[0][0].legend(frameon=False, loc='upper right')
@@ -271,9 +387,15 @@ def main() -> int:
     todos = ['aleatorio', 'guloso', 'genetico', 'exato']
     numeros['n10'] = rotas_3d(saida, 10, 2, todos, 'rotas_3d_n10.png')
     numeros['n20'] = rotas_3d(saida, 20, 10, todos, 'rotas_3d_n20.png')
-    numeros['n25'] = rotas_3d(saida, 25, 3, ['aleatorio', 'guloso', 'genetico'], 'rotas_3d_n25.png',
-                              aviso='Held-Karp não executado:\na tabela de estados precisaria\n'
-                                    'de 7,5 GB de RAM\n(o computador tem 7,3 GB)')
+    numeros['n25'] = rotas_3d(
+        saida,
+        25,
+        3,
+        ['aleatorio', 'guloso', 'genetico'],
+        'rotas_3d_n25.png',
+        aviso='Held-Karp não executado:\na tabela de estados precisaria\n'
+        'de 7,5 GB de RAM\n(o computador tem 7,3 GB)',
+    )
     convergencia(saida, conv)
     print(json.dumps(numeros, indent=1, ensure_ascii=False))
     return 0

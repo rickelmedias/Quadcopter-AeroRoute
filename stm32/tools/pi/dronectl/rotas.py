@@ -25,6 +25,7 @@ Todos os sorteios usam só ``random()`` e as distâncias ``math.sqrt``, que dão
 o mesmo resultado em qualquer versão do Python 3 e em qualquer máquina: com a
 mesma semente, PC e Raspberry Pi chegam nas mesmas rotas.
 """
+
 from __future__ import annotations
 
 import math
@@ -39,6 +40,7 @@ Ordem = List[int]
 
 #: Ponto de partida padrão: em cima da decolagem, a 50 cm (cm).
 ORIGEM: Ponto = (0.0, 0.0, 50.0)
+
 
 def _p3(p: Sequence[float]) -> Ponto:
     """Aceita (x, y) ou (x, y, z); sem z, usa a altura da origem."""
@@ -58,8 +60,7 @@ def _matriz(pontos: Sequence[Sequence[float]], origem: Ponto) -> List[List[float
     return [[distancia(a, b) for b in todos] for a in todos]
 
 
-def custo(ordem: Sequence[int], pontos: Sequence[Sequence[float]],
-          origem: Ponto = ORIGEM) -> float:
+def custo(ordem: Sequence[int], pontos: Sequence[Sequence[float]], origem: Ponto = ORIGEM) -> float:
     """Comprimento do circuito origem -> pontos na ordem -> origem, em cm."""
     caminho = [origem] + [_p3(pontos[i]) for i in ordem] + [origem]
     return sum(distancia(a, b) for a, b in zip(caminho, caminho[1:]))
@@ -68,6 +69,7 @@ def custo(ordem: Sequence[int], pontos: Sequence[Sequence[float]],
 # ---- sorteios reprodutíveis ---------------------------------------------------
 # O Python só garante a mesma sequência de random() entre versões; shuffle,
 # sample e randint podem mudar. Tudo aqui sai só de random().
+
 
 def _indice(rng: random.Random, n: int) -> int:
     """Inteiro uniforme em [0, n)."""
@@ -110,6 +112,7 @@ def _comprimento(d: List[List[float]], ordem: Sequence[int]) -> float:
 
 # ---- referência e construtivos ------------------------------------------------
 
+
 def aleatorio(pontos: Sequence[Sequence[float]], semente: int = 1) -> Ordem:
     """Uma permutação sorteada: o que se espera sem algoritmo nenhum."""
     ordem = list(range(len(pontos)))
@@ -135,8 +138,10 @@ def guloso(pontos: Sequence[Sequence[float]], origem: Ponto = ORIGEM) -> Ordem:
 
 # ---- busca local (ótimo local) ---------------------------------------------------
 
-def dois_opt(ordem: Sequence[int], pontos: Sequence[Sequence[float]],
-             origem: Ponto = ORIGEM) -> Ordem:
+
+def dois_opt(
+    ordem: Sequence[int], pontos: Sequence[Sequence[float]], origem: Ponto = ORIGEM
+) -> Ordem:
     """Melhoria 2-opt até um ótimo local.
 
     Vizinhança 2-opt: remover duas arestas (a, b) e (c, e) e religar como
@@ -153,13 +158,14 @@ def dois_opt(ordem: Sequence[int], pontos: Sequence[Sequence[float]],
             for j in range(i + 1, len(tour) - 1):
                 a, b, c, e = tour[i - 1], tour[i], tour[j], tour[j + 1]
                 if d[a][c] + d[b][e] < d[a][b] + d[c][e] - 1e-9:
-                    tour[i:j + 1] = reversed(tour[i:j + 1])
+                    tour[i : j + 1] = reversed(tour[i : j + 1])
                     melhorou = True
     return [i - 1 for i in tour[1:-1]]
 
 
-def dois_opt_multi(pontos: Sequence[Sequence[float]], partidas: int = 20, semente: int = 1,
-                   origem: Ponto = ORIGEM) -> Tuple[Ordem, List[float]]:
+def dois_opt_multi(
+    pontos: Sequence[Sequence[float]], partidas: int = 20, semente: int = 1, origem: Ponto = ORIGEM
+) -> Tuple[Ordem, List[float]]:
     """2-opt a partir de ``partidas`` rotas aleatórias.
 
     Returns:
@@ -179,6 +185,7 @@ def dois_opt_multi(pontos: Sequence[Sequence[float]], partidas: int = 20, sement
 
 
 # ---- exatos (ótimo global) --------------------------------------------------------
+
 
 def forca_bruta(pontos: Sequence[Sequence[float]], origem: Ponto = ORIGEM) -> Ordem:
     """Circuito ótimo (global) testando todas as n! ordens de visita.
@@ -203,7 +210,6 @@ def forca_bruta(pontos: Sequence[Sequence[float]], origem: Ponto = ORIGEM) -> Or
         if c < melhor_c - 1e-9:
             melhor_c, melhor = c, ordem
     return [i - 1 for i in melhor]
-
 
 
 def held_karp(pontos: Sequence[Sequence[float]], origem: Ponto = ORIGEM) -> Ordem:
@@ -257,6 +263,7 @@ def held_karp(pontos: Sequence[Sequence[float]], origem: Ponto = ORIGEM) -> Orde
 
 # ---- genético (busca global estocástica) ------------------------------------------
 
+
 @dataclass(frozen=True)
 class ParamsGA:
     """Parâmetros do algoritmo genético (todos registrados no benchmark)."""
@@ -277,8 +284,8 @@ def _ox(pai1: List[int], pai2: List[int], rng: random.Random) -> List[int]:
     n = len(pai1)
     a, b = _dois_distintos(rng, n)
     filho = [-1] * n
-    filho[a:b + 1] = pai1[a:b + 1]
-    usados = set(pai1[a:b + 1])
+    filho[a : b + 1] = pai1[a : b + 1]
+    usados = set(pai1[a : b + 1])
     resto = [g for g in pai2 if g not in usados]
     pos = [i for i in range(n) if filho[i] == -1]
     for i, g in zip(pos, resto):
@@ -286,8 +293,9 @@ def _ox(pai1: List[int], pai2: List[int], rng: random.Random) -> List[int]:
     return filho
 
 
-def genetico(pontos: Sequence[Sequence[float]], params: ParamsGA = ParamsGA(),
-             origem: Ponto = ORIGEM) -> Tuple[Ordem, Dict]:
+def genetico(
+    pontos: Sequence[Sequence[float]], params: ParamsGA = ParamsGA(), origem: Ponto = ORIGEM
+) -> Tuple[Ordem, Dict]:
     """Algoritmo genético.
 
     1. População inicial: ``populacao`` permutações aleatórias.
@@ -322,13 +330,13 @@ def genetico(pontos: Sequence[Sequence[float]], params: ParamsGA = ParamsGA(),
 
     for geracao in range(1, params.geracoes + 1):
         ordem_pop = sorted(range(params.populacao), key=lambda i: (aptidao[i], i))
-        nova = [list(pop[i]) for i in ordem_pop[:params.elitismo]]
+        nova = [list(pop[i]) for i in ordem_pop[: params.elitismo]]
         while len(nova) < params.populacao:
             p1, p2 = torneio(), torneio()
             filho = _ox(p1, p2, rng) if rng.random() < params.taxa_cruzamento else list(p1)
             if rng.random() < params.taxa_mutacao:
                 a, b = _dois_distintos(rng, n)
-                filho[a:b + 1] = reversed(filho[a:b + 1])
+                filho[a : b + 1] = reversed(filho[a : b + 1])
             nova.append(filho)
         pop = nova
         aptidao = [_comprimento(d, i) for i in pop]
@@ -374,8 +382,9 @@ def ordenar(nome: str, pontos: Sequence[Sequence[float]], origem: Ponto = ORIGEM
     raise ValueError(f'algoritmo desconhecido: {nome}')
 
 
-def pontos_aleatorios(n: int, semente: int, lado_cm: int = 600, z_min_cm: int = 30,
-                      z_max_cm: int = 150) -> List[Ponto]:
+def pontos_aleatorios(
+    n: int, semente: int, lado_cm: int = 600, z_min_cm: int = 30, z_max_cm: int = 150
+) -> List[Ponto]:
     """N pontos inteiros (cm): x, y num quadrado de ``lado_cm`` centrado na
     decolagem e altura z entre ``z_min_cm`` e ``z_max_cm`` (limites do STM32:
     acima da altura de pouso e no máximo 1,5 m)."""
@@ -383,8 +392,11 @@ def pontos_aleatorios(n: int, semente: int, lado_cm: int = 600, z_min_cm: int = 
     meio = lado_cm // 2
     pontos = set()
     while len(pontos) < n:
-        p = (_indice(rng, lado_cm + 1) - meio, _indice(rng, lado_cm + 1) - meio,
-             z_min_cm + _indice(rng, z_max_cm - z_min_cm + 1))
+        p = (
+            _indice(rng, lado_cm + 1) - meio,
+            _indice(rng, lado_cm + 1) - meio,
+            z_min_cm + _indice(rng, z_max_cm - z_min_cm + 1),
+        )
         if (p[0], p[1]) != (0, 0):
             pontos.add(p)
     return sorted(pontos)

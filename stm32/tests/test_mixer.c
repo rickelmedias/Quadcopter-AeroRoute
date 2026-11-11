@@ -12,13 +12,18 @@
 #include <stdio.h>
 
 /** Frente física: M2 e M4. Direita física: M1 e M2 (índices 0-based). */
-static int is_front(unsigned motor) { return motor == 1U || motor == 3U; }
-static int is_right(unsigned motor) { return motor == 0U || motor == 1U; }
+static int is_front(unsigned motor) {
+  return motor == 1U || motor == 3U;
+}
+static int is_right(unsigned motor) {
+  return motor == 0U || motor == 1U;
+}
 
 /** @brief Todas as entradas vão para motores diferentes, e M1..M4 são todos usados. */
 static void test_is_a_permutation(void) {
   unsigned seen = 0U;
-  for (unsigned i = 0U; i < MIXER_COUNT; ++i) seen |= 1U << mixer_motor_of_input(i);
+  for (unsigned i = 0U; i < MIXER_COUNT; ++i)
+    seen |= 1U << mixer_motor_of_input(i);
   assert(seen == 0x0FU);
   assert(mixer_motor_of_input(MIXER_COUNT) == 0U);
 }
@@ -51,8 +56,8 @@ static void test_yaw_pairs_follow_propeller_colour(void) {
   for (unsigned input = 0U; input < MIXER_COUNT; ++input) {
     psi_of_motor[mixer_motor_of_input(input)] = LQG_ERT_B[LQG_X_PSI][input];
   }
-  assert((psi_of_motor[1] > 0.0) == (psi_of_motor[2] > 0.0));  /* pretas */
-  assert((psi_of_motor[0] > 0.0) == (psi_of_motor[3] > 0.0));  /* amarelas */
+  assert((psi_of_motor[1] > 0.0) == (psi_of_motor[2] > 0.0)); /* pretas */
+  assert((psi_of_motor[0] > 0.0) == (psi_of_motor[3] > 0.0)); /* amarelas */
   assert((psi_of_motor[1] > 0.0) != (psi_of_motor[0] > 0.0));
 }
 

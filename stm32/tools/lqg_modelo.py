@@ -5,6 +5,7 @@ firmware (exportada do Simulink). O ``dlqr`` é o algoritmo de duplicação, que
 converge em dezenas de passos; com ele, ``tools/lqg_ajustado.py`` refaz o
 projeto do TCC (LQR e Kalman) com outros pesos.
 """
+
 from __future__ import annotations
 
 import math
@@ -29,6 +30,7 @@ Matriz = List[List[float]]
 # --------------------------------------------------------------------------
 # Álgebra (matrizes pequenas como listas de listas)
 # --------------------------------------------------------------------------
+
 
 def _mul(a: Matriz, b: Matriz) -> Matriz:
     bt = list(zip(*b))
@@ -64,7 +66,9 @@ def dlqr(A: Matriz, B: Matriz, q: List[float], r: List[float]) -> Matriz:
     """
     n = len(A)
     Bt = _t(B)
-    G = [[sum(B[i][t] * Bt[t][j] / r[t] for t in range(len(r))) for j in range(n)] for i in range(n)]
+    G = [
+        [sum(B[i][t] * Bt[t][j] / r[t] for t in range(len(r))) for j in range(n)] for i in range(n)
+    ]
     H = [[q[i] if i == j else 0.0 for j in range(n)] for i in range(n)]
     Ak = [list(linha) for linha in A]
     for _ in range(200):
@@ -103,6 +107,7 @@ def dlqr(A: Matriz, B: Matriz, q: List[float], r: List[float]) -> Matriz:
 # Tabelas do firmware
 # --------------------------------------------------------------------------
 
+
 def _ler_tabela(texto: str, nome: str, linhas: int, colunas: int) -> Matriz:
     """Lê os ``linhas x colunas`` números depois de ``nome =`` num .c gerado.
 
@@ -112,12 +117,14 @@ def _ler_tabela(texto: str, nome: str, linhas: int, colunas: int) -> Matriz:
     inicio = re.search(re.escape(nome) + r"[^=]*=", sem_comentarios)
     if inicio is None:
         raise ValueError(f"{nome} não encontrado")
-    numeros = [float(v) for v in re.findall(r"[-+]?\d+\.?\d*(?:[eE][-+]?\d+)?",
-                                            sem_comentarios[inicio.end():])]
+    numeros = [
+        float(v)
+        for v in re.findall(r"[-+]?\d+\.?\d*(?:[eE][-+]?\d+)?", sem_comentarios[inicio.end() :])
+    ]
     if len(numeros) < linhas * colunas:
         raise ValueError(f"{nome}: {len(numeros)} valores, esperava {linhas * colunas}")
-    numeros = numeros[:linhas * colunas]
-    return [numeros[i * colunas:(i + 1) * colunas] for i in range(linhas)]
+    numeros = numeros[: linhas * colunas]
+    return [numeros[i * colunas : (i + 1) * colunas] for i in range(linhas)]
 
 
 def modelo() -> tuple[Matriz, Matriz]:

@@ -58,6 +58,7 @@ quando o firmware confirma o CRC.
 Segurança no firmware: inclinação acima de 20 graus corta os motores; altura
 acima de 45 cm pousa; se o PC calar por 1 s (watchdog), o drone pousa em rampa.
 """
+
 from __future__ import annotations
 
 import queue
@@ -114,8 +115,19 @@ TRAVA_BOTAO_S = 1.5
 PASTA_LOGS = Path(__file__).resolve().parent / "logs"
 
 #: Nomes dos estados do voo (flight_ctrl_state_name).
-ESTADOS = ["BOOT", "SELF_TEST", "STANDBY", "PREARM", "ARMADO", "DECOLANDO", "SEGURANDO",
-           "TRECHO", "POUSANDO", "FAILSAFE", "TERMINADO"]
+ESTADOS = [
+    "BOOT",
+    "SELF_TEST",
+    "STANDBY",
+    "PREARM",
+    "ARMADO",
+    "DECOLANDO",
+    "SEGURANDO",
+    "TRECHO",
+    "POUSANDO",
+    "FAILSAFE",
+    "TERMINADO",
+]
 ESTADO_STANDBY, ESTADO_ARMADO, ESTADO_DECOLANDO, ESTADO_HOLD, ESTADO_POUSANDO = 2, 4, 5, 6, 8
 ESTADO_FAILSAFE = 9
 #: Estado do firmware com um trecho (ou setpoint) em andamento.
@@ -136,9 +148,9 @@ class Estimativa:
     estado: int = 0
     meas: int = 0
     flags: int = 0
-    y: list[float] = field(default_factory=lambda: [0.0] * 9)    # z φ θ ψ vx vy p q r
+    y: list[float] = field(default_factory=lambda: [0.0] * 9)  # z φ θ ψ vx vy p q r
     x: list[float] = field(default_factory=lambda: [0.0] * 12)
-    du: list[float] = field(default_factory=lambda: [0.0] * 4)   # rad/s, por entrada u1..u4
+    du: list[float] = field(default_factory=lambda: [0.0] * 4)  # rad/s, por entrada u1..u4
     ref: list[float] = field(default_factory=lambda: [0.0] * 4)  # x y z ψ
 
     @property
@@ -173,7 +185,9 @@ def interpretar_est(linha: str) -> Estimativa | None:
     except ValueError:
         return None
     return Estimativa(
-        estado=n[0], meas=n[1], flags=n[2],
+        estado=n[0],
+        meas=n[1],
+        flags=n[2],
         y=[v / 1000.0 for v in n[3:12]],
         x=[v / 1000.0 for v in n[12:24]],
         du=[v / 10.0 for v in n[24:28]],
@@ -206,10 +220,10 @@ class Modo:
     """Um modo de controle do painel e os parâmetros que ele liga no firmware."""
 
     rotulo: str
-    ajustado: int   # CTL_LQG_AJ: Kd/Kfd com os pesos Q ajustados
-    dist: int       # CTL_DIST: estimador de perturbação
-    ff: bool        # usa o desequilíbrio fixo CTL_FF_TH (senão manda 0)
-    integra: bool   # tem integrador/estimador: CTL_W0 não muda em voo
+    ajustado: int  # CTL_LQG_AJ: Kd/Kfd com os pesos Q ajustados
+    dist: int  # CTL_DIST: estimador de perturbação
+    ff: bool  # usa o desequilíbrio fixo CTL_FF_TH (senão manda 0)
+    integra: bool  # tem integrador/estimador: CTL_W0 não muda em voo
 
 
 #: Modos de controle, do LQG do TCC ao melhorado (ver docs/controle_lqg.md).
@@ -222,9 +236,15 @@ MODOS = {
 MODO_PADRAO = "melhorado"
 
 
-def comando_ligar(seco: bool, modo: str = MODO_PADRAO, altura_m: float = ALTURA_M,
-                  ff_th: int = 0, xy: bool = False, preso: bool = False,
-                  ff_phi: int = 0) -> list[str]:
+def comando_ligar(
+    seco: bool,
+    modo: str = MODO_PADRAO,
+    altura_m: float = ALTURA_M,
+    ff_th: int = 0,
+    xy: bool = False,
+    preso: bool = False,
+    ff_phi: int = 0,
+) -> list[str]:
     """Comandos que armam e sobem ``altura_m`` (ensaio a seco ou real).
 
     ``modo`` é uma chave de ``MODOS``. ``ff_th`` é o desequilíbrio fixo
@@ -236,15 +256,17 @@ def comando_ligar(seco: bool, modo: str = MODO_PADRAO, altura_m: float = ALTURA_
     útil só com cordinhas.
     """
     m = MODOS[modo]
-    return [f"param set FLT_DRY_RUN {1 if seco else 0}",
-            "param set CTL_TRIM 0",
-            f"param set CTL_LQG_AJ {m.ajustado}",
-            f"param set CTL_DIST {m.dist}",
-            f"param set CTL_FF_TH {ff_th if m.ff else 0}",
-            f"param set CTL_FF_PHI {ff_phi if m.ff else 0}",
-            f"param set CTL_XY {1 if xy else 0}",
-            f"param set FLT_PRESO {1 if preso else 0}",
-            f"hover {min(max(altura_m, ALTURA_MIN_M), ALTURA_M):.2f}"]
+    return [
+        f"param set FLT_DRY_RUN {1 if seco else 0}",
+        "param set CTL_TRIM 0",
+        f"param set CTL_LQG_AJ {m.ajustado}",
+        f"param set CTL_DIST {m.dist}",
+        f"param set CTL_FF_TH {ff_th if m.ff else 0}",
+        f"param set CTL_FF_PHI {ff_phi if m.ff else 0}",
+        f"param set CTL_XY {1 if xy else 0}",
+        f"param set FLT_PRESO {1 if preso else 0}",
+        f"hover {min(max(altura_m, ALTURA_MIN_M), ALTURA_M):.2f}",
+    ]
 
 
 #: Campos do quadro de pesos Q: (rótulo, chave). As chaves são os nomes dos
@@ -270,6 +292,7 @@ def pesos_de_textos(textos: dict[str, str]) -> tuple[list[float], float]:
         ValueError: campo vazio, não numérico, ou peso que não seja positivo
             (R) / não negativo (Q).
     """
+
     def num(chave: str) -> float:
         return float(textos[chave].strip().replace(",", "."))
 
@@ -283,8 +306,10 @@ def pesos_de_textos(textos: dict[str, str]) -> tuple[list[float], float]:
 def resumo_ganhos(kd: list[list[float]]) -> str:
     """Os ganhos que mais importam (módulo, motor u1), como no log do ensaio."""
     k = kd[0]
-    return (f"z {abs(k[2]):.1f} · φ/θ {abs(k[3]):.1f}/{abs(k[4]):.1f} · vz {abs(k[8]):.1f} · "
-            f"p/q {abs(k[9]):.1f}/{abs(k[10]):.1f} · x/vx {abs(k[0]):.2f}/{abs(k[6]):.2f}")
+    return (
+        f"z {abs(k[2]):.1f} · φ/θ {abs(k[3]):.1f}/{abs(k[4]):.1f} · vz {abs(k[8]):.1f} · "
+        f"p/q {abs(k[9]):.1f}/{abs(k[10]):.1f} · x/vx {abs(k[0]):.2f}/{abs(k[6]):.2f}"
+    )
 
 
 def comando_setpoint(x_cm: float, y_cm: float, z_cm: float, yaw_graus: float) -> str:
@@ -389,6 +414,7 @@ class Enlace:
 # Tela
 # --------------------------------------------------------------------------
 
+
 def executar_tela(porta_inicial: str) -> None:
     """Monta e roda a janela."""
     import tkinter as tk
@@ -402,8 +428,8 @@ def executar_tela(porta_inicial: str) -> None:
     enlace: Enlace | None = None
     est = Estimativa()
     mot = Motores()
-    chao_m = [None]            # altura medida no chão (referência da "subida")
-    arquivo = [None]           # CSV do ensaio
+    chao_m = [None]  # altura medida no chão (referência da "subida")
+    arquivo = [None]  # CSV do ensaio
     ultimo_envio = [0.0]
     botao_travado_ate = [0.0]
 
@@ -421,21 +447,39 @@ def executar_tela(porta_inicial: str) -> None:
     armado_antes = [False]
     maxmot_var = tk.IntVar(value=80)
     rampa_var = tk.IntVar(value=5)
-    valores: dict[str, tk.StringVar] = {k: tk.StringVar(value="--") for k in (
-        "estado", "sensores", "modo", "roll", "pitch", "yaw", "altura", "ref", "subida", "trim",
-        "xy", "vxy")}
+    valores: dict[str, tk.StringVar] = {
+        k: tk.StringVar(value="--")
+        for k in (
+            "estado",
+            "sensores",
+            "modo",
+            "roll",
+            "pitch",
+            "yaw",
+            "altura",
+            "ref",
+            "subida",
+            "trim",
+            "xy",
+            "vxy",
+        )
+    }
     pesos_vars = {chave: tk.StringVar(value=texto) for chave, texto in textos_pesos().items()}
     resumo_q_var = tk.StringVar(
-        value="ganhos padrão: " + resumo_ganhos(lqg_ajustado.ganhos_lqg(lqg_ajustado.Q_AJUSTADO)[0]))
+        value="ganhos padrão: " + resumo_ganhos(lqg_ajustado.ganhos_lqg(lqg_ajustado.Q_AJUSTADO)[0])
+    )
     # Pesos que o drone tem agora (None = os gerados, Q_AJUSTADO); o LIGAR confere.
     pesos_no_drone: list[tuple[list[float], float] | None] = [None]
     # Setpoint (cm, cm, cm, graus); o X, Y e a guinada de fora do zero seguem ao chegar em HOLD.
-    setpoint_vars = {"x": tk.StringVar(value="0"), "y": tk.StringVar(value="0"),
-                     "z": tk.StringVar(value=str(int(round(ALTURA_PADRAO_M * 100)))),
-                     "yaw": tk.StringVar(value="0")}
+    setpoint_vars = {
+        "x": tk.StringVar(value="0"),
+        "y": tk.StringVar(value="0"),
+        "z": tk.StringVar(value=str(int(round(ALTURA_PADRAO_M * 100)))),
+        "yaw": tk.StringVar(value="0"),
+    }
     setpoint_pendente = [False]
-    setpoint_tentado = [0.0]   # última tentativa automática (time.monotonic)
-    ultimo_lq = [""]           # última resposta "lq ..." do firmware (confirma o commit)
+    setpoint_tentado = [0.0]  # última tentativa automática (time.monotonic)
+    ultimo_lq = [""]  # última resposta "lq ..." do firmware (confirma o commit)
     barras_du: dict[int, tk.Canvas] = {}
     textos_motor: dict[int, tk.StringVar] = {n: tk.StringVar(value="--") for n in (1, 2, 3, 4)}
 
@@ -452,8 +496,10 @@ def executar_tela(porta_inicial: str) -> None:
     def setpoint_atual() -> tuple[float, float, float, float] | None:
         """(X cm, Y cm, Z cm, guinada °) dos campos, ou None se algum for inválido."""
         try:
-            x, y, z, yaw = (float(setpoint_vars[k].get().strip().replace(",", "."))
-                            for k in ("x", "y", "z", "yaw"))
+            x, y, z, yaw = (
+                float(setpoint_vars[k].get().strip().replace(",", "."))
+                for k in ("x", "y", "z", "yaw")
+            )
         except ValueError:
             escrever_log("setpoint inválido: use números (cm e graus)")
             return None
@@ -486,7 +532,9 @@ def executar_tela(porta_inicial: str) -> None:
         setpoint_vars["x"].set("0")
         setpoint_vars["y"].set("0")
         if not xy_var.get():
-            escrever_log("voltar à partida só funciona com 'Segurar posição' marcado antes do LIGAR")
+            escrever_log(
+                "voltar à partida só funciona com 'Segurar posição' marcado antes do LIGAR"
+            )
             return
         aplicar_setpoint()
 
@@ -498,7 +546,9 @@ def executar_tela(porta_inicial: str) -> None:
         mandar("xyzero")
         setpoint_vars["x"].set("0")
         setpoint_vars["y"].set("0")
-        registrar(f"XY zerado no ponto atual (estava em x={est.x[0] * 100:+.1f} y={est.x[1] * 100:+.1f} cm)")
+        registrar(
+            f"XY zerado no ponto atual (estava em x={est.x[0] * 100:+.1f} y={est.x[1] * 100:+.1f} cm)"
+        )
 
     # ---- ações -----------------------------------------------------------
 
@@ -516,11 +566,20 @@ def executar_tela(porta_inicial: str) -> None:
         botao_conectar.configure(text="Desconectar")
         situacao_var.set(f"Conectado em {porta_var.get()}")
         pesos_no_drone[0] = None  # a placa pode ter ficado com ganhos do painel
-        for cmd in ("stop", "lq default", "log on", f"wd {WATCHDOG_MS}", f"param set LOG_EST_HZ {TAXA_EST_HZ}",
-                    "param set FLT_DRY_RUN 1", f"param set FLT_HOVER_H {ALTURA_M:.2f}",
-                    f"param set CTL_W0 {w0_var.get()}", f"param set CTL_FF_TH {ff_th_var.get()}", f"param set CTL_FF_PHI {ff_phi_var.get()}",
-                    f"param set MOT_MAX {maxmot_var.get() / 100:.2f}",
-                    f"param set FLT_Z_RATE {rampa_var.get() / 100:.2f}"):
+        for cmd in (
+            "stop",
+            "lq default",
+            "log on",
+            f"wd {WATCHDOG_MS}",
+            f"param set LOG_EST_HZ {TAXA_EST_HZ}",
+            "param set FLT_DRY_RUN 1",
+            f"param set FLT_HOVER_H {ALTURA_M:.2f}",
+            f"param set CTL_W0 {w0_var.get()}",
+            f"param set CTL_FF_TH {ff_th_var.get()}",
+            f"param set CTL_FF_PHI {ff_phi_var.get()}",
+            f"param set MOT_MAX {maxmot_var.get() / 100:.2f}",
+            f"param set FLT_Z_RATE {rampa_var.get() / 100:.2f}",
+        ):
             mandar(cmd)
         if gravar_var.get():
             abrir_csv()
@@ -584,13 +643,30 @@ def executar_tela(porta_inicial: str) -> None:
 
     def disparar_ligar() -> None:
         setpoint_pendente[0] = True
-        for cmd in comando_ligar(seco_var.get(), modo_var.get(), altura_cm() / 100,
-                                 ff_th_var.get(), xy_var.get(), preso_var.get(), ff_phi_var.get()):
+        for cmd in comando_ligar(
+            seco_var.get(),
+            modo_var.get(),
+            altura_cm() / 100,
+            ff_th_var.get(),
+            xy_var.get(),
+            preso_var.get(),
+            ff_phi_var.get(),
+        ):
             mandar(cmd)
-        escrever_log("LIGAR: " + ("ensaio a seco" if seco_var.get() else "MOTORES REAIS") + f", subindo {altura_cm():g} cm")
+        escrever_log(
+            "LIGAR: "
+            + ("ensaio a seco" if seco_var.get() else "MOTORES REAIS")
+            + f", subindo {altura_cm():g} cm"
+        )
 
     def ajustar(nome: str, valor: str) -> None:
-        armado = est.estado in (ESTADO_ARMADO, ESTADO_DECOLANDO, ESTADO_HOLD, ESTADO_TRECHO, ESTADO_POUSANDO)
+        armado = est.estado in (
+            ESTADO_ARMADO,
+            ESTADO_DECOLANDO,
+            ESTADO_HOLD,
+            ESTADO_TRECHO,
+            ESTADO_POUSANDO,
+        )
         if nome == "CTL_W0" and armado and MODOS[modo_var.get()].integra:
             # Com a compensação ligada, mudar o hover em voo soma um degrau nos
             # quatro motores por cima do que ela já achou (ensaio de 04/11).
@@ -655,8 +731,10 @@ def executar_tela(porta_inicial: str) -> None:
                 if depois is not None:
                     depois()
             else:
-                registrar(f"o drone NÃO confirmou os ganhos ({ultimo_lq[0] or 'sem resposta'}); "
-                          "nada foi armado")
+                registrar(
+                    f"o drone NÃO confirmou os ganhos ({ultimo_lq[0] or 'sem resposta'}); "
+                    "nada foi armado"
+                )
                 botao_travado_ate[0] = 0.0
 
         def enviar() -> None:
@@ -670,15 +748,20 @@ def executar_tela(porta_inicial: str) -> None:
 
         threading.Thread(target=enviar, daemon=True).start()
         q, r = digitados
-        registrar(f"enviando Kd/Kfd ({crc}): "
-                  + " ".join(f"{n}={v:g}" for n, v in zip(lqg_ajustado.lp.ESTADOS, q)) + f" R={r:g}")
+        registrar(
+            f"enviando Kd/Kfd ({crc}): "
+            + " ".join(f"{n}={v:g}" for n, v in zip(lqg_ajustado.lp.ESTADOS, q))
+            + f" R={r:g}"
+        )
         registrar("ganhos: " + resumo_ganhos(ganhos[0]))
         return True
 
     def padrao_q() -> None:
         for chave, texto in textos_pesos().items():
             pesos_vars[chave].set(texto)
-        resumo_q_var.set("ganhos padrão: " + resumo_ganhos(lqg_ajustado.ganhos_lqg(lqg_ajustado.Q_AJUSTADO)[0]))
+        resumo_q_var.set(
+            "ganhos padrão: " + resumo_ganhos(lqg_ajustado.ganhos_lqg(lqg_ajustado.Q_AJUSTADO)[0])
+        )
         pesos_no_drone[0] = None
         if enlace is not None:
             mandar("lq default")
@@ -696,17 +779,28 @@ def executar_tela(porta_inicial: str) -> None:
             except queue.Empty:
                 break
             if tipo == "est":
-                armado = dado.estado in (ESTADO_ARMADO, ESTADO_DECOLANDO, ESTADO_HOLD, ESTADO_TRECHO, ESTADO_POUSANDO)
+                armado = dado.estado in (
+                    ESTADO_ARMADO,
+                    ESTADO_DECOLANDO,
+                    ESTADO_HOLD,
+                    ESTADO_TRECHO,
+                    ESTADO_POUSANDO,
+                )
                 if armado_antes[0] and not armado and ultimo_trim[0]:
                     sugestao = sugestao_w0(w0_var.get(), ultimo_trim[0])
                     if sugestao is not None:
-                        escrever_log(f"sugestão para o próximo voo: CTL_W0 = {sugestao} "
-                                     f"(hover aprendido: {ultimo_trim[0]})")
+                        escrever_log(
+                            f"sugestão para o próximo voo: CTL_W0 = {sugestao} "
+                            f"(hover aprendido: {ultimo_trim[0]})"
+                        )
                 armado_antes[0] = armado
                 subiu = chao_m[0] is not None and dado.altura_m - chao_m[0] >= SUBIDA_SETPOINT_M
                 agora = time.monotonic()
-                if (setpoint_pendente[0] and agora - setpoint_tentado[0] >= INTERVALO_SETPOINT_S
-                        and (dado.estado == ESTADO_HOLD or (dado.estado == ESTADO_DECOLANDO and subiu))):
+                if (
+                    setpoint_pendente[0]
+                    and agora - setpoint_tentado[0] >= INTERVALO_SETPOINT_S
+                    and (dado.estado == ESTADO_HOLD or (dado.estado == ESTADO_DECOLANDO and subiu))
+                ):
                     # A decolagem mantém a proa de quando armou; o setpoint (com a
                     # guinada do quadro, 0 = zero da energização) vai sempre: em HOLD
                     # ou, se a decolagem não termina, assim que o drone sai do chão.
@@ -730,7 +824,7 @@ def executar_tela(porta_inicial: str) -> None:
                 for prefixo in ("trim ", "dist "):
                     if dado.startswith(prefixo) and "z=" in dado:
                         valores["trim"].set(dado)
-                        ultimo_trim[0] = dado[len(prefixo):]
+                        ultimo_trim[0] = dado[len(prefixo) :]
                 if arquivo[0] is not None:
                     arquivo[0].write(f"{time.time():.3f};TXT;{dado}\n")
             elif tipo == "bruta" and arquivo[0] is not None:
@@ -745,19 +839,27 @@ def executar_tela(porta_inicial: str) -> None:
             valores["estado"].set("Desconectado")
         else:
             valores["estado"].set(est.nome_estado)
-        cor = {ESTADO_FAILSAFE: "#b91c1c", ESTADO_POUSANDO: "#b45309", ESTADO_HOLD: "#166534",
-               ESTADO_DECOLANDO: "#1d4ed8", ESTADO_ARMADO: "#1d4ed8"}.get(est.estado, "#374151")
+        cor = {
+            ESTADO_FAILSAFE: "#b91c1c",
+            ESTADO_POUSANDO: "#b45309",
+            ESTADO_HOLD: "#166534",
+            ESTADO_DECOLANDO: "#1d4ed8",
+            ESTADO_ARMADO: "#1d4ed8",
+        }.get(est.estado, "#374151")
         rotulo_estado.configure(foreground=cor)
         ok_bno = bool(est.meas & MEAS_ATITUDE and est.meas & MEAS_GIRO)
         ok_mtf = bool(est.meas & MEAS_ALTURA)
         ok_fluxo = bool(est.meas & MEAS_FLUXO)
-        valores["sensores"].set(f"BNO {'OK' if ok_bno else 'SEM DADO'} · MTF {'OK' if ok_mtf else 'SEM DADO'}"
-                                f" · fluxo {'OK' if ok_fluxo else 'sem dado'}")
-        valores["modo"].set("motores parados (a seco)" if est.flags & FLAG_SECO
-                            else "MOTORES SEGUINDO O CONTROLE")
-        valores["roll"].set(f"{est.y[1] * RAD_GRAUS:+6.2f}°")      # φ
-        valores["pitch"].set(f"{est.y[2] * RAD_GRAUS:+6.2f}°")     # θ
-        valores["yaw"].set(f"{est.y[3] * RAD_GRAUS:+6.2f}°")       # ψ
+        valores["sensores"].set(
+            f"BNO {'OK' if ok_bno else 'SEM DADO'} · MTF {'OK' if ok_mtf else 'SEM DADO'}"
+            f" · fluxo {'OK' if ok_fluxo else 'sem dado'}"
+        )
+        valores["modo"].set(
+            "motores parados (a seco)" if est.flags & FLAG_SECO else "MOTORES SEGUINDO O CONTROLE"
+        )
+        valores["roll"].set(f"{est.y[1] * RAD_GRAUS:+6.2f}°")  # φ
+        valores["pitch"].set(f"{est.y[2] * RAD_GRAUS:+6.2f}°")  # θ
+        valores["yaw"].set(f"{est.y[3] * RAD_GRAUS:+6.2f}°")  # ψ
         valores["altura"].set(f"{est.altura_m * 1000:6.0f} mm")
         valores["ref"].set(f"{-est.ref[2] * 1000:6.0f} mm")
         subida = 0.0 if chao_m[0] is None else est.altura_m - chao_m[0]
@@ -772,15 +874,21 @@ def executar_tela(porta_inicial: str) -> None:
             meio = 100
             largura = max(-95, min(95, du[n - 1] * 3.0))  # 1 rad/s = 3 px
             c.create_line(meio, 0, meio, 18, fill="#9ca3af")
-            c.create_rectangle(meio, 3, meio + largura, 15,
-                               fill="#2563eb" if largura >= 0 else "#dc2626", width=0)
-            textos_motor[n].set(f"du {du[n - 1]:+6.1f} rad/s · motor {mot.permille[n - 1] / 10:4.1f}% "
-                                f"(DShot {mot.dshot[n - 1]})")
+            c.create_rectangle(
+                meio, 3, meio + largura, 15, fill="#2563eb" if largura >= 0 else "#dc2626", width=0
+            )
+            textos_motor[n].set(
+                f"du {du[n - 1]:+6.1f} rad/s · motor {mot.permille[n - 1] / 10:4.1f}% "
+                f"(DShot {mot.dshot[n - 1]})"
+            )
         botao_ligar.configure(text=texto_ligar())
         faixa_modo.configure(
             background="#fee2e2" if (not seco_var.get()) else "#dcfce7",
-            text=("MOTORES REAIS: drone preso, mão na EMERGÊNCIA" if not seco_var.get()
-                  else "Ensaio a seco: os motores NÃO giram"),
+            text=(
+                "MOTORES REAIS: drone preso, mão na EMERGÊNCIA"
+                if not seco_var.get()
+                else "Ensaio a seco: os motores NÃO giram"
+            ),
         )
 
     def texto_ligar() -> str:
@@ -835,26 +943,37 @@ def executar_tela(porta_inicial: str) -> None:
     topo = ttk.Frame(fixo, padding=8)
     topo.pack(fill="x")
     ttk.Label(topo, text="Porta:").pack(side="left")
-    ttk.Combobox(topo, textvariable=porta_var, width=18,
-                 values=[p.device for p in list_ports.comports()]).pack(side="left", padx=4)
+    ttk.Combobox(
+        topo, textvariable=porta_var, width=18, values=[p.device for p in list_ports.comports()]
+    ).pack(side="left", padx=4)
     botao_conectar = ttk.Button(topo, text="Conectar", command=conectar)
     botao_conectar.pack(side="left", padx=4)
     ttk.Label(topo, textvariable=situacao_var).pack(side="left", padx=12)
     ttk.Checkbutton(topo, text="Gravar log do ensaio", variable=gravar_var).pack(side="right")
 
-    tk.Label(corpo, bg="#fde68a", fg="#7c2d12", font=("TkDefaultFont", 11, "bold"), pady=4,
-             text="PRENDA O DRONE · sem controle horizontal ele desliza · EMERGÊNCIA = barra de espaço ou Esc"
-             ).pack(fill="x")
+    tk.Label(
+        corpo,
+        bg="#fde68a",
+        fg="#7c2d12",
+        font=("TkDefaultFont", 11, "bold"),
+        pady=4,
+        text="PRENDA O DRONE · sem controle horizontal ele desliza · EMERGÊNCIA = barra de espaço ou Esc",
+    ).pack(fill="x")
     faixa_modo = tk.Label(corpo, font=("TkDefaultFont", 11, "bold"), pady=3)
     faixa_modo.pack(fill="x")
 
     estado_quadro = ttk.Frame(corpo, padding=8)
     estado_quadro.pack(fill="x")
-    rotulo_estado = ttk.Label(estado_quadro, textvariable=valores["estado"],
-                              font=("TkDefaultFont", 22, "bold"))
+    rotulo_estado = ttk.Label(
+        estado_quadro, textvariable=valores["estado"], font=("TkDefaultFont", 22, "bold")
+    )
     rotulo_estado.pack(side="left", padx=(0, 24))
-    ttk.Label(estado_quadro, textvariable=valores["sensores"], font=("TkDefaultFont", 11)).pack(side="left")
-    ttk.Label(estado_quadro, textvariable=valores["modo"], font=("TkDefaultFont", 11, "bold")).pack(side="right")
+    ttk.Label(estado_quadro, textvariable=valores["sensores"], font=("TkDefaultFont", 11)).pack(
+        side="left"
+    )
+    ttk.Label(estado_quadro, textvariable=valores["modo"], font=("TkDefaultFont", 11, "bold")).pack(
+        side="right"
+    )
 
     medidas = ttk.LabelFrame(corpo, text="Medidas (relativas ao zero configurado)", padding=8)
     medidas.pack(fill="x", padx=8, pady=4)
@@ -872,21 +991,34 @@ def executar_tela(porta_inicial: str) -> None:
     for i, (texto, chave) in enumerate(linhas):
         ttk.Label(medidas, text=texto).grid(row=i, column=0, sticky="w", padx=4, pady=1)
         ttk.Label(medidas, textvariable=valores[chave], font=("TkFixedFont", 13, "bold")).grid(
-            row=i, column=1, sticky="e", padx=16)
+            row=i, column=1, sticky="e", padx=16
+        )
     medidas.columnconfigure(0, weight=1)
 
     motores_quadro = ttk.LabelFrame(
-        corpo, text="O que cada motor recebe (barra = du do controle: azul aumenta, vermelho diminui)",
-        padding=8)
+        corpo,
+        text="O que cada motor recebe (barra = du do controle: azul aumenta, vermelho diminui)",
+        padding=8,
+    )
     motores_quadro.pack(fill="x", padx=8, pady=4)
-    nomes = {1: "M1 trás/dir. (amarela)", 2: "M2 frente/dir. (preta)", 3: "M3 trás/esq. (preta)",
-             4: "M4 frente/esq. (amarela)"}
+    nomes = {
+        1: "M1 trás/dir. (amarela)",
+        2: "M2 frente/dir. (preta)",
+        3: "M3 trás/esq. (preta)",
+        4: "M4 frente/esq. (amarela)",
+    }
     for n, (lin, col) in {4: (0, 0), 2: (0, 1), 3: (1, 0), 1: (1, 1)}.items():
         quadro = ttk.Frame(motores_quadro, padding=4)
         quadro.grid(row=lin, column=col, sticky="ew", padx=10)
         ttk.Label(quadro, text=nomes[n], font=("TkDefaultFont", 10, "bold")).pack(anchor="w")
-        c = tk.Canvas(quadro, width=200, height=18, bg="white", highlightthickness=1,
-                      highlightbackground="#9ca3af")
+        c = tk.Canvas(
+            quadro,
+            width=200,
+            height=18,
+            bg="white",
+            highlightthickness=1,
+            highlightbackground="#9ca3af",
+        )
         c.pack(anchor="w")
         barras_du[n] = c
         ttk.Label(quadro, textvariable=textos_motor[n]).pack(anchor="w")
@@ -894,19 +1026,39 @@ def executar_tela(porta_inicial: str) -> None:
 
     acoes = ttk.Frame(fixo, padding=8)
     acoes.pack(fill="x")
-    botao_ligar = tk.Button(acoes, text="LIGAR", font=("TkDefaultFont", 14, "bold"), bg="#16a34a",
-                            fg="white", activebackground="#166534", width=26, command=ligar_ou_desligar)
+    botao_ligar = tk.Button(
+        acoes,
+        text="LIGAR",
+        font=("TkDefaultFont", 14, "bold"),
+        bg="#16a34a",
+        fg="white",
+        activebackground="#166534",
+        width=26,
+        command=ligar_ou_desligar,
+    )
     botao_ligar.pack(side="left", padx=4)
-    tk.Button(acoes, text="EMERGÊNCIA\nPARAR MOTORES", font=("TkDefaultFont", 12, "bold"),
-              bg="#dc2626", fg="white", activebackground="#7f1d1d", command=emergencia
-              ).pack(side="left", padx=16)
-    ttk.Checkbutton(acoes, text="Ensaio a seco (motores parados)", variable=seco_var).pack(side="left", padx=12)
+    tk.Button(
+        acoes,
+        text="EMERGÊNCIA\nPARAR MOTORES",
+        font=("TkDefaultFont", 12, "bold"),
+        bg="#dc2626",
+        fg="white",
+        activebackground="#7f1d1d",
+        command=emergencia,
+    ).pack(side="left", padx=16)
+    ttk.Checkbutton(acoes, text="Ensaio a seco (motores parados)", variable=seco_var).pack(
+        side="left", padx=12
+    )
     opcoes = ttk.Frame(acoes)
     opcoes.pack(side="left", padx=4)
     # O XY entra quando o drone sai do chão (o fluxo do MTF não vale com o sensor
     # a menos de ~10 cm do piso); a posição é zerada ali.
-    ttk.Checkbutton(opcoes, text="Segurar posição (XY, liga ao sair do chão)", variable=xy_var).pack(anchor="w")
-    ttk.Checkbutton(opcoes, text="Detector de subida presa (cordinhas)", variable=preso_var).pack(anchor="w")
+    ttk.Checkbutton(
+        opcoes, text="Segurar posição (XY, liga ao sair do chão)", variable=xy_var
+    ).pack(anchor="w")
+    ttk.Checkbutton(opcoes, text="Detector de subida presa (cordinhas)", variable=preso_var).pack(
+        anchor="w"
+    )
     modos = ttk.LabelFrame(acoes, text="Modo de controle", padding=4)
     modos.pack(side="left", padx=12)
     for chave, modo in MODOS.items():
@@ -915,59 +1067,123 @@ def executar_tela(porta_inicial: str) -> None:
     ajustes = ttk.LabelFrame(corpo, text="Ajustes ao vivo", padding=6)
     ajustes.pack(fill="x", padx=8, pady=4)
     ttk.Label(ajustes, text="Rotação de hover CTL_W0 (rad/s):").grid(row=0, column=0, sticky="w")
-    tk.Scale(ajustes, from_=400, to=1200, orient="horizontal", length=260, variable=w0_var,
-             command=lambda v: ajustar("CTL_W0", str(int(float(v))))).grid(row=0, column=1)
-    ttk.Label(ajustes, text="Limite de aceleração MOT_MAX (%):").grid(row=0, column=2, sticky="w", padx=(16, 0))
-    tk.Scale(ajustes, from_=20, to=100, orient="horizontal", length=200, variable=maxmot_var,
-             command=lambda v: ajustar("MOT_MAX", f"{float(v) / 100:.2f}")).grid(row=0, column=3)
+    tk.Scale(
+        ajustes,
+        from_=400,
+        to=1200,
+        orient="horizontal",
+        length=260,
+        variable=w0_var,
+        command=lambda v: ajustar("CTL_W0", str(int(float(v)))),
+    ).grid(row=0, column=1)
+    ttk.Label(ajustes, text="Limite de aceleração MOT_MAX (%):").grid(
+        row=0, column=2, sticky="w", padx=(16, 0)
+    )
+    tk.Scale(
+        ajustes,
+        from_=20,
+        to=100,
+        orient="horizontal",
+        length=200,
+        variable=maxmot_var,
+        command=lambda v: ajustar("MOT_MAX", f"{float(v) / 100:.2f}"),
+    ).grid(row=0, column=3)
     ttk.Label(ajustes, text="Rampa FLT_Z_RATE (cm/s):").grid(row=1, column=0, sticky="w")
-    tk.Scale(ajustes, from_=2, to=20, orient="horizontal", length=260, variable=rampa_var,
-             command=lambda v: ajustar("FLT_Z_RATE", f"{float(v) / 100:.2f}")).grid(row=1, column=1)
-    ttk.Label(ajustes, text="Com a compensação ligada o CTL_W0 só precisa ficar perto; sem ela, suba até levantar.").grid(
-        row=1, column=2, columnspan=2, sticky="w", padx=(16, 0))
+    tk.Scale(
+        ajustes,
+        from_=2,
+        to=20,
+        orient="horizontal",
+        length=260,
+        variable=rampa_var,
+        command=lambda v: ajustar("FLT_Z_RATE", f"{float(v) / 100:.2f}"),
+    ).grid(row=1, column=1)
+    ttk.Label(
+        ajustes,
+        text="Com a compensação ligada o CTL_W0 só precisa ficar perto; sem ela, suba até levantar.",
+    ).grid(row=1, column=2, columnspan=2, sticky="w", padx=(16, 0))
     ttk.Label(ajustes, text="Frente/trás fixo CTL_FF_TH (rad/s, − = traseira mais forte):").grid(
-        row=3, column=0, sticky="w")
-    tk.Scale(ajustes, from_=-200, to=200, orient="horizontal", length=260, variable=ff_th_var,
-             command=lambda v: ajustar("CTL_FF_TH", str(int(float(v))))).grid(row=3, column=1)
-    ttk.Label(ajustes, text="Só desarmado. Ajuste até o 'dist th=' do log ficar perto de 0 no hover.").grid(
-        row=3, column=2, columnspan=2, sticky="w", padx=(16, 0))
-    ttk.Label(ajustes, text="Esquerda/direita fixo CTL_FF_PHI (rad/s):").grid(row=4, column=0, sticky="w")
-    tk.Scale(ajustes, from_=-200, to=200, orient="horizontal", length=260, variable=ff_phi_var,
-             command=lambda v: ajustar("CTL_FF_PHI", str(int(float(v))))).grid(row=4, column=1)
-    ttk.Label(ajustes, text="Se o drone sai para um lado ao subir, o 'dist phi=' do log é o valor certo.").grid(
-        row=4, column=2, columnspan=2, sticky="w", padx=(16, 0))
+        row=3, column=0, sticky="w"
+    )
+    tk.Scale(
+        ajustes,
+        from_=-200,
+        to=200,
+        orient="horizontal",
+        length=260,
+        variable=ff_th_var,
+        command=lambda v: ajustar("CTL_FF_TH", str(int(float(v)))),
+    ).grid(row=3, column=1)
+    ttk.Label(
+        ajustes, text="Só desarmado. Ajuste até o 'dist th=' do log ficar perto de 0 no hover."
+    ).grid(row=3, column=2, columnspan=2, sticky="w", padx=(16, 0))
+    ttk.Label(ajustes, text="Esquerda/direita fixo CTL_FF_PHI (rad/s):").grid(
+        row=4, column=0, sticky="w"
+    )
+    tk.Scale(
+        ajustes,
+        from_=-200,
+        to=200,
+        orient="horizontal",
+        length=260,
+        variable=ff_phi_var,
+        command=lambda v: ajustar("CTL_FF_PHI", str(int(float(v)))),
+    ).grid(row=4, column=1)
+    ttk.Label(
+        ajustes, text="Se o drone sai para um lado ao subir, o 'dist phi=' do log é o valor certo."
+    ).grid(row=4, column=2, columnspan=2, sticky="w", padx=(16, 0))
 
     quadro_sp = ttk.LabelFrame(
-        corpo, text="Setpoint · X, Y do ponto de decolagem (0, 0) · guinada do zero da energização",
-        padding=6)
+        corpo,
+        text="Setpoint · X, Y do ponto de decolagem (0, 0) · guinada do zero da energização",
+        padding=6,
+    )
     quadro_sp.pack(fill="x", padx=8, pady=4)
-    for i, (rotulo, chave) in enumerate((("X (cm, + frente)", "x"), ("Y (cm, + direita)", "y"),
-                                         ("Z (altura, cm)", "z"), ("Guinada (°)", "yaw"))):
+    for i, (rotulo, chave) in enumerate(
+        (
+            ("X (cm, + frente)", "x"),
+            ("Y (cm, + direita)", "y"),
+            ("Z (altura, cm)", "z"),
+            ("Guinada (°)", "yaw"),
+        )
+    ):
         ttk.Label(quadro_sp, text=rotulo).grid(row=0, column=2 * i, sticky="e", padx=(8, 2))
-        ttk.Entry(quadro_sp, textvariable=setpoint_vars[chave], width=7).grid(row=0, column=2 * i + 1)
-    ttk.Button(quadro_sp, text="Aplicar em voo", command=aplicar_setpoint).grid(row=0, column=8, padx=12)
-    ttk.Button(quadro_sp, text="Voltar à partida", command=voltar_a_partida).grid(row=0, column=9, padx=4)
+        ttk.Entry(quadro_sp, textvariable=setpoint_vars[chave], width=7).grid(
+            row=0, column=2 * i + 1
+        )
+    ttk.Button(quadro_sp, text="Aplicar em voo", command=aplicar_setpoint).grid(
+        row=0, column=8, padx=12
+    )
+    ttk.Button(quadro_sp, text="Voltar à partida", command=voltar_a_partida).grid(
+        row=0, column=9, padx=4
+    )
     ttk.Button(quadro_sp, text="Zerar X Y aqui", command=zerar_xy).grid(row=0, column=10, padx=4)
-    ttk.Label(quadro_sp, text="Z vale no LIGAR; o setpoint inteiro vai em HOLD ou ao subir 4 cm "
-                              "(X, Y só com 'Segurar posição').").grid(
-        row=1, column=0, columnspan=11, sticky="w", pady=(4, 0))
+    ttk.Label(
+        quadro_sp,
+        text="Z vale no LIGAR; o setpoint inteiro vai em HOLD ou ao subir 4 cm "
+        "(X, Y só com 'Segurar posição').",
+    ).grid(row=1, column=0, columnspan=11, sticky="w", pady=(4, 0))
 
     quadro_q = ttk.LabelFrame(
-        corpo, text="Pesos Q do LQG nos 12 estados (dlqr do TCC; modos ajustado e melhorado) · só desarmado",
-        padding=6)
+        corpo,
+        text="Pesos Q do LQG nos 12 estados (dlqr do TCC; modos ajustado e melhorado) · só desarmado",
+        padding=6,
+    )
     quadro_q.pack(fill="x", padx=8, pady=4)
     for i, (rotulo, chave) in enumerate(CAMPOS_PESOS):
         linha, coluna = divmod(i, 7)
         ttk.Label(quadro_q, text=rotulo).grid(row=linha, column=2 * coluna, sticky="e", padx=(8, 2))
         ttk.Entry(quadro_q, textvariable=pesos_vars[chave], width=8).grid(
-            row=linha, column=2 * coluna + 1, sticky="w")
+            row=linha, column=2 * coluna + 1, sticky="w"
+        )
     botoes_q = ttk.Frame(quadro_q)
     botoes_q.grid(row=0, column=14, rowspan=2, padx=(16, 0))
     ttk.Button(botoes_q, text="Calcular", command=calcular_q).pack(fill="x")
     ttk.Button(botoes_q, text="Enviar ao drone", command=enviar_q).pack(fill="x", pady=2)
     ttk.Button(botoes_q, text="Padrão", command=padrao_q).pack(fill="x")
     ttk.Label(quadro_q, textvariable=resumo_q_var, font=("TkFixedFont", 10)).grid(
-        row=2, column=0, columnspan=15, sticky="w", pady=(4, 0))
+        row=2, column=0, columnspan=15, sticky="w", pady=(4, 0)
+    )
 
     raiz.bind("<space>", emergencia)
     raiz.bind("<Escape>", emergencia)

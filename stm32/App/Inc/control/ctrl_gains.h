@@ -30,27 +30,27 @@
 
 /** @brief Matrizes que podem ser enviadas (mesmos valores de DRONE_GAIN_MATRIX). */
 typedef enum {
-  CTRL_GAIN_KD = 0,   /**< Kd, 4 x 12. */
-  CTRL_GAIN_KFD = 1,  /**< Kfd, 4 x 4. */
-  CTRL_GAIN_L = 2,    /**< L, 12 x 9. */
-  CTRL_GAIN_M = 3,    /**< M, 12 x 9. */
+  CTRL_GAIN_KD = 0,  /**< Kd, 4 x 12. */
+  CTRL_GAIN_KFD = 1, /**< Kfd, 4 x 4. */
+  CTRL_GAIN_L = 2,   /**< L, 12 x 9. */
+  CTRL_GAIN_M = 3,   /**< M, 12 x 9. */
   CTRL_GAIN_COUNT
 } ctrl_gain_matrix_t;
 
 /** @brief Resultado das operações de envio (mesmos valores de DRONE_GAIN_STATUS). */
 typedef enum {
-  CTRL_GAINS_OK = 0,            /**< Aceito. */
-  CTRL_GAINS_BAD_SESSION = 1,   /**< Sessão diferente da que está sendo preparada. */
-  CTRL_GAINS_BAD_INDEX = 2,     /**< Matriz, linha ou quantidade de colunas inválida. */
-  CTRL_GAINS_INCOMPLETE = 3,    /**< Commit sem todas as linhas. */
-  CTRL_GAINS_CRC_MISMATCH = 4,  /**< O CRC não confere com o enviado. */
-  CTRL_GAINS_NOT_FINITE = 5     /**< Algum valor é NaN ou infinito. */
+  CTRL_GAINS_OK = 0,           /**< Aceito. */
+  CTRL_GAINS_BAD_SESSION = 1,  /**< Sessão diferente da que está sendo preparada. */
+  CTRL_GAINS_BAD_INDEX = 2,    /**< Matriz, linha ou quantidade de colunas inválida. */
+  CTRL_GAINS_INCOMPLETE = 3,   /**< Commit sem todas as linhas. */
+  CTRL_GAINS_CRC_MISMATCH = 4, /**< O CRC não confere com o enviado. */
+  CTRL_GAINS_NOT_FINITE = 5    /**< Algum valor é NaN ou infinito. */
 } ctrl_gains_status_t;
 
 /** Total de linhas de um conjunto completo (4 + 4 + 12 + 12). */
 #define CTRL_GAINS_TOTAL_ROWS 32U
 /** Maior quantidade de colunas de uma linha (Kd). */
-#define CTRL_GAINS_MAX_COLS 12U
+#define CTRL_GAINS_MAX_COLS   12U
 
 /** @brief Restaura os ganhos do Simulink e descarta qualquer preparo. */
 void ctrl_gains_init(void);
@@ -97,9 +97,8 @@ uint32_t ctrl_gains_active_crc(void);
  * @param[in] count    Quantidade de valores; precisa ser o número de colunas.
  * @return ::CTRL_GAINS_OK ou o motivo da recusa.
  */
-ctrl_gains_status_t ctrl_gains_stage_row(uint32_t session, ctrl_gain_matrix_t m,
-                                         uint8_t row, const float *values,
-                                         uint8_t count);
+ctrl_gains_status_t ctrl_gains_stage_row(uint32_t session, ctrl_gain_matrix_t m, uint8_t row,
+                                         const float *values, uint8_t count);
 
 /**
  * @brief Troca os ganhos em uso pelos preparados, se estiverem completos e
@@ -113,8 +112,7 @@ ctrl_gains_status_t ctrl_gains_stage_row(uint32_t session, ctrl_gain_matrix_t m,
  * @return ::CTRL_GAINS_OK se os ganhos foram trocados.
  */
 ctrl_gains_status_t ctrl_gains_commit(uint32_t session, uint32_t expected_crc,
-                                      uint32_t *computed_crc,
-                                      uint32_t *rows_received);
+                                      uint32_t *computed_crc, uint32_t *rows_received);
 
 /** @brief Descarta o preparo em andamento. */
 void ctrl_gains_abort(void);

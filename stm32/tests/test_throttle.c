@@ -38,7 +38,7 @@ static void test_blend_common(void) {
   float z[4] = {0.62F, 0.58F, 0.62F, 0.58F};
   throttle_blend_common(z, 4U, 0.05F, 0.0F);
   assert(fabsf((z[0] + z[1] + z[2] + z[3]) / 4.0F - 0.05F) < 1e-6F);
-  float lo[4] = {0.03F, 0.04F, 0.03F, 0.04F};  /* média abaixo da marcha lenta: não muda */
+  float lo[4] = {0.03F, 0.04F, 0.03F, 0.04F}; /* média abaixo da marcha lenta: não muda */
   throttle_blend_common(lo, 4U, 0.05F, 0.5F);
   assert(lo[0] == 0.03F);
 }
@@ -62,17 +62,17 @@ static void test_desaturate(void) {
   float t[4] = {0.66F, 0.45F, 0.66F, 0.45F};
   assert(throttle_desaturate(t, 4U, 0.03F, 0.60F));
   assert(fabsf(t[0] - 0.60F) < 1e-6F && fabsf(t[1] - 0.39F) < 1e-6F);
-  assert(fabsf((t[0] - t[1]) - 0.21F) < 1e-6F);   /* a diferença ficou */
+  assert(fabsf((t[0] - t[1]) - 0.21F) < 1e-6F); /* a diferença ficou */
 
   float ok[4] = {0.40F, 0.42F, 0.44F, 0.41F};
   assert(!throttle_desaturate(ok, 4U, 0.03F, 0.60F));
   assert(ok[2] == 0.44F);
 
-  float low[4] = {0.01F, 0.10F, 0.10F, 0.10F};      /* abaixo do mínimo: sobe todos */
+  float low[4] = {0.01F, 0.10F, 0.10F, 0.10F}; /* abaixo do mínimo: sobe todos */
   assert(throttle_desaturate(low, 4U, 0.03F, 0.60F));
   assert(fabsf(low[0] - 0.03F) < 1e-6F && fabsf(low[1] - 0.12F) < 1e-6F);
 
-  float wide[4] = {0.90F, 0.0F, 0.50F, 0.50F};      /* não cabe: teto manda, piso limita */
+  float wide[4] = {0.90F, 0.0F, 0.50F, 0.50F}; /* não cabe: teto manda, piso limita */
   assert(throttle_desaturate(wide, 4U, 0.03F, 0.60F));
   assert(wide[0] == 0.60F && wide[1] == 0.03F && fabsf(wide[2] - 0.20F) < 1e-6F);
 

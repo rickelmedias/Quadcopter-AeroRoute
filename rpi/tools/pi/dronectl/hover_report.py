@@ -25,6 +25,7 @@ E sugere o próximo voo:
 Nada aqui fala com o drone: serve também para reanalisar uma pasta antiga
 (``dronectl hover-report <pasta>``).
 """
+
 from __future__ import annotations
 
 import csv
@@ -93,17 +94,26 @@ class Report:
 
 # ---- leitura -------------------------------------------------------------------
 
-CSV_HEADER = (['t_pi', 't_ms', 'state', 'meas', 'flags'] + [f'y{i}' for i in range(9)] +
-              [f'x{i}' for i in range(12)] + [f'du{i}' for i in range(4)] +
-              [f'ref{i}' for i in range(4)] + [f'thr{i}' for i in range(4)])
+CSV_HEADER = (
+    ['t_pi', 't_ms', 'state', 'meas', 'flags']
+    + [f'y{i}' for i in range(9)]
+    + [f'x{i}' for i in range(12)]
+    + [f'du{i}' for i in range(4)]
+    + [f'ref{i}' for i in range(4)]
+    + [f'thr{i}' for i in range(4)]
+)
 
 
 def sample_row(t_pi: float, s) -> List:
     """Linha do CSV a partir de um DebugSample (dronectl.link)."""
-    return ([f'{t_pi:.4f}', s.time_ms, s.state, s.meas_flags, s.ctrl_flags] +
-            [f'{v:.6g}' for v in s.y] + [f'{v:.6g}' for v in s.x_hat] +
-            [f'{v:.6g}' for v in s.du] + [f'{v:.6g}' for v in s.ref] +
-            [f'{v:.4f}' for v in s.throttle])
+    return (
+        [f'{t_pi:.4f}', s.time_ms, s.state, s.meas_flags, s.ctrl_flags]
+        + [f'{v:.6g}' for v in s.y]
+        + [f'{v:.6g}' for v in s.x_hat]
+        + [f'{v:.6g}' for v in s.du]
+        + [f'{v:.6g}' for v in s.ref]
+        + [f'{v:.4f}' for v in s.throttle]
+    )
 
 
 def load_samples(path: Path) -> List[Sample]:
@@ -111,13 +121,20 @@ def load_samples(path: Path) -> List[Sample]:
     with open(path, newline='', encoding='utf-8') as f:
         for row in csv.DictReader(f):
             num = {k: float(v) for k, v in row.items()}
-            out.append(Sample(t=num['t_ms'] / 1000.0, state=int(num['state']),
-                              meas=int(num['meas']), flags=int(num['flags']),
-                              y=[num[f'y{i}'] for i in range(9)],
-                              x=[num[f'x{i}'] for i in range(12)],
-                              du=[num[f'du{i}'] for i in range(4)],
-                              ref=[num[f'ref{i}'] for i in range(4)],
-                              thr=[num[f'thr{i}'] for i in range(4)], t_pi=num['t_pi']))
+            out.append(
+                Sample(
+                    t=num['t_ms'] / 1000.0,
+                    state=int(num['state']),
+                    meas=int(num['meas']),
+                    flags=int(num['flags']),
+                    y=[num[f'y{i}'] for i in range(9)],
+                    x=[num[f'x{i}'] for i in range(12)],
+                    du=[num[f'du{i}'] for i in range(4)],
+                    ref=[num[f'ref{i}'] for i in range(4)],
+                    thr=[num[f'thr{i}'] for i in range(4)],
+                    t_pi=num['t_pi'],
+                )
+            )
     return out
 
 
@@ -134,6 +151,7 @@ def load_texts(path: Path) -> List[Tuple[float, str]]:
 
 
 # ---- contas --------------------------------------------------------------------
+
 
 def _mean(v: Sequence[float]) -> float:
     return sum(v) / len(v) if v else float('nan')
@@ -206,13 +224,17 @@ def parse_dist(texts: Sequence[Tuple[float, str]]) -> Optional[Dict[str, float]]
     for _, text in texts:
         m = DIST_RE.search(text)
         if m:
-            last = {'z': float(m.group(1)), 'theta': float(m.group(2)),
-                    'phi': float(m.group(3)),
-                    'psi': float(m.group(4)) if m.group(4) is not None else 0.0}
+            last = {
+                'z': float(m.group(1)),
+                'theta': float(m.group(2)),
+                'phi': float(m.group(3)),
+                'psi': float(m.group(4)) if m.group(4) is not None else 0.0,
+            }
     return last
 
 
 # ---- análise -------------------------------------------------------------------
+
 
 def analyze(samples: List[Sample], texts: Sequence[Tuple[float, str]], meta: Dict) -> Report:
     """Analisa um ensaio. ``meta`` traz ``height_m`` e os parâmetros usados (``params``)."""
@@ -234,9 +256,9 @@ def analyze(samples: List[Sample], texts: Sequence[Tuple[float, str]], meta: Dic
     else:
         ground = _mean(ground_pool) if ground_pool else samples[0].y[0]
     for s in samples:
-        s.h_meas = ground - s.y[0]      # type: ignore[attr-defined]
-        s.h_est = ground - s.x[2]       # type: ignore[attr-defined]
-        s.h_ref = ground - s.ref[2]     # type: ignore[attr-defined]
+        s.h_meas = ground - s.y[0]  # type: ignore[attr-defined]
+        s.h_est = ground - s.x[2]  # type: ignore[attr-defined]
+        s.h_ref = ground - s.ref[2]  # type: ignore[attr-defined]
 
     def first(cond, start: float = -1e9) -> Optional[float]:
         for s in samples:
@@ -247,10 +269,17 @@ def analyze(samples: List[Sample], texts: Sequence[Tuple[float, str]], meta: Dic
     t0 = samples[0].t
     t_arm = first(lambda s: s.state >= ARMED and s.state != FAILSAFE)
     t_takeoff = first(lambda s: s.state == TAKEOFF)
-    t_lift = first(lambda s: s.h_est >= LIFTED_M and s.state in (TAKEOFF, HOLD, LEG),
-                   t_takeoff or t0)
-    t_reach = first(lambda s: abs(s.h_est - target) <= REACHED_M and s.state in (TAKEOFF, HOLD, LEG),
-                    t_lift or t0) if t_lift is not None else None
+    t_lift = first(
+        lambda s: s.h_est >= LIFTED_M and s.state in (TAKEOFF, HOLD, LEG), t_takeoff or t0
+    )
+    t_reach = (
+        first(
+            lambda s: abs(s.h_est - target) <= REACHED_M and s.state in (TAKEOFF, HOLD, LEG),
+            t_lift or t0,
+        )
+        if t_lift is not None
+        else None
+    )
     t_land = first(lambda s: s.state == LAND, t_takeoff or t0)
     t_failsafe = first(lambda s: s.state == FAILSAFE, t_arm or t0)
     t_stop = min(v for v in (t_land, t_failsafe, samples[-1].t) if v is not None)
@@ -262,20 +291,33 @@ def analyze(samples: List[Sample], texts: Sequence[Tuple[float, str]], meta: Dic
     dts = sorted(b.t - a.t for a, b in zip(samples, samples[1:]) if b.t > a.t)
     if dts:
         step = dts[len(dts) // 2]
-        lost = sum(round((b.t - a.t) / step) - 1
-                   for a, b in zip(samples, samples[1:]) if b.t - a.t > 1.5 * step)
-        rep.metrics['link'] = {'samples': len(samples), 'rate_hz': round(1.0 / step, 1),
-                               'lost_pct': round(100.0 * lost / (len(samples) + lost), 1)}
-    rep.metrics['phases_s'] = {'arm': rel(t_arm), 'takeoff': 0.0 if t_takeoff else None,
-                               'lifted': rel(t_lift), 'reached': rel(t_reach),
-                               'land': rel(t_land), 'failsafe': rel(t_failsafe)}
+        lost = sum(
+            round((b.t - a.t) / step) - 1
+            for a, b in zip(samples, samples[1:])
+            if b.t - a.t > 1.5 * step
+        )
+        rep.metrics['link'] = {
+            'samples': len(samples),
+            'rate_hz': round(1.0 / step, 1),
+            'lost_pct': round(100.0 * lost / (len(samples) + lost), 1),
+        }
+    rep.metrics['phases_s'] = {
+        'arm': rel(t_arm),
+        'takeoff': 0.0 if t_takeoff else None,
+        'lifted': rel(t_lift),
+        'reached': rel(t_reach),
+        'land': rel(t_land),
+        'failsafe': rel(t_failsafe),
+    }
     rep.metrics['max_height_cm'] = round(max(s.h_meas for s in samples) * 100, 1)
     if t_takeoff is None:
         rep.notes.append('não decolou (sem estado TAKEOFF)')
     elif t_lift is None:
         rep.notes.append('não saiu do chão: hover (CTL_W0) baixo, motor parado ou ensaio a seco')
     elif t_reach is None:
-        rep.notes.append(f'não chegou a {target * 100:.0f} cm (máximo {rep.metrics["max_height_cm"]} cm)')
+        rep.notes.append(
+            f'não chegou a {target * 100:.0f} cm (máximo {rep.metrics["max_height_cm"]} cm)'
+        )
     if t_failsafe is not None:
         reasons = [txt for _, txt in texts if txt.startswith('FAILSAFE')]
         rep.notes.append('FAILSAFE' + (f': {reasons[-1]}' if reasons else ''))
@@ -287,8 +329,11 @@ def analyze(samples: List[Sample], texts: Sequence[Tuple[float, str]], meta: Dic
         w0 = t_lift + 3.0
     else:
         w0 = None
-    win = [s for s in samples if w0 is not None and w0 <= s.t < t_stop and
-           s.state in (TAKEOFF, HOLD, LEG)]
+    win = [
+        s
+        for s in samples
+        if w0 is not None and w0 <= s.t < t_stop and s.state in (TAKEOFF, HOLD, LEG)
+    ]
     window_s = (win[-1].t - win[0].t) if len(win) > 1 else 0.0
     rep.metrics['window_s'] = round(window_s, 1)
 
@@ -297,29 +342,37 @@ def analyze(samples: List[Sample], texts: Sequence[Tuple[float, str]], meta: Dic
         ez = [s.h_meas - s.h_ref for s in win]
         rep.metrics['height'] = {
             'mean_cm': round(_mean([s.h_meas for s in win]) * 100, 1),
-            'err_mean_cm': round(_mean(ez) * 100, 1), 'err_rms_cm': round(_rms(ez) * 100, 1),
+            'err_mean_cm': round(_mean(ez) * 100, 1),
+            'err_rms_cm': round(_rms(ez) * 100, 1),
             'err_max_cm': round(max(abs(v) for v in ez) * 100, 1),
-            'std_cm': round(_std([s.h_meas for s in win]) * 100, 1)}
+            'std_cm': round(_std([s.h_meas for s in win]) * 100, 1),
+        }
         ex = [s.x[0] - s.ref[0] for s in win]
         ey = [s.x[1] - s.ref[1] for s in win]
         radius = [math.hypot(a, b) for a, b in zip(ex, ey)]
         rep.metrics['xy'] = {
             'mean_cm': [round(_mean(ex) * 100, 1), round(_mean(ey) * 100, 1)],
-            'rms_cm': round(_rms(radius) * 100, 1), 'max_cm': round(max(radius) * 100, 1),
+            'rms_cm': round(_rms(radius) * 100, 1),
+            'max_cm': round(max(radius) * 100, 1),
             'final_cm': [round(ex[-1] * 100, 1), round(ey[-1] * 100, 1)],
             'drift_cm_s': [round(_slope(t, ex) * 100, 2), round(_slope(t, ey) * 100, 2)],
             'speed_rms_cm_s': round(_rms([math.hypot(s.x[6], s.x[7]) for s in win]) * 100, 1),
-            'flow_valid_pct': round(100 * _mean([1.0 if s.meas & MEAS_FLOW else 0.0
-                                                 for s in win]), 1)}
+            'flow_valid_pct': round(
+                100 * _mean([1.0 if s.meas & MEAS_FLOW else 0.0 for s in win]), 1
+            ),
+        }
         phi = [s.y[1] * DEG for s in win]
         theta = [s.y[2] * DEG for s in win]
         psi = _unwrap([s.y[3] for s in win])
         rep.metrics['attitude'] = {
-            'phi_mean_deg': round(_mean(phi), 2), 'phi_std_deg': round(_std(phi), 2),
-            'theta_mean_deg': round(_mean(theta), 2), 'theta_std_deg': round(_std(theta), 2),
+            'phi_mean_deg': round(_mean(phi), 2),
+            'phi_std_deg': round(_std(phi), 2),
+            'theta_mean_deg': round(_mean(theta), 2),
+            'theta_std_deg': round(_std(theta), 2),
             'psi_drift_deg': round((psi[-1] - psi[0]) * DEG, 1),
             'psi_range_deg': round((max(psi) - min(psi)) * DEG, 1),
-            'rate_std_deg_s': [round(_std([s.y[i] * DEG for s in win]), 1) for i in (6, 7, 8)]}
+            'rate_std_deg_s': [round(_std([s.y[i] * DEG for s in win]), 1) for i in (6, 7, 8)],
+        }
         thr = [[s.thr[i] for s in win] for i in range(4)]
         per_input = [round(_mean(v) * 100, 1) for v in thr]
         per_motor = [0.0] * 4
@@ -331,14 +384,19 @@ def analyze(samples: List[Sample], texts: Sequence[Tuple[float, str]], meta: Dic
         rep.metrics['motors'] = {
             'throttle_pct_M1_M4': per_motor,
             'throttle_max_pct': round(max(max(v) for v in thr) * 100, 1),
-            'saturated_pct': round(100 * _mean([1.0 if s.flags & CTRL_SATURATED else 0.0
-                                                for s in win]), 1),
-            'hover_equiv_w0': round(w_at_0 + mean_thr * (w_at_100 - w_at_0))}
+            'saturated_pct': round(
+                100 * _mean([1.0 if s.flags & CTRL_SATURATED else 0.0 for s in win]), 1
+            ),
+            'hover_equiv_w0': round(w_at_0 + mean_thr * (w_at_100 - w_at_0)),
+        }
         osc = {}
-        for name, values, unit in (('phi', phi, 'deg'), ('theta', theta, 'deg'),
-                                   ('height', [v * 100 for v in ez], 'cm'),
-                                   ('x', [v * 100 for v in ex], 'cm'),
-                                   ('y', [v * 100 for v in ey], 'cm')):
+        for name, values, unit in (
+            ('phi', phi, 'deg'),
+            ('theta', theta, 'deg'),
+            ('height', [v * 100 for v in ez], 'cm'),
+            ('x', [v * 100 for v in ex], 'cm'),
+            ('y', [v * 100 for v in ey], 'cm'),
+        ):
             f, a = dominant_oscillation(t, values)
             osc[name] = {'hz': round(f, 2) if f == f else None, 'rms': round(a, 2), 'unit': unit}
         rep.metrics['oscillation'] = osc
@@ -378,11 +436,14 @@ def analyze(samples: List[Sample], texts: Sequence[Tuple[float, str]], meta: Dic
     return rep
 
 
-def timeline(samples: Sequence[Sample], texts: Sequence[Tuple[float, str]], target: float,
-             every_s: float = 1.0) -> List[str]:
+def timeline(
+    samples: Sequence[Sample],
+    texts: Sequence[Tuple[float, str]],
+    target: float,
+    every_s: float = 1.0,
+) -> List[str]:
     """Uma linha por segundo: estado, altura, XY, inclinação, guinada e motores."""
-    names = {2: 'STANDBY', 4: 'ARMED', 5: 'TAKEOFF', 6: 'HOLD', 7: 'LEG', 8: 'LAND',
-             9: 'FAILSAFE'}
+    names = {2: 'STANDBY', 4: 'ARMED', 5: 'TAKEOFF', 6: 'HOLD', 7: 'LEG', 8: 'LAND', 9: 'FAILSAFE'}
     out = ['    t  estado    h(cm) alvo   x(cm)  y(cm)   φ(°)   θ(°)   ψ(°)  motores % (M1..M4)']
     t_start = next((s.t for s in samples if s.state >= ARMED), samples[0].t) if samples else 0.0
     last = -1e9
@@ -393,15 +454,17 @@ def timeline(samples: Sequence[Sample], texts: Sequence[Tuple[float, str]], targ
         motors = [0.0] * 4
         for i, m in enumerate(MOTOR_OF_INPUT):
             motors[m - 1] = s.thr[i] * 100
-        out.append(f'{s.t - t_start:5.1f}  {names.get(s.state, str(s.state)):<8} '
-                   f'{getattr(s, "h_meas", 0.0) * 100:5.1f} {getattr(s, "h_ref", 0.0) * 100:5.1f} '
-                   f'{s.x[0] * 100:6.1f} {s.x[1] * 100:6.1f} {s.y[1] * DEG:6.1f} '
-                   f'{s.y[2] * DEG:6.1f} {s.y[3] * DEG:6.1f}  '
-                   + ' '.join(f'{m:4.0f}' for m in motors))
+        out.append(
+            f'{s.t - t_start:5.1f}  {names.get(s.state, str(s.state)):<8} '
+            f'{getattr(s, "h_meas", 0.0) * 100:5.1f} {getattr(s, "h_ref", 0.0) * 100:5.1f} '
+            f'{s.x[0] * 100:6.1f} {s.x[1] * 100:6.1f} {s.y[1] * DEG:6.1f} '
+            f'{s.y[2] * DEG:6.1f} {s.y[3] * DEG:6.1f}  ' + ' '.join(f'{m:4.0f}' for m in motors)
+        )
     return out
 
 
 # ---- texto ---------------------------------------------------------------------
+
 
 def _fmt(v, unit='') -> str:
     if v is None or (isinstance(v, float) and v != v):
@@ -411,59 +474,82 @@ def _fmt(v, unit='') -> str:
 
 def format_report(rep: Report) -> str:
     m = rep.metrics
-    lines = [f"alvo {m.get('target_cm')} cm · altura máxima {m.get('max_height_cm')} cm · "
-             f"janela de hover {m.get('window_s')} s"]
+    lines = [
+        f"alvo {m.get('target_cm')} cm · altura máxima {m.get('max_height_cm')} cm · "
+        f"janela de hover {m.get('window_s')} s"
+    ]
     ph = m.get('phases_s') or {}
-    lines.append('fases (s desde a decolagem): ' +
-                 ', '.join(f'{k} {_fmt(v)}' for k, v in ph.items()))
+    lines.append(
+        'fases (s desde a decolagem): ' + ', '.join(f'{k} {_fmt(v)}' for k, v in ph.items())
+    )
     if 'height' in m:
         h = m['height']
-        lines.append(f"altura: média {h['mean_cm']} cm, erro médio {h['err_mean_cm']:+} cm, "
-                     f"RMS {h['err_rms_cm']} cm, máx {h['err_max_cm']} cm")
+        lines.append(
+            f"altura: média {h['mean_cm']} cm, erro médio {h['err_mean_cm']:+} cm, "
+            f"RMS {h['err_rms_cm']} cm, máx {h['err_max_cm']} cm"
+        )
     if 'xy' in m:
         xy = m['xy']
-        lines.append(f"XY: deslocamento médio ({xy['mean_cm'][0]:+}, {xy['mean_cm'][1]:+}) cm, "
-                     f"RMS {xy['rms_cm']} cm, máx {xy['max_cm']} cm, final "
-                     f"({xy['final_cm'][0]:+}, {xy['final_cm'][1]:+}) cm, deriva "
-                     f"({xy['drift_cm_s'][0]:+}, {xy['drift_cm_s'][1]:+}) cm/s, "
-                     f"fluxo válido {xy['flow_valid_pct']}%")
+        lines.append(
+            f"XY: deslocamento médio ({xy['mean_cm'][0]:+}, {xy['mean_cm'][1]:+}) cm, "
+            f"RMS {xy['rms_cm']} cm, máx {xy['max_cm']} cm, final "
+            f"({xy['final_cm'][0]:+}, {xy['final_cm'][1]:+}) cm, deriva "
+            f"({xy['drift_cm_s'][0]:+}, {xy['drift_cm_s'][1]:+}) cm/s, "
+            f"fluxo válido {xy['flow_valid_pct']}%"
+        )
     if m.get('nav'):
         from .nav_report import nav_line
+
         line = nav_line(m['nav'])
         if line:
             lines.append(line)
     if 'attitude' in m:
         a = m['attitude']
-        lines.append(f"atitude: φ {a['phi_mean_deg']:+}° ± {a['phi_std_deg']}, "
-                     f"θ {a['theta_mean_deg']:+}° ± {a['theta_std_deg']}, ψ girou "
-                     f"{a['psi_drift_deg']:+}° (faixa {a['psi_range_deg']}°), "
-                     f"p/q/r ± {a['rate_std_deg_s']} °/s")
+        lines.append(
+            f"atitude: φ {a['phi_mean_deg']:+}° ± {a['phi_std_deg']}, "
+            f"θ {a['theta_mean_deg']:+}° ± {a['theta_std_deg']}, ψ girou "
+            f"{a['psi_drift_deg']:+}° (faixa {a['psi_range_deg']}°), "
+            f"p/q/r ± {a['rate_std_deg_s']} °/s"
+        )
     if 'motors' in m:
         mo = m['motors']
-        lines.append(f"motores M1..M4: {mo['throttle_pct_M1_M4']} %, máx {mo['throttle_max_pct']}%, "
-                     f"saturado {mo['saturated_pct']}% do tempo, hover equivalente "
-                     f"CTL_W0 ≈ {mo['hover_equiv_w0']}")
+        lines.append(
+            f"motores M1..M4: {mo['throttle_pct_M1_M4']} %, máx {mo['throttle_max_pct']}%, "
+            f"saturado {mo['saturated_pct']}% do tempo, hover equivalente "
+            f"CTL_W0 ≈ {mo['hover_equiv_w0']}"
+        )
     if 'oscillation' in m:
-        lines.append('oscilação dominante: ' + ', '.join(
-            f"{k} {_fmt(v['hz'], ' Hz')} ({v['rms']} {v['unit']} RMS)"
-            for k, v in m['oscillation'].items()))
+        lines.append(
+            'oscilação dominante: '
+            + ', '.join(
+                f"{k} {_fmt(v['hz'], ' Hz')} ({v['rms']} {v['unit']} RMS)"
+                for k, v in m['oscillation'].items()
+            )
+        )
     if m.get('level_still_mean_deg'):
         lv = m['level_still_mean_deg']
-        lines.append(f"parado ({m.get('still_pct')}% da janela): φ médio {lv.get('phi')}°, "
-                     f"θ médio {lv.get('theta')}° (o nível real)")
+        lines.append(
+            f"parado ({m.get('still_pct')}% da janela): φ médio {lv.get('phi')}°, "
+            f"θ médio {lv.get('theta')}° (o nível real)"
+        )
     if m.get('dist_final'):
         d = m['dist_final']
-        lines.append(f"perturbação estimada no fim: z {d['z']:+.0f}, θ {d['theta']:+.0f}, "
-                     f"φ {d['phi']:+.0f}, ψ {d['psi']:+.0f} rad/s")
+        lines.append(
+            f"perturbação estimada no fim: z {d['z']:+.0f}, θ {d['theta']:+.0f}, "
+            f"φ {d['phi']:+.0f}, ψ {d['psi']:+.0f} rad/s"
+        )
     if m.get('link'):
         ln = m['link']
-        lines.append(f"telemetria: {ln['samples']} amostras a {ln['rate_hz']} Hz, "
-                     f"{ln['lost_pct']}% perdidas")
+        lines.append(
+            f"telemetria: {ln['samples']} amostras a {ln['rate_hz']} Hz, {ln['lost_pct']}% perdidas"
+        )
     for note in rep.notes:
         lines.append(f'! {note}')
     if rep.suggestion:
-        lines.append('sugestão para o próximo voo: ' +
-                     ', '.join(f'{k}={v:g}' for k, v in rep.suggestion.items()))
+        lines.append(
+            'sugestão para o próximo voo: '
+            + ', '.join(f'{k}={v:g}' for k, v in rep.suggestion.items())
+        )
     return '\n'.join(lines)
 
 

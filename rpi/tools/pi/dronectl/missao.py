@@ -34,6 +34,7 @@ DRONE_LEG_COMMAND; o STM32 responde DRONE_LEG_ACK "em andamento" ao aceitar e
 o drone não estiver estável em HOLD, o STM32 recusa (estado errado ou
 ocupado) — e a Pi nem tenta: confere o estado antes.
 """
+
 from __future__ import annotations
 
 import math
@@ -62,8 +63,14 @@ ARQUIVO_PONTOS = Path(__file__).resolve().parents[1] / 'missoes' / 'pontos.txt'
 #: Algoritmo do ``route`` quando nenhum é pedido (o escolhido no TCC).
 ALGORITMO_PADRAO = 'ga'
 #: Algoritmos aceitos no ``route`` -> nome em rotas.ALGORITMOS.
-ALGORITMOS_ROUTE = {'greedy': 'guloso', '2opt': 'guloso+2opt', '2optmulti': '2opt-multi',
-                      'ga': 'genetico', 'bruteforce': 'forca-bruta', 'exact': 'exato'}
+ALGORITMOS_ROUTE = {
+    'greedy': 'guloso',
+    '2opt': 'guloso+2opt',
+    '2optmulti': '2opt-multi',
+    'ga': 'genetico',
+    'bruteforce': 'forca-bruta',
+    'exact': 'exato',
+}
 #: Faixa de altura aceita nos pontos, em cm (o STM32 recusa abaixo do pouso e acima de 1,5 m).
 ALTURA_MINIMA_PONTO_CM = 15
 #: Mais pontos que isso no exato estoura a memória da Pi Zero (Held-Karp: n·2ⁿ).
@@ -82,8 +89,11 @@ COMANDOS = {
     'climb': (1, 'climb <cm>: sobe'),
     'descend': (1, 'descend <cm>: desce'),
     'goto': (-1, 'goto <x cm> <y cm> [z cm]: gira de frente para o waypoint e anda reto'),
-    'route': (-1, 'route [alg] [x,y[,z] ...]: ordem pelo algoritmo genético, visita todos e '
-                  'volta à partida; sem pontos, lê missoes/pontos.txt'),
+    'route': (
+        -1,
+        'route [alg] [x,y[,z] ...]: ordem pelo algoritmo genético, visita todos e '
+        'volta à partida; sem pontos, lê missoes/pontos.txt',
+    ),
     'waypoints': (-1, 'waypoints <x,y[,z]> ...: "goto" para cada waypoint, na ordem dada (cm)'),
     'rtl': (0, 'rtl: return to launch, "goto 0 0" (ponto de decolagem)'),
     'hold': (0, 'hold: para onde está'),
@@ -94,11 +104,28 @@ COMANDOS = {
     'exit': (0, 'exit: sai (no ar, pousa antes)'),
 }
 #: Comandos que só fazem sentido com o drone estável no ar (HOLD).
-PRECISAM_HOLD = {'yaw', 'forward', 'back', 'right', 'left', 'climb', 'descend',
-                 'goto', 'route', 'waypoints', 'rtl'}
+PRECISAM_HOLD = {
+    'yaw',
+    'forward',
+    'back',
+    'right',
+    'left',
+    'climb',
+    'descend',
+    'goto',
+    'route',
+    'waypoints',
+    'rtl',
+}
 #: Deslocamentos no corpo: nome -> sinal de (frente, direita, baixo).
-DESLOCAMENTOS = {'forward': (1, 0, 0), 'back': (-1, 0, 0), 'right': (0, 1, 0),
-                 'left': (0, -1, 0), 'climb': (0, 0, -1), 'descend': (0, 0, 1)}
+DESLOCAMENTOS = {
+    'forward': (1, 0, 0),
+    'back': (-1, 0, 0),
+    'right': (0, 1, 0),
+    'left': (0, -1, 0),
+    'climb': (0, 0, -1),
+    'descend': (0, 0, 1),
+}
 
 
 @dataclass
@@ -112,7 +139,6 @@ class Comando:
     pontos: List[Tuple[int, ...]] = field(default_factory=list)
     #: Algoritmo do ``route``.
     algoritmo: str = ''
-
 
 
 def interpretar(linha: str) -> Optional[Comando]:
@@ -168,8 +194,9 @@ def ler_pontos(textos: Iterable[str]) -> List[Tuple[int, ...]]:
             if len(ponto) not in (2, 3):
                 raise ValueError
         except ValueError:
-            raise ValueError(f'ponto inválido "{texto}" (use x,y ou x,y,z em cm, '
-                             'ex.: 150,-50,80)') from None
+            raise ValueError(
+                f'ponto inválido "{texto}" (use x,y ou x,y,z em cm, ex.: 150,-50,80)'
+            ) from None
         _conferir_altura(ponto)
         pontos.append(ponto)
     return pontos
@@ -189,14 +216,14 @@ def _conferir_limite(algoritmo: str, pontos: List[Tuple[int, ...]]) -> None:
     if algoritmo == 'exact' and len(pontos) > EXATO_MAX_PONTOS:
         raise ValueError(f'exact: no máximo {EXATO_MAX_PONTOS} pontos (use ga)')
     if algoritmo == 'bruteforce' and len(pontos) > FORCA_BRUTA_MAX_PONTOS:
-        raise ValueError(f'bruteforce: no máximo {FORCA_BRUTA_MAX_PONTOS} pontos '
-                         '(use exact ou ga)')
+        raise ValueError(f'bruteforce: no máximo {FORCA_BRUTA_MAX_PONTOS} pontos (use exact ou ga)')
 
 
 def _conferir_altura(ponto: Tuple[int, ...]) -> None:
     if len(ponto) == 3 and not ALTURA_MINIMA_PONTO_CM <= ponto[2] <= ALTURA_MAXIMA_CM:
-        raise ValueError(f'altura {ponto[2]} cm fora de {ALTURA_MINIMA_PONTO_CM}..'
-                         f'{ALTURA_MAXIMA_CM} cm')
+        raise ValueError(
+            f'altura {ponto[2]} cm fora de {ALTURA_MINIMA_PONTO_CM}..{ALTURA_MAXIMA_CM} cm'
+        )
 
 
 def rumo(x: float, y: float, psi: float, alvo_x: float, alvo_y: float) -> Tuple[float, float]:
@@ -220,8 +247,12 @@ def rumo(x: float, y: float, psi: float, alvo_x: float, alvo_y: float) -> Tuple[
 class Missao:
     """Executa comandos um de cada vez, esperando o STM32 estabilizar entre eles."""
 
-    def __init__(self, link: DroneLink, saida: Callable[[str], None] = print,
-                 arquivo_pontos: Path = ARQUIVO_PONTOS) -> None:
+    def __init__(
+        self,
+        link: DroneLink,
+        saida: Callable[[str], None] = print,
+        arquivo_pontos: Path = ARQUIVO_PONTOS,
+    ) -> None:
         self.link = link
         self.saida = saida
         #: De onde o ``route`` sem pontos lê os pontos.
@@ -243,8 +274,10 @@ class Missao:
         último trecho (chegam a 5 Hz): com a de antes, a rota sairia errada.
         """
         fim = time.monotonic() + tempo_s
-        while time.monotonic() < fim and min(self.link.position_time,
-                                             self.link.attitude_time) <= self._fim_trecho:
+        while (
+            time.monotonic() < fim
+            and min(self.link.position_time, self.link.attitude_time) <= self._fim_trecho
+        ):
             time.sleep(0.02)
         pos, att = self.link.position, self.link.attitude
         if pos is None or att is None:
@@ -255,8 +288,9 @@ class Missao:
         texto = f'estado {self.estado}'
         try:
             x, y, h, psi = self.posicao()
-            texto += (f'  x={x:+.0f} y={y:+.0f} cm  altura={h:.0f} cm  '
-                      f'guinada={math.degrees(psi):+.0f}°')
+            texto += (
+                f'  x={x:+.0f} y={y:+.0f} cm  altura={h:.0f} cm  guinada={math.degrees(psi):+.0f}°'
+            )
         except LinkError:
             pass
         return texto
@@ -286,7 +320,7 @@ class Missao:
     def _andar(self, frente: float, direita: float, baixo: float, o_que: str) -> None:
         """Translada no corpo; as medidas em cm (o enlace usa m)."""
         self.saida(f'{o_que}...')
-        distancia = math.sqrt(frente ** 2 + direita ** 2 + baixo ** 2) / 100.0
+        distancia = math.sqrt(frente**2 + direita**2 + baixo**2) / 100.0
         tempo = distancia / min(XY_RATE_M_S, Z_RATE_M_S) + FOLGA_S
         cmd = self.link.move(frente / 100.0, direita / 100.0, baixo / 100.0, timeout_s=tempo)
         self._esperar_trecho(cmd, tempo + 5.0, o_que)
@@ -300,9 +334,13 @@ class Missao:
         x, y, h, psi = self.posicao()
         giro, distancia = rumo(x, y, psi, alvo_x, alvo_y)
         dz = 0.0 if alvo_z is None else alvo_z - h
-        alvo = f'({alvo_x:+.0f}, {alvo_y:+.0f}' + ('' if alvo_z is None else f', {alvo_z:.0f}') + ')'
-        self.saida(f'rota até {alvo} cm: girar {giro:+.0f}°, andar {distancia:.0f} cm'
-                   + ('' if alvo_z is None else f', {"subir" if dz >= 0 else "descer"} {abs(dz):.0f} cm'))
+        alvo = (
+            f'({alvo_x:+.0f}, {alvo_y:+.0f}' + ('' if alvo_z is None else f', {alvo_z:.0f}') + ')'
+        )
+        self.saida(
+            f'rota até {alvo} cm: girar {giro:+.0f}°, andar {distancia:.0f} cm'
+            + ('' if alvo_z is None else f', {"subir" if dz >= 0 else "descer"} {abs(dz):.0f} cm')
+        )
         if distancia < DISTANCIA_MINIMA_CM and abs(dz) < DISTANCIA_MINIMA_CM:
             self.saida('já está no ponto')
             return
@@ -315,8 +353,13 @@ class Missao:
         x, y, h, psi = self.posicao()
         giro, distancia = rumo(x, y, psi, alvo_x, alvo_y)
         dz = 0.0 if alvo_z is None else alvo_z - h
-        self._andar(distancia, 0.0, -dz, f'frente {distancia:.0f} cm'
-                    + ('' if abs(dz) < 1 else f' e {"subir" if dz > 0 else "descer"} {abs(dz):.0f} cm'))
+        self._andar(
+            distancia,
+            0.0,
+            -dz,
+            f'frente {distancia:.0f} cm'
+            + ('' if abs(dz) < 1 else f' e {"subir" if dz > 0 else "descer"} {abs(dz):.0f} cm'),
+        )
 
     def _visitar(self, algoritmo: str, pontos: List[Tuple[int, ...]]) -> None:
         """Calcula a ordem com o algoritmo, visita os pontos e volta à partida.
@@ -330,9 +373,11 @@ class Missao:
         t0 = time.perf_counter()
         ordem = rotas.ordenar(nome, pontos3, origem)
         calculo_ms = (time.perf_counter() - t0) * 1000.0
-        self.saida(f'{nome}: ordem {" ".join(str(i + 1) for i in ordem)}  '
-                   f'circuito {rotas.custo(ordem, pontos3, origem):.0f} cm  '
-                   f'(calculado em {calculo_ms:.1f} ms)')
+        self.saida(
+            f'{nome}: ordem {" ".join(str(i + 1) for i in ordem)}  '
+            f'circuito {rotas.custo(ordem, pontos3, origem):.0f} cm  '
+            f'(calculado em {calculo_ms:.1f} ms)'
+        )
         inicio = time.monotonic()
         for i, indice in enumerate(ordem, 1):
             self.saida(f'ponto {i}/{len(ordem)}: {pontos3[indice]}')
@@ -353,8 +398,9 @@ class Missao:
         self.saida(f'armado; decolando para {altura_cm:.0f} cm...')
         altura = altura_cm / 100.0
         cmd = self.link.takeoff(altura, timeout_s=altura / Z_RATE_M_S + FOLGA_S)
-        self._esperar_trecho(cmd, altura / Z_RATE_M_S + FOLGA_S + 5.0,
-                             f'decolar {altura_cm:.0f} cm')
+        self._esperar_trecho(
+            cmd, altura / Z_RATE_M_S + FOLGA_S + 5.0, f'decolar {altura_cm:.0f} cm'
+        )
 
     def pousar(self, tempo_s: float = 30.0) -> None:
         """Pousa e espera desarmar (também usado ao sair e em erro)."""

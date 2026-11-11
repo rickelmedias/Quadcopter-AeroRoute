@@ -30,7 +30,7 @@
 /** Maior valor de aceleração DShot. */
 #define DSHOT_THROTTLE_MAX 2047U
 /** Comando DShot de beep 1 (só com o motor parado). */
-#define DSHOT_CMD_BEEP1 1U
+#define DSHOT_CMD_BEEP1    1U
 
 /**
  * @brief Liga os quatro canais PWM do TIM4 com saída em zero e prepara o DMA.

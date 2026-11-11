@@ -51,16 +51,20 @@ static void compare(const lqg_ert_t *s, const lqg_real_t du[LQG_NU]) {
   for (unsigned i = 0U; i < LQG_NU; ++i) {
     const double ref = STM32_Y.Out1[i];
     const double err = fabs((double)du[i] - ref) / (1.0 + fabs(ref));
-    if (err > worst_relative) worst_relative = err;
+    if (err > worst_relative)
+      worst_relative = err;
   }
   for (unsigned i = 0U; i < LQG_NX; ++i) {
     const double ref = STM32_DW.MemoryX_DSTATE[i];
     const double err = fabs((double)s->x_pred[i] - ref) / (1.0 + fabs(ref));
-    if (err > worst_relative) worst_relative = err;
+    if (err > worst_relative)
+      worst_relative = err;
   }
 #else
-  for (unsigned i = 0U; i < LQG_NU; ++i) assert(du[i] == STM32_Y.Out1[i]);
-  for (unsigned i = 0U; i < LQG_NX; ++i) assert(s->x_pred[i] == STM32_DW.MemoryX_DSTATE[i]);
+  for (unsigned i = 0U; i < LQG_NU; ++i)
+    assert(du[i] == STM32_Y.Out1[i]);
+  for (unsigned i = 0U; i < LQG_NX; ++i)
+    assert(s->x_pred[i] == STM32_DW.MemoryX_DSTATE[i]);
 #endif
 }
 
@@ -85,8 +89,10 @@ static void test_open_loop(void) {
 #if defined(LQG_ERT_SINGLE_PRECISION)
     /* Mesma entrada vista pelos dois: a referência recebe o valor já
        arredondado para float. */
-    for (unsigned i = 0U; i < LQG_NY; ++i) STM32_U.y[i] = y[i];
-    for (unsigned i = 0U; i < LQG_NR; ++i) STM32_U.In1[i] = r[i];
+    for (unsigned i = 0U; i < LQG_NY; ++i)
+      STM32_U.y[i] = y[i];
+    for (unsigned i = 0U; i < LQG_NR; ++i)
+      STM32_U.In1[i] = r[i];
 #endif
     STM32_step();
     lqg_ert_step(&s, &LQG_ERT_DEFAULT_GAINS, y, r, du);
@@ -109,18 +115,25 @@ static void test_closed_loop(void) {
   STM32_DW.icLoad = true;
 
   double x[LQG_NX] = {0};
-  x[LQG_X_PHI] = 0.1;    /* começa inclinado */
-  x[LQG_X_Z] = -0.05;    /* e a 5 cm do equilíbrio */
+  x[LQG_X_PHI] = 0.1; /* começa inclinado */
+  x[LQG_X_Z] = -0.05; /* e a 5 cm do equilíbrio */
   double target[LQG_NR] = {0.0, 0.0, -0.5, 0.0};
 
-  for (int k = 0; k < 6000; ++k) {  /* 60 s */
-    if (k == 2000) { target[LQG_R_X] = 0.3; target[LQG_R_PSI] = 0.2; }
-    if (k == 4000) { target[LQG_R_Z] = -0.8; target[LQG_R_Y] = -0.2; }
+  for (int k = 0; k < 6000; ++k) { /* 60 s */
+    if (k == 2000) {
+      target[LQG_R_X] = 0.3;
+      target[LQG_R_PSI] = 0.2;
+    }
+    if (k == 4000) {
+      target[LQG_R_Z] = -0.8;
+      target[LQG_R_Y] = -0.2;
+    }
 
     lqg_real_t y[LQG_NY], r[LQG_NR], du[LQG_NU];
     for (unsigned i = 0U; i < LQG_NY; ++i) {
       double c = 0.0;
-      for (unsigned j = 0U; j < LQG_NX; ++j) c += LQG_ERT_C[i][j] * x[j];
+      for (unsigned j = 0U; j < LQG_NX; ++j)
+        c += LQG_ERT_C[i][j] * x[j];
       y[i] = (lqg_real_t)(c + 1e-3 * uniform());
       STM32_U.y[i] = y[i];
     }
@@ -135,8 +148,10 @@ static void test_closed_loop(void) {
     double next[LQG_NX];
     for (unsigned i = 0U; i < LQG_NX; ++i) {
       double v = 0.0;
-      for (unsigned j = 0U; j < LQG_NX; ++j) v += LQG_ERT_A[i][j] * x[j];
-      for (unsigned j = 0U; j < LQG_NU; ++j) v += LQG_ERT_B[i][j] * STM32_Y.Out1[j];
+      for (unsigned j = 0U; j < LQG_NX; ++j)
+        v += LQG_ERT_A[i][j] * x[j];
+      for (unsigned j = 0U; j < LQG_NU; ++j)
+        v += LQG_ERT_B[i][j] * STM32_Y.Out1[j];
       next[i] = v;
     }
     memcpy(x, next, sizeof(x));
@@ -147,8 +162,8 @@ static void test_closed_loop(void) {
   assert(fabs(x[LQG_X_Z] + 0.8) < 0.01);
   assert(fabs(x[LQG_X_PSI] - 0.2) < 0.01);
   assert(fabs(x[LQG_X_PHI]) < 0.01 && fabs(x[LQG_X_THETA]) < 0.01);
-  printf("  malha fechada: 6000 passos, converge para x=%.3f y=%.3f z=%.3f psi=%.3f\n",
-         x[LQG_X_X], x[LQG_X_Y], x[LQG_X_Z], x[LQG_X_PSI]);
+  printf("  malha fechada: 6000 passos, converge para x=%.3f y=%.3f z=%.3f psi=%.3f\n", x[LQG_X_X],
+         x[LQG_X_Y], x[LQG_X_Z], x[LQG_X_PSI]);
 }
 
 /** @brief Separar saída e predição com o mesmo du é o mesmo passo. */
@@ -158,8 +173,10 @@ static void test_split_step_matches_step(void) {
   lqg_ert_init(&b);
   for (int k = 0; k < 500; ++k) {
     lqg_real_t y[LQG_NY], r[LQG_NR], du_a[LQG_NU], du_b[LQG_NU];
-    for (unsigned i = 0U; i < LQG_NY; ++i) y[i] = (lqg_real_t)uniform();
-    for (unsigned i = 0U; i < LQG_NR; ++i) r[i] = (lqg_real_t)uniform();
+    for (unsigned i = 0U; i < LQG_NY; ++i)
+      y[i] = (lqg_real_t)uniform();
+    for (unsigned i = 0U; i < LQG_NR; ++i)
+      r[i] = (lqg_real_t)uniform();
     lqg_ert_step(&a, &LQG_ERT_DEFAULT_GAINS, y, r, du_a);
     lqg_ert_output(&b, &LQG_ERT_DEFAULT_GAINS, y, r, du_b);
     lqg_ert_update(&b, &LQG_ERT_DEFAULT_GAINS, du_b);
@@ -173,13 +190,15 @@ static void test_first_step_starts_from_zero(void) {
   lqg_ert_t s;
   memset(&s, 0x5A, sizeof(s));
   lqg_ert_init(&s);
-  for (unsigned i = 0U; i < LQG_NX; ++i) s.x_pred[i] = 123.0F;  /* "lixo" */
+  for (unsigned i = 0U; i < LQG_NX; ++i)
+    s.x_pred[i] = 123.0F; /* "lixo" */
   s.ic_load = true;
   const lqg_real_t y[LQG_NY] = {0};
   const lqg_real_t r[LQG_NR] = {0};
   lqg_real_t du[LQG_NU];
   lqg_ert_output(&s, &LQG_ERT_DEFAULT_GAINS, y, r, du);
-  for (unsigned i = 0U; i < LQG_NU; ++i) assert(du[i] == 0.0F);
+  for (unsigned i = 0U; i < LQG_NU; ++i)
+    assert(du[i] == 0.0F);
 }
 
 int main(void) {

@@ -15,6 +15,7 @@ Exemplos:
     python -m dronectl hover-report            # reanalisa o último ensaio
     python -m dronectl hover-profile           # perfil com que o próximo ensaio começa
 """
+
 from __future__ import annotations
 
 import argparse
@@ -35,8 +36,10 @@ def _status_line(link: DroneLink) -> str:
     if pos is not None:
         parts.append(f'h={-pos.z:5.2f} m  x={pos.x:+5.2f} y={pos.y:+5.2f}  vz={pos.vz:+5.2f}')
     if att is not None:
-        parts.append(f'φ={math.degrees(att.roll):+5.1f}° θ={math.degrees(att.pitch):+5.1f}° '
-                     f'ψ={math.degrees(att.yaw):+6.1f}°')
+        parts.append(
+            f'φ={math.degrees(att.roll):+5.1f}° θ={math.degrees(att.pitch):+5.1f}° '
+            f'ψ={math.degrees(att.yaw):+6.1f}°'
+        )
     if not link.link_ok:
         parts.append('SEM ENLACE')
     return '  '.join(parts)
@@ -84,6 +87,7 @@ def _apply_profile(link: DroneLink, profile: Optional[str]):
 
 
 # ---- comandos --------------------------------------------------------------
+
 
 def cmd_status(args) -> int:
     with _connect(args) as link:
@@ -143,8 +147,7 @@ def _land_and_wait(link: DroneLink, timeout: float = 20.0) -> None:
     except LinkError as exc:
         print(f'pouso: {exc}')
     end = time.monotonic() + timeout
-    while time.monotonic() < end and state_name(link.flight_state) not in ('STANDBY',
-                                                                          'FAILSAFE'):
+    while time.monotonic() < end and state_name(link.flight_state) not in ('STANDBY', 'FAILSAFE'):
         time.sleep(0.2)
     if state_name(link.flight_state) not in ('STANDBY', 'FAILSAFE'):
         print('não desarmou sozinho: desarmando')
@@ -159,13 +162,13 @@ def cmd_hover(args) -> int:
         stats = recorder = None
         if args.debug or args.csv:
             stats, recorder = _start_debug_stream(
-                link, args, _default_csv('hover') if args.debug else None)
+                link, args, _default_csv('hover') if args.debug else None
+            )
         weights = _apply_profile(link, args.profile)
         if args.dry:
             link.param_set('FLT_DRY_RUN', 1)
         dry = link.param_get('FLT_DRY_RUN') >= 0.5
-        print('ENSAIO A SECO: motores parados' if dry else
-              'MOTORES VÃO GIRAR. Ctrl+C pousa.')
+        print('ENSAIO A SECO: motores parados' if dry else 'MOTORES VÃO GIRAR. Ctrl+C pousa.')
         link.start_session()
         try:
             link.arm(True)
@@ -241,8 +244,10 @@ def cmd_gains(args) -> int:
         else:
             weights = load_profile(Path(args.profile))[0] if args.profile else Weights()
             gains, info = design(weights)
-            print(f'maior polo: controle {info["controle_maior_polo"]:.6f}, '
-                  f'estimador {info["estimador_maior_polo"]:.6f}')
+            print(
+                f'maior polo: controle {info["controle_maior_polo"]:.6f}, '
+                f'estimador {info["estimador_maior_polo"]:.6f}'
+            )
             print(f'ganhos em uso (crc {link.upload_gains(gains):08X})')
     return 0
 
@@ -255,10 +260,14 @@ def cmd_design(args) -> int:
 
     weights = load_profile(Path(args.profile))[0] if args.profile else Weights()
     gains, info = design(weights)
-    print(f'maior polo: controle {info["controle_maior_polo"]:.6f}, '
-          f'estimador {info["estimador_maior_polo"]:.6f}')
-    print('diferença relativa para o Simulink:',
-          ', '.join(f'{k}={v:.2e}' for k, v in compare(gains, default_gains()).items()))
+    print(
+        f'maior polo: controle {info["controle_maior_polo"]:.6f}, '
+        f'estimador {info["estimador_maior_polo"]:.6f}'
+    )
+    print(
+        'diferença relativa para o Simulink:',
+        ', '.join(f'{k}={v:.2e}' for k, v in compare(gains, default_gains()).items()),
+    )
     np.set_printoptions(precision=4, suppress=True, linewidth=150)
     print('Kd =\n', np.array(gains.Kd))
     print(f'crc {gains.crc32():08X}')
@@ -281,8 +290,10 @@ def cmd_missao(args) -> int:
             if sim:
                 print('DRONE SIMULADO no STM32 (FLT_SIM=1): motores parados')
             elif dry:
-                print('aviso: FLT_DRY_RUN=1 sem FLT_SIM: os motores não giram e a decolagem '
-                      'nunca termina. Use --sim para o teste de comunicação.')
+                print(
+                    'aviso: FLT_DRY_RUN=1 sem FLT_SIM: os motores não giram e a decolagem '
+                    'nunca termina. Use --sim para o teste de comunicação.'
+                )
             else:
                 print('MOTORES VÃO GIRAR (voo real). Ctrl+C pousa.')
         missao = Missao(link, arquivo_pontos=args.pontos) if args.pontos else Missao(link)
@@ -312,12 +323,19 @@ def cmd_hover_test(args) -> int:
     try:
         params = parse_assignments(args.set)
         q = parse_assignments(args.q, upper=False)
-        opts = Options(height_m=(args.height if args.height is not None else profile.height_cm) / 100,
-                       time_s=args.time if args.time is not None else profile.time_s,
-                       mode=mode, params=params, q=q, r=args.r, rate_hz=args.rate,
-                       geofence_m=args.geofence / 100, label=args.label or '',
-                       out_dir=Path(args.out) if args.out else RESULTS_DIR,
-                       countdown_s=args.countdown)
+        opts = Options(
+            height_m=(args.height if args.height is not None else profile.height_cm) / 100,
+            time_s=args.time if args.time is not None else profile.time_s,
+            mode=mode,
+            params=params,
+            q=q,
+            r=args.r,
+            rate_hz=args.rate,
+            geofence_m=args.geofence / 100,
+            label=args.label or '',
+            out_dir=Path(args.out) if args.out else RESULTS_DIR,
+            countdown_s=args.countdown,
+        )
         opts.check()
     except ValueError as exc:
         print(f'erro: {exc}', file=sys.stderr)
@@ -333,9 +351,14 @@ def cmd_hover_test(args) -> int:
             profile.time_s = args.time
         profile.save()
         print('perfil atualizado com os ajustes deste ensaio')
-    print({'motors': 'VOO REAL', 'sim': 'DRONE SIMULADO no STM32 (motores parados)',
-           'dry': 'A SECO: sensores reais, motores parados'}[mode] +
-          f': {opts.height_m * 100:g} cm por {opts.time_s:g} s')
+    print(
+        {
+            'motors': 'VOO REAL',
+            'sim': 'DRONE SIMULADO no STM32 (motores parados)',
+            'dry': 'A SECO: sensores reais, motores parados',
+        }[mode]
+        + f': {opts.height_m * 100:g} cm por {opts.time_s:g} s'
+    )
     with _connect(args) as link:
         test = run_hover_test(link, opts, profile)
     return 1 if test.error else 0
@@ -365,6 +388,7 @@ def cmd_hover_report(args) -> int:
     print(format_report(report))
     if args.plot:
         from .hover_plot import plot_folder
+
         print(f'gráfico em {plot_folder(folder)}')
     return 0
 
@@ -377,8 +401,12 @@ def cmd_hover_profile(args) -> int:
     changed = []
     try:
         if args.reset:
-            profile = Profile(path=profile.path, history=profile.history,
-                              boot_id=profile.boot_id, boot_values=profile.boot_values)
+            profile = Profile(
+                path=profile.path,
+                history=profile.history,
+                boot_id=profile.boot_id,
+                boot_values=profile.boot_values,
+            )
             changed.append('perfil zerado (fábrica)')
         params = parse_assignments(args.set)
         managed = sorted(set(params) & set(MANAGED))
@@ -391,8 +419,10 @@ def cmd_hover_profile(args) -> int:
         return 2
     if args.apply_suggestion is not None:
         chosen = profile.apply_suggestion(args.apply_suggestion)
-        changed.append('sugestão aplicada: ' +
-                       (', '.join(f'{k}={v:g}' for k, v in chosen.items()) or 'nada a aplicar'))
+        changed.append(
+            'sugestão aplicada: '
+            + (', '.join(f'{k}={v:g}' for k, v in chosen.items()) or 'nada a aplicar')
+        )
     profile.params.update(params)
     profile.q.update(q)
     for name in args.unset or []:
@@ -408,8 +438,17 @@ def cmd_hover_profile(args) -> int:
         profile.height_cm = args.height
     if args.time is not None:
         profile.time_s = args.time
-    if changed or params or q or args.unset or args.unset_q or args.clear_q or \
-            args.r is not None or args.height is not None or args.time is not None:
+    if (
+        changed
+        or params
+        or q
+        or args.unset
+        or args.unset_q
+        or args.clear_q
+        or args.r is not None
+        or args.height is not None
+        or args.time is not None
+    ):
         profile.save()
     for line in changed:
         print(line)
@@ -421,8 +460,15 @@ def cmd_rotas_bench(args) -> int:
     """Benchmark dos algoritmos de rota (não usa o drone)."""
     from .rotas_bench import rodar
 
-    resumo = rodar(args.n_min, args.n_max, args.instancias, args.exato_max_s, args.exato_max_mb,
-                   Path(args.saida), forca_max_s=args.forca_max_s)
+    resumo = rodar(
+        args.n_min,
+        args.n_max,
+        args.instancias,
+        args.exato_max_s,
+        args.exato_max_mb,
+        Path(args.saida),
+        forca_max_s=args.forca_max_s,
+    )
     print(f"\nassinatura {resumo['assinatura_sha256']}")
     print(f"total {resumo['tempo_total_s']} s; resultados em {args.saida}/")
     return 0
@@ -440,8 +486,9 @@ def cmd_rotas_limite(args) -> int:
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog='dronectl', description='Comando e ajuste do drone')
-    parser.add_argument('-p', '--port', default='/dev/serial0',
-                        help='porta serial do STM32 (ou URL do pyserial)')
+    parser.add_argument(
+        '-p', '--port', default='/dev/serial0', help='porta serial do STM32 (ou URL do pyserial)'
+    )
     parser.add_argument('-b', '--baud', type=int, default=115200)
     sub = parser.add_subparsers(dest='command', required=True)
 
@@ -478,30 +525,51 @@ def main(argv=None) -> int:
     p.set_defaults(func=cmd_gains)
     p = sub.add_parser('missao', help='comandos passo a passo (takeoff, yaw, goto, route, land...)')
     p.add_argument('arquivo', nargs='?', help='arquivo de missão (sem ele: shell interativo)')
-    p.add_argument('--sim', action='store_true',
-                   help='liga FLT_SIM=1: drone simulado no STM32, motores parados')
-    p.add_argument('--pontos', help='arquivo de pontos do "route" sem pontos '
-                   '(padrão: tools/pi/missoes/pontos.txt)')
-    p.add_argument('--desligar-sim', action='store_true',
-                   help='volta FLT_SIM=0 ao terminar')
+    p.add_argument(
+        '--sim',
+        action='store_true',
+        help='liga FLT_SIM=1: drone simulado no STM32, motores parados',
+    )
+    p.add_argument(
+        '--pontos',
+        help='arquivo de pontos do "route" sem pontos (padrão: tools/pi/missoes/pontos.txt)',
+    )
+    p.add_argument('--desligar-sim', action='store_true', help='volta FLT_SIM=0 ao terminar')
     p.set_defaults(func=cmd_missao)
-    p = sub.add_parser('hover-test', help='ensaio de hover: perfil, voo protegido, gravação e '
-                       'análise (sem --motors/--sim: a seco)')
+    p = sub.add_parser(
+        'hover-test',
+        help='ensaio de hover: perfil, voo protegido, gravação e '
+        'análise (sem --motors/--sim: a seco)',
+    )
     mode = p.add_mutually_exclusive_group()
     mode.add_argument('--motors', action='store_true', help='voo real: os motores giram')
     mode.add_argument('--sim', action='store_true', help='drone simulado no STM32 (FLT_SIM=1)')
     p.add_argument('--height', type=float, help='altura, em cm (padrão: a do perfil, 30)')
     p.add_argument('--time', type=float, help='tempo de hover depois de chegar, em s (perfil: 20)')
-    p.add_argument('--set', action='append', metavar='NOME=VALOR[,...]',
-                   help='parâmetro só deste ensaio (pode repetir)')
-    p.add_argument('--q', action='append', metavar='ESTADO=PESO[,...]',
-                   help='peso Q do LQG ajustado só deste ensaio (x y z phi theta psi vx vy vz p q r)')
+    p.add_argument(
+        '--set',
+        action='append',
+        metavar='NOME=VALOR[,...]',
+        help='parâmetro só deste ensaio (pode repetir)',
+    )
+    p.add_argument(
+        '--q',
+        action='append',
+        metavar='ESTADO=PESO[,...]',
+        help='peso Q do LQG ajustado só deste ensaio (x y z phi theta psi vx vy vz p q r)',
+    )
     p.add_argument('--r', type=float, help='peso R do LQG ajustado (padrão 0,1)')
-    p.add_argument('--save', action='store_true', help='grava --set/--q/--r/--height/--time no perfil')
+    p.add_argument(
+        '--save', action='store_true', help='grava --set/--q/--r/--height/--time no perfil'
+    )
     p.add_argument('--label', help='anotação do ensaio (vai para o registro)')
     p.add_argument('--rate', type=float, default=50.0, help='DRONE_CTRL_DEBUG, em Hz')
-    p.add_argument('--geofence', type=float, default=80.0,
-                   help='pousa a esta distância do ponto de decolagem, em cm')
+    p.add_argument(
+        '--geofence',
+        type=float,
+        default=80.0,
+        help='pousa a esta distância do ponto de decolagem, em cm',
+    )
     p.add_argument('--countdown', type=float, default=3.0, help='contagem antes de armar, em s')
     p.add_argument('--profile', help='perfil (padrão ~/drone/perfil_hover.json)')
     p.add_argument('--out', help='pasta dos ensaios (padrão ~/real_log_kit)')
@@ -521,27 +589,49 @@ def main(argv=None) -> int:
     p.add_argument('--r', type=float)
     p.add_argument('--height', type=float, help='altura padrão, em cm')
     p.add_argument('--time', type=float, help='tempo de hover padrão, em s')
-    p.add_argument('--apply-suggestion', nargs='*', metavar='NOME',
-                   help='passa a sugestão do último ensaio (toda, ou só estes nomes) para o perfil')
+    p.add_argument(
+        '--apply-suggestion',
+        nargs='*',
+        metavar='NOME',
+        help='passa a sugestão do último ensaio (toda, ou só estes nomes) para o perfil',
+    )
     p.add_argument('--reset', action='store_true', help='perfil de fábrica (mantém o histórico)')
     p.add_argument('--profile', help='perfil (padrão ~/drone/perfil_hover.json)')
     p.set_defaults(func=cmd_hover_profile)
-    p = sub.add_parser('rotas-bench', help='benchmark guloso x 2-opt x genético x força bruta x exato (TSP)')
+    p = sub.add_parser(
+        'rotas-bench', help='benchmark guloso x 2-opt x genético x força bruta x exato (TSP)'
+    )
     p.add_argument('--n-min', type=int, default=3)
     p.add_argument('--n-max', type=int, default=30)
     p.add_argument('--instancias', type=int, default=10, help='instâncias (sementes) por N')
-    p.add_argument('--exato-max-s', type=float, default=10.0,
-                   help='não roda o exato se o tempo previsto por instância passar disso')
-    p.add_argument('--exato-max-mb', type=float, default=600.0,
-                   help='nem se a memória do Held-Karp passar disso (Pi Zero: use 150)')
-    p.add_argument('--forca-max-s', type=float, default=10.0,
-                   help='não roda a força bruta se o tempo previsto por instância passar disso')
+    p.add_argument(
+        '--exato-max-s',
+        type=float,
+        default=10.0,
+        help='não roda o exato se o tempo previsto por instância passar disso',
+    )
+    p.add_argument(
+        '--exato-max-mb',
+        type=float,
+        default=600.0,
+        help='nem se a memória do Held-Karp passar disso (Pi Zero: use 150)',
+    )
+    p.add_argument(
+        '--forca-max-s',
+        type=float,
+        default=10.0,
+        help='não roda a força bruta se o tempo previsto por instância passar disso',
+    )
     p.add_argument('--saida', default='resultados_rotas', help='pasta dos resultados')
     p.set_defaults(func=cmd_rotas_bench)
     p = sub.add_parser('rotas-limite', help='até quantos pontos o TSP exato roda (tempo e RAM)')
     p.add_argument('--n-max', type=int, default=30)
-    p.add_argument('--tempo-max-s', type=float, default=60.0,
-                   help='tempo por instância a partir do qual o exato é inviável')
+    p.add_argument(
+        '--tempo-max-s',
+        type=float,
+        default=60.0,
+        help='tempo por instância a partir do qual o exato é inviável',
+    )
     p.add_argument('--mem-max-mb', type=float, help='padrão: 80 %% da RAM livre')
     p.add_argument('--saida', default='resultados_rotas', help='pasta dos resultados')
     p.set_defaults(func=cmd_rotas_limite)

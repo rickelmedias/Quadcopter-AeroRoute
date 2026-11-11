@@ -15,6 +15,7 @@ subida em FLT_Z_RATE, altura seguindo a referência, XY parado em
 chão. O relógio do STM32 falso anda ``time_scale`` vezes mais rápido que o
 real, para um ensaio de 20 s caber em 2 s de teste.
 """
+
 from __future__ import annotations
 
 import math
@@ -31,13 +32,21 @@ SHAPES = [(4, 12), (4, 4), (12, 9), (12, 9)]
 FIRST_ROW = [0, 4, 8, 20]
 #: Parâmetros do voo que o ensaio de hover lê e muda: [valor, mínimo, máximo].
 HOVER_PARAMS = {
-    'CTL_FF_TH': [-50.0, -300.0, 300.0], 'CTL_FF_PHI': [-40.0, -300.0, 300.0],
-    'CTL_FF_PSI': [50.0, -300.0, 300.0], 'SNS_LVL_PHI': [0.0, -5.0, 5.0],
-    'SNS_LVL_TH': [0.0, -5.0, 5.0], 'CTL_XY': [1.0, 0.0, 1.0], 'CTL_LQG_AJ': [1.0, 0.0, 1.0],
-    'CTL_DIST': [1.0, 0.0, 1.0], 'CTL_DIST_MAX': [300.0, 0.0, 600.0],
-    'MOT_MAX': [0.95, 0.1, 1.0], 'MOT_W_AT_0': [0.0, 0.0, 2000.0],
-    'MOT_W_AT_100': [1755.0, 100.0, 8000.0], 'FLT_Z_RATE': [0.05, 0.0, 1.0],
-    'FLT_TILT_MAX': [0.35, 0.2, 1.2]}
+    'CTL_FF_TH': [-50.0, -300.0, 300.0],
+    'CTL_FF_PHI': [-40.0, -300.0, 300.0],
+    'CTL_FF_PSI': [50.0, -300.0, 300.0],
+    'SNS_LVL_PHI': [0.0, -5.0, 5.0],
+    'SNS_LVL_TH': [0.0, -5.0, 5.0],
+    'CTL_XY': [1.0, 0.0, 1.0],
+    'CTL_LQG_AJ': [1.0, 0.0, 1.0],
+    'CTL_DIST': [1.0, 0.0, 1.0],
+    'CTL_DIST_MAX': [300.0, 0.0, 600.0],
+    'MOT_MAX': [0.95, 0.1, 1.0],
+    'MOT_W_AT_0': [0.0, 0.0, 2000.0],
+    'MOT_W_AT_100': [1755.0, 100.0, 8000.0],
+    'FLT_Z_RATE': [0.05, 0.0, 1.0],
+    'FLT_TILT_MAX': [0.35, 0.2, 1.2],
+}
 #: z medido pelo MTF com o drone no chão (SIM_PLANT_GROUND_Z), em m (NED).
 GROUND_Z = -0.08
 
@@ -45,8 +54,9 @@ GROUND_Z = -0.08
 class FakeFC:
     """Controladora simulada do outro lado de um pty."""
 
-    def __init__(self, drop_first_row: bool = False, hover: bool = False,
-                 time_scale: float = 1.0) -> None:
+    def __init__(
+        self, drop_first_row: bool = False, hover: bool = False, time_scale: float = 1.0
+    ) -> None:
         self.mod = dialect.load()
         self.master, slave = os.openpty()
         self.port = os.ttyname(slave)
@@ -55,8 +65,12 @@ class FakeFC:
         self.mav.robust_parsing = True
         self.boot_id = 4242
         self.state = 2  # STANDBY
-        self.params = {'CTL_W0': [702.0, 100.0, 3000.0], 'FLT_DRY_RUN': [1.0, 0.0, 1.0],
-                       'DBG_RATE_HZ': [0.0, 0.0, 50.0], 'FLT_SIM': [0.0, 0.0, 1.0]}
+        self.params = {
+            'CTL_W0': [702.0, 100.0, 3000.0],
+            'FLT_DRY_RUN': [1.0, 0.0, 1.0],
+            'DBG_RATE_HZ': [0.0, 0.0, 50.0],
+            'FLT_SIM': [0.0, 0.0, 1.0],
+        }
         #: Modelo de voo para o ensaio de hover (ver o cabeçalho).
         self.hover = hover
         self.time_scale = time_scale
@@ -114,12 +128,18 @@ class FakeFC:
 
     def _param_value(self, name: str) -> None:
         names = list(self.params)
-        self.mav.param_value_send(name.encode(), self.params[name][0],
-                                  self.mod.MAV_PARAM_TYPE_REAL32, len(names), names.index(name))
+        self.mav.param_value_send(
+            name.encode(),
+            self.params[name][0],
+            self.mod.MAV_PARAM_TYPE_REAL32,
+            len(names),
+            names.index(name),
+        )
 
     def _gain_ack(self, session, action, status, staged_crc=0, rows=0) -> None:
-        self.mav.drone_gain_ack_send(session, staged_crc, self.active_crc, rows, action, status,
-                                     self.custom, 1, 191)
+        self.mav.drone_gain_ack_send(
+            session, staged_crc, self.active_crc, rows, action, status, self.custom, 1, 191
+        )
 
     def _handle(self, msg) -> None:
         kind = msg.get_type()
@@ -127,15 +147,21 @@ class FakeFC:
             for name in self.params:
                 self._param_value(name)
         elif kind == 'PARAM_REQUEST_READ':
-            name = msg.param_id.rstrip('\x00') if isinstance(msg.param_id, str) else \
-                msg.param_id.decode().rstrip('\x00')
+            name = (
+                msg.param_id.rstrip('\x00')
+                if isinstance(msg.param_id, str)
+                else msg.param_id.decode().rstrip('\x00')
+            )
             if msg.param_index >= 0:
                 name = list(self.params)[msg.param_index]
             if name in self.params:
                 self._param_value(name)
         elif kind == 'PARAM_SET':
-            name = msg.param_id.rstrip('\x00') if isinstance(msg.param_id, str) else \
-                msg.param_id.decode().rstrip('\x00')
+            name = (
+                msg.param_id.rstrip('\x00')
+                if isinstance(msg.param_id, str)
+                else msg.param_id.decode().rstrip('\x00')
+            )
             if name not in self.params:
                 self.mav.statustext_send(4, f'param {name}: desconhecido'.encode())
                 return
@@ -191,9 +217,20 @@ class FakeFC:
 
     def _leg(self, msg) -> None:
         def ack(result, progress, reason=0):
-            self.mav.drone_leg_ack_send(self.boot_id, msg.mission_id, msg.command_id,
-                                        0xFFFFFFFF, float('nan'), msg.leg_index, reason, result,
-                                        progress, self.state, 1, 191)
+            self.mav.drone_leg_ack_send(
+                self.boot_id,
+                msg.mission_id,
+                msg.command_id,
+                0xFFFFFFFF,
+                float('nan'),
+                msg.leg_index,
+                reason,
+                result,
+                progress,
+                self.state,
+                1,
+                191,
+            )
 
         def later(apply):
             def finish():
@@ -201,6 +238,7 @@ class FakeFC:
                 apply()
                 self.state = 6
                 ack(self.mod.MAV_RESULT_ACCEPTED, 100)
+
             threading.Thread(target=finish, daemon=True).start()
 
         a = self.mod
@@ -237,15 +275,19 @@ class FakeFC:
             self.state = 7
             ack(a.MAV_RESULT_IN_PROGRESS, 0)
             if msg.action == a.DRONE_ACTION_ROTATE_RELATIVE:
+
                 def girar():
                     self.yaw = (self.yaw + msg.yaw + math.pi) % (2 * math.pi) - math.pi
+
                 later(girar)
             else:
+
                 def andar():
                     c, s = math.cos(self.yaw), math.sin(self.yaw)
                     self.x += msg.x * c - msg.y * s
                     self.y += msg.x * s + msg.y * c
                     self.z += msg.z
+
                 later(andar)
         else:
             ack(a.MAV_RESULT_DENIED, 0, 1)
@@ -269,8 +311,12 @@ class FakeFC:
         target = self.z_ref if motors else GROUND_Z
         self.zf += (target - self.zf) * min(1.0, dt / 0.3)
         lifted = self.zf < GROUND_Z - 0.03
-        if self.state == 5 and self.takeoff_target is not None and \
-                self.z_ref == self.takeoff_target and abs(self.zf - self.takeoff_target) < 0.005:
+        if (
+            self.state == 5
+            and self.takeoff_target is not None
+            and self.z_ref == self.takeoff_target
+            and abs(self.zf - self.takeoff_target) < 0.005
+        ):
             self.state = 6
             self._takeoff_ack(self.mod.MAV_RESULT_ACCEPTED, 100)
         if self.state == 8 and self.zf > GROUND_Z - 0.003:
@@ -301,14 +347,24 @@ class FakeFC:
             vx, vy = self.drift
             x = self.hover_xy[0] + k * theta + vx * t_air
             y = self.hover_xy[1] - k * phi + vy * t_air
-        flying = self.state in (5, 6, 7, 8) and (self._p('FLT_DRY_RUN') < 0.5 or
-                                                 self._p('FLT_SIM') >= 0.5)
+        flying = self.state in (5, 6, 7, 8) and (
+            self._p('FLT_DRY_RUN') < 0.5 or self._p('FLT_SIM') >= 0.5
+        )
         thr = [6200, 6000, 5300, 6100] if flying else [0] * 4
         ys = [self.zf + noise, phi, theta, 0.0, vx, vy, 0.0, 0.0, 0.0]
         xs = [x, y, self.zf, phi, theta, 0.0, vx, vy, 0.0, 0.0, 0.0, 0.0]
-        self.mav.drone_ctrl_debug_send(int(self.sim_t * 1000) & 0xFFFFFFFF, step, ys, xs,
-                                       [0.0] * 4, [0.0, 0.0, self.z_ref, 0.0], thr, self.state,
-                                       15, 1)
+        self.mav.drone_ctrl_debug_send(
+            int(self.sim_t * 1000) & 0xFFFFFFFF,
+            step,
+            ys,
+            xs,
+            [0.0] * 4,
+            [0.0, 0.0, self.z_ref, 0.0],
+            thr,
+            self.state,
+            15,
+            1,
+        )
 
     # ---- laço ----------------------------------------------------------
 
@@ -335,12 +391,18 @@ class FakeFC:
             if now - last_hb > 0.5:
                 last_hb = now
                 armed = self.mod.MAV_MODE_FLAG_SAFETY_ARMED if self.state in (4, 5, 6, 7, 8) else 0
-                self.mav.heartbeat_send(self.mod.MAV_TYPE_QUADROTOR,
-                                        self.mod.MAV_AUTOPILOT_GENERIC, armed, self.state, 4)
+                self.mav.heartbeat_send(
+                    self.mod.MAV_TYPE_QUADROTOR,
+                    self.mod.MAV_AUTOPILOT_GENERIC,
+                    armed,
+                    self.state,
+                    4,
+                )
             if now - last_info > 1.0:
                 last_info = now
-                self.mav.drone_protocol_info_send(self.boot_id, 0x7F, 120000, 1, 1, self.state,
-                                                  0, 0)
+                self.mav.drone_protocol_info_send(
+                    self.boot_id, 0x7F, 120000, 1, 1, self.state, 0, 0
+                )
             if now - last_pose > 0.2:
                 last_pose = now
                 t = int(now * 1000) & 0xFFFFFFFF
@@ -361,6 +423,15 @@ class FakeFC:
                 noise = (step % 7 - 3) * 1e-3
                 y = [-0.5 + noise, 0.01, -0.02, 0.0, noise, -noise, 0.0, 0.0, 0.0]
                 x = [0.0, 0.0, -0.5, 0.01, -0.02, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-                self.mav.drone_ctrl_debug_send(int(now * 1000) & 0xFFFFFFFF, step, y, x,
-                                               [0.0] * 4, [0.0, 0.0, -0.5, 0.0],
-                                               [4000] * 4, self.state, 15, 1)
+                self.mav.drone_ctrl_debug_send(
+                    int(now * 1000) & 0xFFFFFFFF,
+                    step,
+                    y,
+                    x,
+                    [0.0] * 4,
+                    [0.0, 0.0, -0.5, 0.0],
+                    [4000] * 4,
+                    self.state,
+                    15,
+                    1,
+                )

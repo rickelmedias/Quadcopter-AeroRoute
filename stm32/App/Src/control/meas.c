@@ -36,15 +36,15 @@ static float unwrap_yaw(meas_state_t *s, float yaw) {
 }
 
 /** Degrau do fluxo do MTF-01, em rad/s (cm/s a 1 m em múltiplos de 20). */
-#define FLOW_LSB_RAD_S 0.2F
+#define FLOW_LSB_RAD_S    0.2F
 /** Qualidade que liga o fluxo (ArduPilot: QUALITY_HIGH). */
 #define FLOW_QUALITY_HIGH 30U
 /** Qualidade abaixo da qual o fluxo desliga (histerese). */
-#define FLOW_QUALITY_LOW 15U
+#define FLOW_QUALITY_LOW  15U
 /** Cosseno mínimo da inclinação (~37°); além disso a distância deixa de ser a altura. */
 #define FLOW_MIN_COS_TILT 0.80F
 /** Fluxo máximo aceito, em rad/s (mesmo teto do ArduPilot). */
-#define FLOW_MAX_RAD_S 4.2F
+#define FLOW_MAX_RAD_S    4.2F
 
 /** @brief Limita @p v a [@p lo, @p hi]. */
 static float clampf(float v, float lo, float hi) {
@@ -57,9 +57,11 @@ static float clampf(float v, float lo, float hi) {
  */
 static bool flow_gate_ok(meas_state_t *s, const meas_input_t *in, const ctrl_params_t *p,
                          euler_t rel) {
-  if (p->flow_gate < 0.5F) return true;
+  if (p->flow_gate < 0.5F)
+    return true;
   if (s->flow_quality_ok) {
-    if (in->flow_quality <= FLOW_QUALITY_LOW) s->flow_quality_ok = false;
+    if (in->flow_quality <= FLOW_QUALITY_LOW)
+      s->flow_quality_ok = false;
   } else if (in->flow_quality >= FLOW_QUALITY_HIGH) {
     s->flow_quality_ok = true;
   }
@@ -73,8 +75,7 @@ uint8_t meas_update(meas_state_t *s, const meas_input_t *in, const ctrl_params_t
   uint8_t flags = 0U;
   euler_t rel = {0.0F, 0.0F, 0.0F};
 
-  if (in->attitude_valid && isfinite(in->roll) && isfinite(in->pitch) &&
-      isfinite(in->yaw)) {
+  if (in->attitude_valid && isfinite(in->roll) && isfinite(in->pitch) && isfinite(in->yaw)) {
     /* O BNO está montado invertido (roll cru ~ -175 graus nivelado): roll e
        pitch entram no modelo relativos ao zero de nível. */
     const euler_t zero = {p->zero_roll_deg * DEG_TO_RAD, p->zero_pitch_deg * DEG_TO_RAD, 0.0F};
@@ -88,8 +89,7 @@ uint8_t meas_update(meas_state_t *s, const meas_input_t *in, const ctrl_params_t
     flags |= MEAS_ATTITUDE;
   }
 
-  if (in->gyro_valid && isfinite(in->gyro[0]) && isfinite(in->gyro[1]) &&
-      isfinite(in->gyro[2])) {
+  if (in->gyro_valid && isfinite(in->gyro[0]) && isfinite(in->gyro[1]) && isfinite(in->gyro[2])) {
     /* Mesmo mapa de eixos dos ângulos: p vem do giro em torno do eixo y do
        BNO e q do giro em torno do x. */
     s->y[LQG_Y_P] = p->sgn_p * in->gyro[1];
@@ -104,8 +104,8 @@ uint8_t meas_update(meas_state_t *s, const meas_input_t *in, const ctrl_params_t
      serve aqui: com o BNO invertido o cosseno dele seria ~ -1. */
   const bool tilt_known = (flags & MEAS_ATTITUDE) != 0U;
   const float cos_tilt = tilt_known ? cosf(rel.roll) * cosf(rel.pitch) : 1.0F;
-  const bool range_ok = in->range_valid && tilt_known && isfinite(in->range_m) &&
-                        in->range_m > 0.0F;
+  const bool range_ok =
+      in->range_valid && tilt_known && isfinite(in->range_m) && in->range_m > 0.0F;
   if (range_ok) {
     s->y[LQG_Y_Z] = -in->range_m * cos_tilt;
     flags |= MEAS_RANGE;
@@ -117,8 +117,8 @@ uint8_t meas_update(meas_state_t *s, const meas_input_t *in, const ctrl_params_t
      relação ao corpo, e o mesmo mapa dos giros vale para a aceleração: frente
      = sinal de p × eixo y, direita = sinal de q × eixo x, para baixo = sinal
      de r × eixo z (conferido com o voo capturado em 08/11). */
-  const nav_ekf_config_t ncfg = {p->fekf_acc_noise,   p->fekf_accz_noise, p->fekf_bias_noise,
-                                 p->fekf_flow_noise,  p->fekf_range_noise, p->fekf_gate};
+  const nav_ekf_config_t ncfg = {p->fekf_acc_noise,  p->fekf_accz_noise,  p->fekf_bias_noise,
+                                 p->fekf_flow_noise, p->fekf_range_noise, p->fekf_gate};
   const float ang = p->sgn_yaw * s->yaw_unwrapped;
   s->diag.flags = 0U;
   if (in->accel_valid && tilt_known && (flags & MEAS_GYRO) != 0U) {
@@ -130,14 +130,16 @@ uint8_t meas_update(meas_state_t *s, const meas_input_t *in, const ctrl_params_t
     nav_ekf_predict(&s->nav, ax, ay, s->diag.accel[2], (float)LQG_TS_S, &ncfg);
   }
   /* No chão a velocidade é zero (ZUPT): o EKF chega ao ar já iniciado e sem viés de velocidade. */
-  if (in->on_ground && p->flow_ekf >= 0.5F) nav_ekf_zupt(&s->nav);
+  if (in->on_ground && p->flow_ekf >= 0.5F)
+    nav_ekf_zupt(&s->nav);
   /* As correções só usam quadro novo do MTF (100 Hz, sem relação fixa com o
      passo de 10 ms): repetir um quadro contaria a mesma medida duas vezes. */
   const bool new_frame = in->mtf_frame != s->last_mtf_frame;
   float frame_dt = (float)LQG_TS_S;
   if (new_frame) {
     const uint32_t gap = in->mtf_time_ms - s->last_mtf_time_ms;
-    if (s->last_mtf_frame != 0U && gap > 0U && gap < 250U) frame_dt = (float)gap * 0.001F;
+    if (s->last_mtf_frame != 0U && gap > 0U && gap < 250U)
+      frame_dt = (float)gap * 0.001F;
     s->last_mtf_frame = in->mtf_frame;
     s->last_mtf_time_ms = in->mtf_time_ms;
     s->diag.flags |= MEAS_DIAG_NEW_FRAME;
@@ -156,7 +158,8 @@ uint8_t meas_update(meas_state_t *s, const meas_input_t *in, const ctrl_params_t
       }
     }
   }
-  if (nav_ekf_z_usable(&s->nav)) s->diag.flags |= MEAS_DIAG_Z_USABLE;
+  if (nav_ekf_z_usable(&s->nav))
+    s->diag.flags |= MEAS_DIAG_Z_USABLE;
   if (p->z_ekf >= 0.5F && range_ok && nav_ekf_z_usable(&s->nav)) {
     s->y[LQG_Y_Z] = s->nav.z.x[0];
     s->diag.flags |= MEAS_DIAG_Z_TO_LQG;
@@ -179,10 +182,10 @@ uint8_t meas_update(meas_state_t *s, const meas_input_t *in, const ctrl_params_t
     const float flow_y = in->flow_y - p->flow_bias_y;
     /* Compensação do giro: o ganho "direto" (X com o giro x, Y com o y) e o
        cruzado (X com o giro y, Y com o x). O voo de 08/11 mostrou o cruzado. */
-    const float trans_x = p->flow_scale_x * flow_x + p->flow_gyro_x * in->gyro[0] +
-                          p->flow_gyro_xy * in->gyro[1];
-    const float trans_y = p->flow_scale_y * flow_y + p->flow_gyro_y * in->gyro[1] +
-                          p->flow_gyro_yx * in->gyro[0];
+    const float trans_x =
+        p->flow_scale_x * flow_x + p->flow_gyro_x * in->gyro[0] + p->flow_gyro_xy * in->gyro[1];
+    const float trans_y =
+        p->flow_scale_y * flow_y + p->flow_gyro_y * in->gyro[1] + p->flow_gyro_yx * in->gyro[0];
     /* Os sinais levam o fluxo aos eixos do corpo do modelo (frente, direita),
        medidos com a guinada em zero; a rotação para o local usa ψ do modelo
        (horário visto de cima, = sgn_yaw × guinada do sensor). Girar pela
@@ -261,7 +264,8 @@ uint8_t meas_update(meas_state_t *s, const meas_input_t *in, const ctrl_params_t
     s->diag.flags |= MEAS_DIAG_XY_TO_LQG;
     flags |= MEAS_FLOW;
   }
-  if (nav_ekf_xy_usable(&s->nav)) s->diag.flags |= MEAS_DIAG_XY_USABLE;
+  if (nav_ekf_xy_usable(&s->nav))
+    s->diag.flags |= MEAS_DIAG_XY_USABLE;
 
   for (unsigned i = 0U; i < LQG_NY; ++i) {
     y[i] = (lqg_real_t)s->y[i];

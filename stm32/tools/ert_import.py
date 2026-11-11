@@ -18,6 +18,7 @@ Depois de exportar o modelo de novo no Simulink, copie os fontes para
 ``reference/STM32_ert_rtw`` (o teste ``tests/test_lqg_ert.c`` compara o
 firmware com eles) e rode este script.
 """
+
 import argparse
 import re
 import sys
@@ -46,8 +47,13 @@ INPUT_NAMES = ['du1', 'du2', 'du3', 'du4']
 REF_NAMES = ['x_ref', 'y_ref', 'z_ref', 'psi_ref']
 #: Nome de cada linha, para o comentário ao fim dela.
 ROW_NAMES = {
-    'LQG_ERT_A': STATE_NAMES, 'LQG_ERT_B': STATE_NAMES, 'LQG_ERT_C': OUTPUT_NAMES,
-    'L': STATE_NAMES, 'M': STATE_NAMES, 'Kfd': INPUT_NAMES, 'Kd': INPUT_NAMES,
+    'LQG_ERT_A': STATE_NAMES,
+    'LQG_ERT_B': STATE_NAMES,
+    'LQG_ERT_C': OUTPUT_NAMES,
+    'L': STATE_NAMES,
+    'M': STATE_NAMES,
+    'Kfd': INPUT_NAMES,
+    'Kd': INPUT_NAMES,
 }
 
 
@@ -86,7 +92,9 @@ def emit_matrix(lines, name, rows, origin, indent):
     names = ROW_NAMES[name]
     for i, row in enumerate(rows):
         sep = ',' if i + 1 < len(rows) else ''
-        lines.append(f'{indent}  {{ ' + ', '.join(literal(v) for v in row) + f' }}{sep}  /* {names[i]} */')
+        lines.append(
+            f'{indent}  {{ ' + ', '.join(literal(v) for v in row) + f' }}{sep}  /* {names[i]} */'
+        )
     lines.append(f'{indent}}}')
 
 
@@ -111,9 +119,11 @@ def generate(source):
         '#include "control/lqg_ert_model.h"',
         '',
     ]
-    for name, rows_macro, cols_macro in (('LQG_ERT_A', 'LQG_NX', 'LQG_NX'),
-                                         ('LQG_ERT_B', 'LQG_NX', 'LQG_NU'),
-                                         ('LQG_ERT_C', 'LQG_NY', 'LQG_NX')):
+    for name, rows_macro, cols_macro in (
+        ('LQG_ERT_A', 'LQG_NX', 'LQG_NX'),
+        ('LQG_ERT_B', 'LQG_NX', 'LQG_NU'),
+        ('LQG_ERT_C', 'LQG_NY', 'LQG_NX'),
+    ):
         out.append(f'const lqg_real_t {name}[{rows_macro}][{cols_macro}] =')
         emit_matrix(out, name, mats[name], origin[name], '')
         out[-1] += ';'
@@ -132,10 +142,17 @@ def generate(source):
 def main():
     """Lê a exportação do Simulink e grava (ou confere) lqg_ert_model.c."""
     parser = argparse.ArgumentParser(description=__doc__.split('\n')[0])
-    parser.add_argument('export_dir', nargs='?', default=str(ROOT / 'reference/STM32_ert_rtw'),
-                        help='pasta com o STM32_data.c gerado pelo Simulink')
-    parser.add_argument('--check', action='store_true',
-                        help='não grava; sai com erro se o arquivo estiver desatualizado')
+    parser.add_argument(
+        'export_dir',
+        nargs='?',
+        default=str(ROOT / 'reference/STM32_ert_rtw'),
+        help='pasta com o STM32_data.c gerado pelo Simulink',
+    )
+    parser.add_argument(
+        '--check',
+        action='store_true',
+        help='não grava; sai com erro se o arquivo estiver desatualizado',
+    )
     args = parser.parse_args()
     text = generate(Path(args.export_dir) / 'STM32_data.c')
     if args.check:

@@ -55,7 +55,8 @@ static void test_output_ignores_horizontal_states(void) {
   attitude_mode_repeat_prediction(&b, yb);
   lqg_ert_output(&a, &g, ya, r, du_a);
   lqg_ert_output(&b, &g, yb, r, du_b);
-  for (unsigned i = 0U; i < LQG_NU; ++i) assert(fabs(du_a[i] - du_b[i]) < 1e-9);
+  for (unsigned i = 0U; i < LQG_NU; ++i)
+    assert(fabs(du_a[i] - du_b[i]) < 1e-9);
 
   /* Já a rolagem medida mexe na saída. */
   lqg_ert_t c;
@@ -65,7 +66,8 @@ static void test_output_ignores_horizontal_states(void) {
   lqg_real_t du_c[LQG_NU];
   lqg_ert_output(&c, &g, yc, r, du_c);
   double diff = 0.0;
-  for (unsigned i = 0U; i < LQG_NU; ++i) diff += fabs(du_c[i]);
+  for (unsigned i = 0U; i < LQG_NU; ++i)
+    diff += fabs(du_c[i]);
   assert(diff > 1e-3);
 }
 
@@ -81,7 +83,7 @@ static void test_repeat_prediction_gives_zero_innovation(void) {
   lqg_ert_output(&s, &g, y, r, du);
   lqg_ert_update(&s, &g, du);
   for (int k = 0; k < 50; ++k) {
-    y[LQG_Y_VX] = 99.0;  /* fluxo absurdo: tem de ser ignorado */
+    y[LQG_Y_VX] = 99.0; /* fluxo absurdo: tem de ser ignorado */
     y[LQG_Y_VY] = -99.0;
     attitude_mode_repeat_prediction(&s, y);
     lqg_ert_output(&s, &g, y, r, du);
@@ -95,13 +97,16 @@ static void test_first_step_is_zero(void) {
   lqg_ert_t s;
   lqg_ert_init(&s);
   lqg_real_t y[LQG_NY];
-  for (unsigned i = 0U; i < LQG_NY; ++i) y[i] = 7.0;
+  for (unsigned i = 0U; i < LQG_NY; ++i)
+    y[i] = 7.0;
   attitude_mode_repeat_prediction(&s, y);
   assert(y[LQG_Y_VX] == 0.0 && y[LQG_Y_VY] == 0.0 && y[LQG_Y_Z] == 7.0);
 }
 
 /** Ruído uniforme em [-1, 1]. */
-static double noise(void) { return (rand() / (double)RAND_MAX - 0.5) * 2.0; }
+static double noise(void) {
+  return (rand() / (double)RAND_MAX - 0.5) * 2.0;
+}
 
 /**
  * @brief Malha fechada na planta exportada pelo Simulink: sobe 15 cm em rampa
@@ -126,14 +131,16 @@ static void test_closed_loop_attitude_and_height(void) {
   x[LQG_X_PSI] = 0.1;
   const double z0 = -0.065;
   double zref = z0;
-  static const unsigned idx[LQG_NY] = {LQG_X_Z, LQG_X_PHI, LQG_X_THETA, LQG_X_PSI, LQG_X_VX,
-                                       LQG_X_VY, LQG_X_P, LQG_X_Q, LQG_X_R};
+  static const unsigned idx[LQG_NY] = {LQG_X_Z,  LQG_X_PHI, LQG_X_THETA, LQG_X_PSI, LQG_X_VX,
+                                       LQG_X_VY, LQG_X_P,   LQG_X_Q,     LQG_X_R};
   double max_late_angle = 0.0;
   for (int k = 0; k < 1500; ++k) {
-    if (k >= 100) zref = fmax(zref - 0.05 * LQG_TS_S, z0 - 0.15);
+    if (k >= 100)
+      zref = fmax(zref - 0.05 * LQG_TS_S, z0 - 0.15);
     lqg_real_t y[LQG_NY], du[LQG_NU];
     const lqg_real_t r[LQG_NR] = {0.0, 0.0, zref, 0.0};
-    for (unsigned i = 0U; i < LQG_NY; ++i) y[i] = x[idx[i]];
+    for (unsigned i = 0U; i < LQG_NY; ++i)
+      y[i] = x[idx[i]];
     y[LQG_Y_Z] += 0.005 * noise();
     y[LQG_Y_PHI] += 0.003 * noise();
     y[LQG_Y_THETA] += 0.003 * noise();
@@ -148,8 +155,10 @@ static void test_closed_loop_attitude_and_height(void) {
     double next[LQG_NX];
     for (unsigned i = 0U; i < LQG_NX; ++i) {
       double sum = 0.0;
-      for (unsigned j = 0U; j < LQG_NX; ++j) sum += LQG_ERT_A[i][j] * x[j];
-      for (unsigned j = 0U; j < LQG_NU; ++j) sum += LQG_ERT_B[i][j] * du[j];
+      for (unsigned j = 0U; j < LQG_NX; ++j)
+        sum += LQG_ERT_A[i][j] * x[j];
+      for (unsigned j = 0U; j < LQG_NU; ++j)
+        sum += LQG_ERT_B[i][j] * du[j];
       next[i] = sum;
     }
     memcpy(x, next, sizeof(x));
@@ -159,7 +168,7 @@ static void test_closed_loop_attitude_and_height(void) {
       max_late_angle = fmax(max_late_angle, fabs(x[LQG_X_PSI]));
     }
   }
-  assert(max_late_angle < 0.01);                 /* menos de 0,6 grau depois de 3 s */
+  assert(max_late_angle < 0.01);                  /* menos de 0,6 grau depois de 3 s */
   assert(fabs(x[LQG_X_Z] - (z0 - 0.15)) < 0.005); /* 15 cm, com erro < 5 mm */
 }
 

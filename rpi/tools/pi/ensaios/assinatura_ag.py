@@ -9,6 +9,7 @@ comprimento). Se o hash for igual nas duas máquinas, a Pi calcula exatamente a
 mesma rota que o PC: o benchmark feito no PC vale para o algoritmo da Pi, e só
 o tempo de cálculo muda.
 """
+
 import hashlib
 import json
 import platform
@@ -35,11 +36,20 @@ def main() -> int:
         ordem = rotas.ordenar('genetico', pontos, origem)
         dt = time.perf_counter() - t0
         custo = round(rotas.custo(ordem, pontos, origem), 3)
-        texto = json.dumps({'pontos': [list(p) for p in pontos], 'origem': list(origem),
-                            'ordem': ordem, 'custo_cm': custo}, sort_keys=True)
+        texto = json.dumps(
+            {
+                'pontos': [list(p) for p in pontos],
+                'origem': list(origem),
+                'ordem': ordem,
+                'custo_cm': custo,
+            },
+            sort_keys=True,
+        )
         sha = hashlib.sha256(texto.encode()).hexdigest()
-        print(f'{nome}: ordem {" ".join(str(i + 1) for i in ordem)}  {custo:.1f} cm  '
-              f'{dt:.2f} s  sha256 {sha}')
+        print(
+            f'{nome}: ordem {" ".join(str(i + 1) for i in ordem)}  {custo:.1f} cm  '
+            f'{dt:.2f} s  sha256 {sha}'
+        )
     return 0
 
 

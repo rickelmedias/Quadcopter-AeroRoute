@@ -5,6 +5,7 @@ matrizes na ordem Kd, Kfd, L, M, cada uma linha por linha, e CRC-32 (zlib)
 dos valores em float32 little-endian. ``tests/run.sh`` confere que os dois
 lados calculam o mesmo CRC para os ganhos do Simulink.
 """
+
 from __future__ import annotations
 
 import struct

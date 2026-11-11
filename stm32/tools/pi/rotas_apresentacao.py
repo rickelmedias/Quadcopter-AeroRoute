@@ -18,6 +18,7 @@ Gera em ``docs/apresentacao_rotas/``:
 Os números vêm de ``docs/resultados_rotas/pc`` (benchmark ``rotas-bench``) e das
 próprias funções de ``dronectl/rotas.py``.
 """
+
 from __future__ import annotations
 
 import csv
@@ -69,6 +70,7 @@ def _eixo2d(ax, titulo, xlabel, ylabel):
 
 # ---- rotas em 3D ------------------------------------------------------------------
 
+
 def _rota_3d(ax, pontos, ordem, nome, distancia_ref=None):
     rot, cor, _ = ESTILO[nome]
     origem = rotas.ORIGEM
@@ -85,8 +87,9 @@ def _rota_3d(ax, pontos, ordem, nome, distancia_ref=None):
         ax.text(px[i], py[i], pz[i] + 0.06, str(passo), fontsize=6, color=TEXTO2)
     d = rotas.custo(ordem, pontos) / 100.0
     extra = '' if distancia_ref is None else f'  (+{100 * (d / distancia_ref - 1):.1f} %)'
-    ax.set_title(f'{rot}\n{d:.2f} m{extra}'.replace('.', ','), color=TEXTO, fontsize=10,
-                 fontweight='bold')
+    ax.set_title(
+        f'{rot}\n{d:.2f} m{extra}'.replace('.', ','), color=TEXTO, fontsize=10, fontweight='bold'
+    )
     ax.set_xlabel('x (m)', color=TEXTO2, fontsize=8)
     ax.set_ylabel('y (m)', color=TEXTO2, fontsize=8)
     ax.set_zlabel('altura (m)', color=TEXTO2, fontsize=8)
@@ -108,17 +111,29 @@ def figura_3d(n, semente, nomes, arquivo, titulo):
         ax = fig.add_subplot(1, len(nomes), k, projection='3d')
         ax.set_facecolor(FUNDO)
         _rota_3d(ax, pontos, ordens[nome], nome, ref)
-    fig.suptitle(titulo + '  ·  % = acima da rota mais curta desta figura', x=0.01, ha='left',
-                 color=TEXTO, fontsize=12, fontweight='bold')
+    fig.suptitle(
+        titulo + '  ·  % = acima da rota mais curta desta figura',
+        x=0.01,
+        ha='left',
+        color=TEXTO,
+        fontsize=12,
+        fontweight='bold',
+    )
     fig.tight_layout(rect=(0, 0, 1, 0.93))
     fig.savefig(SAIDA / arquivo, dpi=200)
     plt.close(fig)
-    return {nome: {'distancia_m': round(rotas.custo(ordens[nome], pontos) / 100.0, 3),
-                   'tempo_ms': round(tempos[nome] * 1000.0, 2),
-                   'ordem': [i + 1 for i in ordens[nome]]} for nome in nomes}
+    return {
+        nome: {
+            'distancia_m': round(rotas.custo(ordens[nome], pontos) / 100.0, 3),
+            'tempo_ms': round(tempos[nome] * 1000.0, 2),
+            'ordem': [i + 1 for i in ordens[nome]],
+        }
+        for nome in nomes
+    }
 
 
 # ---- gráficos do benchmark ------------------------------------------------------------
+
 
 def _medias_distancia():
     soma = defaultdict(float)
@@ -136,8 +151,12 @@ def distancia_media(arquivo):
     ns = [5, 10, 15, 20, 22, 25, 30]
     nomes = ['aleatorio', 'guloso', 'genetico', 'forca-bruta', 'exato']
     fig, ax = plt.subplots(figsize=(10, 4.8), facecolor=FUNDO)
-    _eixo2d(ax, 'Distância média do circuito (10 instâncias por N)', 'pontos a visitar (N)',
-            'distância (m)')
+    _eixo2d(
+        ax,
+        'Distância média do circuito (10 instâncias por N)',
+        'pontos a visitar (N)',
+        'distância (m)',
+    )
     largura = 0.16
     for k, nome in enumerate(nomes):
         rot, cor, _ = ESTILO[nome]
@@ -145,17 +164,36 @@ def distancia_media(arquivo):
         ys = [medias.get((n, nome)) for n in ns]
         for x, y in zip(xs, ys):
             if y is None:
-                ax.text(x, 1.0, 'não roda', ha='center', va='bottom', fontsize=6.5, color=TEXTO2,
-                        rotation=90)
-        ax.bar([x for x, y in zip(xs, ys) if y is not None], [y for y in ys if y is not None],
-               width=largura, color=cor, edgecolor=FUNDO, linewidth=1, label=rot)
+                ax.text(
+                    x,
+                    1.0,
+                    'não roda',
+                    ha='center',
+                    va='bottom',
+                    fontsize=6.5,
+                    color=TEXTO2,
+                    rotation=90,
+                )
+        ax.bar(
+            [x for x, y in zip(xs, ys) if y is not None],
+            [y for y in ys if y is not None],
+            width=largura,
+            color=cor,
+            edgecolor=FUNDO,
+            linewidth=1,
+            label=rot,
+        )
     ax.set_xticks(range(len(ns)), [str(n) for n in ns])
     ax.legend(frameon=False, fontsize=8, loc='upper left')
     fig.tight_layout()
     fig.savefig(SAIDA / arquivo, dpi=200)
     plt.close(fig)
-    return {f'{nome}@{n}': round(medias[(n, nome)], 2) for n in ns for nome in nomes
-            if (n, nome) in medias}
+    return {
+        f'{nome}@{n}': round(medias[(n, nome)], 2)
+        for n in ns
+        for nome in nomes
+        if (n, nome) in medias
+    }
 
 
 def _limite():
@@ -179,84 +217,184 @@ def tempo_resolver(arquivo, resumo, limite):
     fb = limite['forca_bruta']
     teto = 1e8
     fig, ax = plt.subplots(figsize=(10, 6.2), facecolor=FUNDO)
-    _eixo2d(ax, 'Tempo para resolver uma instância (PC Intel i5-9300HF)', 'pontos a visitar (N)',
-            'tempo (s, escala log)')
+    _eixo2d(
+        ax,
+        'Tempo para resolver uma instância (PC Intel i5-9300HF)',
+        'pontos a visitar (N)',
+        'tempo (s, escala log)',
+    )
     ax.set_yscale('log')
     for nome in ('guloso', 'genetico'):
         rot, cor, marca = ESTILO[nome]
         pts = [(t['n'], t['tempo_medio_ms'] / 1000.0) for t in tab if t['algoritmo'] == nome]
         xs, ys = zip(*pts)
-        ax.plot(xs, ys, color=cor, linewidth=2, marker=marca, markersize=5,
-                markeredgecolor=FUNDO, markeredgewidth=0.8, label=rot + ' (medido, média)')
+        ax.plot(
+            xs,
+            ys,
+            color=cor,
+            linewidth=2,
+            marker=marca,
+            markersize=5,
+            markeredgecolor=FUNDO,
+            markeredgewidth=0.8,
+            label=rot + ' (medido, média)',
+        )
     rot, cor, marca = ESTILO['exato']
     med = limite['medidos']
-    ax.plot([m['n'] for m in med], [m['tempo_s'] for m in med], color=cor, linewidth=2,
-            marker=marca, markersize=5, markeredgecolor=FUNDO, label=rot + ' (medido)')
-    prev = [(med[-1]['n'], med[-1]['tempo_s'])] + [(p['n'], p['tempo_s']) for p in limite['previsao']]
-    ax.plot([p[0] for p in prev], [p[1] for p in prev], color=cor, linewidth=2, linestyle='--',
-            label='TSP exato, Held-Karp (previsto: c·N²·2ᴺ; não cabe na RAM)')
+    ax.plot(
+        [m['n'] for m in med],
+        [m['tempo_s'] for m in med],
+        color=cor,
+        linewidth=2,
+        marker=marca,
+        markersize=5,
+        markeredgecolor=FUNDO,
+        label=rot + ' (medido)',
+    )
+    prev = [(med[-1]['n'], med[-1]['tempo_s'])] + [
+        (p['n'], p['tempo_s']) for p in limite['previsao']
+    ]
+    ax.plot(
+        [p[0] for p in prev],
+        [p[1] for p in prev],
+        color=cor,
+        linewidth=2,
+        linestyle='--',
+        label='TSP exato, Held-Karp (previsto: c·N²·2ᴺ; não cabe na RAM)',
+    )
     rot, cor, marca = ESTILO['forca-bruta']
     fbm = fb['medidos']
-    ax.plot([m['n'] for m in fbm], [m['tempo_s'] for m in fbm], color=cor, linewidth=2,
-            marker=marca, markersize=6, markeredgecolor=FUNDO, label=rot + ' (medido)')
+    ax.plot(
+        [m['n'] for m in fbm],
+        [m['tempo_s'] for m in fbm],
+        color=cor,
+        linewidth=2,
+        marker=marca,
+        markersize=6,
+        markeredgecolor=FUNDO,
+        label=rot + ' (medido)',
+    )
     fbp = [(fbm[-1]['n'], fbm[-1]['tempo_s'])] + [(p['n'], p['tempo_s']) for p in fb['previsao']]
-    ax.plot([p[0] for p in fbp], [p[1] for p in fbp], color=cor, linewidth=2, linestyle='--',
-            label='TSP exato, força bruta (previsto: c·N!)')
+    ax.plot(
+        [p[0] for p in fbp],
+        [p[1] for p in fbp],
+        color=cor,
+        linewidth=2,
+        linestyle='--',
+        label='TSP exato, força bruta (previsto: c·N!)',
+    )
     # A previsão sai do gráfico por cima; o rótulo fica ao lado de onde ela sai.
     sai = next(p['n'] for p in fb['previsao'] if p['tempo_s'] > teto)
     fb20 = next(p['tempo_s'] for p in fb['previsao'] if p['n'] == 20)
-    ax.text(sai - 0.4, teto / 4, f'força bruta, 20 pontos:\n≈ {_anos(fb20)}', ha='left', va='top',
-            fontsize=8, color=TEXTO)
-    for segundos, texto in ((1, '1 s'), (60, '1 min (critério de corte)'), (3600, '1 h'),
-                            (86400, '1 dia'), (365.25 * 86400, '1 ano')):
+    ax.text(
+        sai - 0.4,
+        teto / 4,
+        f'força bruta, 20 pontos:\n≈ {_anos(fb20)}',
+        ha='left',
+        va='top',
+        fontsize=8,
+        color=TEXTO,
+    )
+    for segundos, texto in (
+        (1, '1 s'),
+        (60, '1 min (critério de corte)'),
+        (3600, '1 h'),
+        (86400, '1 dia'),
+        (365.25 * 86400, '1 ano'),
+    ):
         ax.axhline(segundos, color=EIXO, linewidth=1, linestyle=':')
         ax.text(3.2, segundos * 1.15, texto, fontsize=8, color=TEXTO2)
-    for x, texto in ((corte_fb, f'força bruta\nfora do\ncomparativo\n(N ≥ {corte_fb + 1})'),
-                     (corte, f'Held-Karp\nfora do\ncomparativo\n(N ≥ {corte + 1})')):
+    for x, texto in (
+        (corte_fb, f'força bruta\nfora do\ncomparativo\n(N ≥ {corte_fb + 1})'),
+        (corte, f'Held-Karp\nfora do\ncomparativo\n(N ≥ {corte + 1})'),
+    ):
         ax.axvline(x + 0.5, color=TEXTO2, linewidth=1, linestyle='--')
         ax.text(x + 0.7, 1.5e-6, texto, fontsize=8, color=TEXTO2)
     ga30 = next(t['tempo_medio_ms'] for t in tab if t['algoritmo'] == 'genetico' and t['n'] == 30)
-    ax.annotate(f'genético, 30 pontos: {ga30 / 1000:.2f} s'.replace('.', ','), (30, ga30 / 1000.0),
-                xytext=(-6, 10), textcoords='offset points', ha='right', fontsize=8, color=TEXTO)
+    ax.annotate(
+        f'genético, 30 pontos: {ga30 / 1000:.2f} s'.replace('.', ','),
+        (30, ga30 / 1000.0),
+        xytext=(-6, 10),
+        textcoords='offset points',
+        ha='right',
+        fontsize=8,
+        color=TEXTO,
+    )
     t30 = next(p['tempo_s'] for p in limite['previsao'] if p['n'] == 30)
-    ax.annotate(f'Held-Karp, 30 pontos: ≈ {t30 / 3600:.0f} h (e 290 GB)', (30, t30),
-                xytext=(-10, 6), textcoords='offset points', ha='right', fontsize=8, color=TEXTO)
+    ax.annotate(
+        f'Held-Karp, 30 pontos: ≈ {t30 / 3600:.0f} h (e 290 GB)',
+        (30, t30),
+        xytext=(-10, 6),
+        textcoords='offset points',
+        ha='right',
+        fontsize=8,
+        color=TEXTO,
+    )
     ax.set_xlim(2.5, 31)
     ax.set_ylim(top=teto)
     ax.legend(frameon=False, fontsize=8, loc='upper center', bbox_to_anchor=(0.5, -0.13), ncol=2)
     fig.tight_layout()
     fig.savefig(SAIDA / arquivo, dpi=200)
     plt.close(fig)
-    return {'corte_n': corte, 'corte_forca_bruta_n': corte_fb,
-            'forca_bruta_medido_s': {m['n']: round(m['tempo_s'], 3) for m in fbm if m['n'] >= 8},
-            'forca_bruta_previsto_s': {p['n']: p['tempo_s'] for p in fb['previsao']
-                                       if p['n'] in (12, 13, 15, 20, 25, 30)},
-            'genetico_30_s': round(ga30 / 1000.0, 3),
-            'exato_medido_s': {m['n']: round(m['tempo_s'], 2) for m in med if m['n'] >= 15},
-            'exato_previsto_s': {p['n']: round(p['tempo_s'], 1) for p in limite['previsao']
-                                 if p['n'] in (24, 25, 30)}}
+    return {
+        'corte_n': corte,
+        'corte_forca_bruta_n': corte_fb,
+        'forca_bruta_medido_s': {m['n']: round(m['tempo_s'], 3) for m in fbm if m['n'] >= 8},
+        'forca_bruta_previsto_s': {
+            p['n']: p['tempo_s'] for p in fb['previsao'] if p['n'] in (12, 13, 15, 20, 25, 30)
+        },
+        'genetico_30_s': round(ga30 / 1000.0, 3),
+        'exato_medido_s': {m['n']: round(m['tempo_s'], 2) for m in med if m['n'] >= 15},
+        'exato_previsto_s': {
+            p['n']: round(p['tempo_s'], 1) for p in limite['previsao'] if p['n'] in (24, 25, 30)
+        },
+    }
 
 
 def memoria_exato(arquivo, limite):
     ns = list(range(3, 31))
-    mem = [n * 2 ** n * 9 / 1e6 for n in ns]  # MB: n·2ⁿ estados de 8 B + 1 B do predecessor
+    mem = [n * 2**n * 9 / 1e6 for n in ns]  # MB: n·2ⁿ estados de 8 B + 1 B do predecessor
     ga = [(120 * 2 * n * 8) / 1e6 for n in ns]  # duas populações de 120 permutações
     fig, ax = plt.subplots(figsize=(10, 4.8), facecolor=FUNDO)
     _eixo2d(ax, 'Memória necessária', 'pontos a visitar (N)', 'memória (MB, escala log)')
     ax.set_yscale('log')
     rot, cor, marca = ESTILO['exato']
-    ax.plot(ns, mem, color=cor, linewidth=2, linestyle='--', label=rot + ' (N·2ᴺ estados, calculado)')
+    ax.plot(
+        ns, mem, color=cor, linewidth=2, linestyle='--', label=rot + ' (N·2ᴺ estados, calculado)'
+    )
     med = [m for m in limite['medidos'] if m['n'] >= 16]  # abaixo disso domina o próprio Python
-    ax.plot([m['n'] for m in med], [m['pico_mb'] for m in med], color=cor, linewidth=0,
-            marker=marca, markersize=6, markeredgecolor=FUNDO, label=rot + ' (pico medido do processo)')
+    ax.plot(
+        [m['n'] for m in med],
+        [m['pico_mb'] for m in med],
+        color=cor,
+        linewidth=0,
+        marker=marca,
+        markersize=6,
+        markeredgecolor=FUNDO,
+        label=rot + ' (pico medido do processo)',
+    )
     rot, cor, marca = ESTILO['genetico']
-    ax.plot(ns, ga, color=cor, linewidth=2, marker=marca, markersize=4, markeredgecolor=FUNDO,
-            label=rot + ' (população)')
-    for mb, texto in ((RAM_PI_ZERO_MB, 'RAM da Raspberry Pi Zero (512 MB)'),
-                      (limite['ram_livre_mb'],
-                       f"RAM livre do PC ({limite['ram_livre_mb'] / 1000:.1f} GB)".replace('.', ',')),
-                      (limite['ram_total_mb'],
-                       f"RAM total do PC ({limite['ram_total_mb'] / 1000:.1f} GB)".replace('.', ','))):
+    ax.plot(
+        ns,
+        ga,
+        color=cor,
+        linewidth=2,
+        marker=marca,
+        markersize=4,
+        markeredgecolor=FUNDO,
+        label=rot + ' (população)',
+    )
+    for mb, texto in (
+        (RAM_PI_ZERO_MB, 'RAM da Raspberry Pi Zero (512 MB)'),
+        (
+            limite['ram_livre_mb'],
+            f"RAM livre do PC ({limite['ram_livre_mb'] / 1000:.1f} GB)".replace('.', ','),
+        ),
+        (
+            limite['ram_total_mb'],
+            f"RAM total do PC ({limite['ram_total_mb'] / 1000:.1f} GB)".replace('.', ','),
+        ),
+    ):
         ax.axhline(mb, color=TEXTO2, linewidth=1, linestyle=':')
         ax.text(3.2, mb * 1.3, texto, fontsize=8, color=TEXTO2)
     ax.legend(frameon=False, fontsize=8, loc='center left', bbox_to_anchor=(0.0, 0.42))
@@ -264,8 +402,10 @@ def memoria_exato(arquivo, limite):
     fig.tight_layout()
     fig.savefig(SAIDA / arquivo, dpi=200)
     plt.close(fig)
-    return {'exato_mb': {n: round(n * 2 ** n * 9 / 1e6, 1) for n in (15, 20, 22, 23, 24, 25, 30)},
-            'pico_medido_mb': {m['n']: round(m['pico_mb'], 1) for m in med}}
+    return {
+        'exato_mb': {n: round(n * 2**n * 9 / 1e6, 1) for n in (15, 20, 22, 23, 24, 25, 30)},
+        'pico_medido_mb': {m['n']: round(m['pico_mb'], 1) for m in med},
+    }
 
 
 def main() -> int:
@@ -273,18 +413,34 @@ def main() -> int:
     resumo = json.loads((DADOS / 'resumo.json').read_text(encoding='utf-8'))
     limite = _limite()
     numeros = {
-        'rotas_3d_n10': figura_3d(10, 2, ['guloso', 'genetico', 'exato'], 'rotas_3d_n10.png',
-                                  '10 pontos (semente 2): mesma instância, três algoritmos'),
-        'rotas_3d_n15': figura_3d(15, 10, ['guloso', 'genetico', 'exato'], 'rotas_3d_n15.png',
-                                  '15 pontos (semente 10): mesma instância, três algoritmos'),
-        'rotas_3d_n25': figura_3d(25, 3, ['aleatorio', 'guloso', 'genetico'], 'rotas_3d_n25.png',
-                                  '25 pontos (semente 3): o Held-Karp precisaria de 7,5 GB de RAM'),
+        'rotas_3d_n10': figura_3d(
+            10,
+            2,
+            ['guloso', 'genetico', 'exato'],
+            'rotas_3d_n10.png',
+            '10 pontos (semente 2): mesma instância, três algoritmos',
+        ),
+        'rotas_3d_n15': figura_3d(
+            15,
+            10,
+            ['guloso', 'genetico', 'exato'],
+            'rotas_3d_n15.png',
+            '15 pontos (semente 10): mesma instância, três algoritmos',
+        ),
+        'rotas_3d_n25': figura_3d(
+            25,
+            3,
+            ['aleatorio', 'guloso', 'genetico'],
+            'rotas_3d_n25.png',
+            '25 pontos (semente 3): o Held-Karp precisaria de 7,5 GB de RAM',
+        ),
         'distancia_media_m': distancia_media('distancia_media.png'),
         'tempo': tempo_resolver('tempo_resolver.png', resumo, limite),
         'memoria': memoria_exato('memoria_exato.png', limite),
     }
-    (SAIDA / 'numeros.json').write_text(json.dumps(numeros, indent=2, ensure_ascii=False),
-                                        encoding='utf-8')
+    (SAIDA / 'numeros.json').write_text(
+        json.dumps(numeros, indent=2, ensure_ascii=False), encoding='utf-8'
+    )
     print(json.dumps(numeros, indent=1, ensure_ascii=False))
     return 0
 

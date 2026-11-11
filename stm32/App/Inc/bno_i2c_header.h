@@ -24,9 +24,11 @@
  * @return true se os dois cabeçalhos são consistentes.
  */
 static inline bool bno_i2c_header_matches(const uint8_t first[4], const uint8_t next[4]) {
-  if (first[0] != next[0] || (first[1] & 0x7FU) != (next[1] & 0x7FU) || first[2] != next[2]) return false;
-  if (first[1] == next[1] && first[3] == next[3]) return true;
-  return (next[1] & 0x80U) && next[3] == (uint8_t)(first[3]+1U);
+  if (first[0] != next[0] || (first[1] & 0x7FU) != (next[1] & 0x7FU) || first[2] != next[2])
+    return false;
+  if (first[1] == next[1] && first[3] == next[3])
+    return true;
+  return (next[1] & 0x80U) && next[3] == (uint8_t)(first[3] + 1U);
 }
 
 /**

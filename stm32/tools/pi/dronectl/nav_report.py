@@ -12,6 +12,7 @@ responder duas perguntas:
 - **Qual a qualidade do Z e do XY?** Quanto o filtro de distância e os gates
   recusaram, quanto o x, y do EKF difere do do LQG, quanto o viés vale.
 """
+
 from __future__ import annotations
 
 import csv
@@ -54,31 +55,83 @@ class NavSample:
     @classmethod
     def from_msg(cls, msg) -> 'NavSample':
         """Converte a mensagem MAVLink."""
-        return cls(msg.time_boot_ms, list(msg.flow_raw), list(msg.flow_body), msg.range_raw,
-                   msg.range_filt, list(msg.pos), list(msg.vel), list(msg.bias),
-                   list(msg.accel), msg.flow_ratio, msg.z_ratio, msg.flow_rejected,
-                   msg.z_rejected, msg.range_rejected, msg.flags, msg.quality)
+        return cls(
+            msg.time_boot_ms,
+            list(msg.flow_raw),
+            list(msg.flow_body),
+            msg.range_raw,
+            msg.range_filt,
+            list(msg.pos),
+            list(msg.vel),
+            list(msg.bias),
+            list(msg.accel),
+            msg.flow_ratio,
+            msg.z_ratio,
+            msg.flow_rejected,
+            msg.z_rejected,
+            msg.range_rejected,
+            msg.flags,
+            msg.quality,
+        )
 
 
 #: Colunas do nav_log.csv.
-NAV_HEADER = ['t_pi_s', 't_stm32_ms', 'flow_raw_x_rad_s', 'flow_raw_y_rad_s',
-              'flow_fwd_m_s', 'flow_right_m_s', 'range_raw_m', 'range_filt_m',
-              'ekf_x_m', 'ekf_y_m', 'ekf_z_m', 'ekf_vx_m_s', 'ekf_vy_m_s', 'ekf_vz_m_s',
-              'bias_x_m_s2', 'bias_y_m_s2', 'bias_z_m_s2',
-              'accel_x_m_s2', 'accel_y_m_s2', 'accel_down_m_s2',
-              'flow_ratio', 'z_ratio', 'flow_rejected', 'z_rejected', 'range_rejected',
-              'flags', 'quality', 'xy_usable', 'xy_to_lqg', 'z_usable', 'z_to_lqg']
+NAV_HEADER = [
+    't_pi_s',
+    't_stm32_ms',
+    'flow_raw_x_rad_s',
+    'flow_raw_y_rad_s',
+    'flow_fwd_m_s',
+    'flow_right_m_s',
+    'range_raw_m',
+    'range_filt_m',
+    'ekf_x_m',
+    'ekf_y_m',
+    'ekf_z_m',
+    'ekf_vx_m_s',
+    'ekf_vy_m_s',
+    'ekf_vz_m_s',
+    'bias_x_m_s2',
+    'bias_y_m_s2',
+    'bias_z_m_s2',
+    'accel_x_m_s2',
+    'accel_y_m_s2',
+    'accel_down_m_s2',
+    'flow_ratio',
+    'z_ratio',
+    'flow_rejected',
+    'z_rejected',
+    'range_rejected',
+    'flags',
+    'quality',
+    'xy_usable',
+    'xy_to_lqg',
+    'z_usable',
+    'z_to_lqg',
+]
 
 
 def nav_row(t_pi: float, n: NavSample) -> List:
     """Uma linha do nav_log.csv."""
-    return ([f'{t_pi:.4f}', n.time_ms] + [f'{v:.5g}' for v in n.flow_raw + n.flow_body] +
-            [f'{n.range_raw:.4f}', f'{n.range_filt:.4f}'] +
-            [f'{v:.5g}' for v in n.pos + n.vel + n.bias + n.accel] +
-            [f'{n.flow_ratio:.3g}', f'{n.z_ratio:.3g}', n.flow_rejected, n.z_rejected,
-             n.range_rejected, n.flags, n.quality, int(bool(n.flags & XY_USABLE)),
-             int(bool(n.flags & XY_TO_LQG)), int(bool(n.flags & Z_USABLE)),
-             int(bool(n.flags & Z_TO_LQG))])
+    return (
+        [f'{t_pi:.4f}', n.time_ms]
+        + [f'{v:.5g}' for v in n.flow_raw + n.flow_body]
+        + [f'{n.range_raw:.4f}', f'{n.range_filt:.4f}']
+        + [f'{v:.5g}' for v in n.pos + n.vel + n.bias + n.accel]
+        + [
+            f'{n.flow_ratio:.3g}',
+            f'{n.z_ratio:.3g}',
+            n.flow_rejected,
+            n.z_rejected,
+            n.range_rejected,
+            n.flags,
+            n.quality,
+            int(bool(n.flags & XY_USABLE)),
+            int(bool(n.flags & XY_TO_LQG)),
+            int(bool(n.flags & Z_USABLE)),
+            int(bool(n.flags & Z_TO_LQG)),
+        ]
+    )
 
 
 def save_nav_log(path: Path, samples: Sequence[Tuple[float, NavSample]]) -> None:
@@ -103,7 +156,7 @@ def _count_since_reset(values: Sequence[int]) -> int:
             total += v - prev
         elif prev - v > 0x8000:  # deu a volta dos 16 bits
             total += v + 0x10000 - prev
-        else:                    # zeramento: o que veio antes é de outro voo
+        else:  # zeramento: o que veio antes é de outro voo
             total = v
         prev = v
     return total
@@ -133,8 +186,9 @@ def analyze_nav(nav: Sequence[NavSample], ctrl: Sequence) -> Dict:
         if not ctrl:
             return None
         i = bisect_left(times, t_ms)
-        best = min((j for j in (i - 1, i) if 0 <= j < len(ctrl)),
-                   key=lambda j: abs(times[j] - t_ms))
+        best = min(
+            (j for j in (i - 1, i) if 0 <= j < len(ctrl)), key=lambda j: abs(times[j] - t_ms)
+        )
         return ctrl[best] if abs(times[best] - t_ms) <= 50 else None
 
     pairs = [(n, at(n.time_ms)) for n in nav]
@@ -167,14 +221,18 @@ def analyze_nav(nav: Sequence[NavSample], ctrl: Sequence) -> Dict:
         out['climb_ekf_mean_cm_s'] = round(statistics.fmean(vz_ekf), 2)
         out['climb_lqg_mean_cm_s'] = round(statistics.fmean(vz_lqg), 2)
         out['climb_lqg_minus_ekf_rms_cm_s'] = round(
-            _rms([a - b for a, b in zip(vz_lqg, vz_ekf)]), 2)
+            _rms([a - b for a, b in zip(vz_lqg, vz_ekf)]), 2
+        )
         heights = [-c.y[0] * 100.0 for _, c in use]
         t = [n.time_ms / 1000.0 for n, _ in use]
         if len(t) > 2 and t[-1] > t[0]:
             mt, mh = statistics.fmean(t), statistics.fmean(heights)
             den = sum((a - mt) ** 2 for a in t)
-            out['height_trend_cm_s'] = round(
-                sum((a - mt) * (b - mh) for a, b in zip(t, heights)) / den, 2) if den else None
+            out['height_trend_cm_s'] = (
+                round(sum((a - mt) * (b - mh) for a, b in zip(t, heights)) / den, 2)
+                if den
+                else None
+            )
         # x, y: o EKF contra o Kalman do LQG.
         dxy = [math.hypot(n.pos[0] - c.x_hat[0], n.pos[1] - c.x_hat[1]) * 100.0 for n, c in use]
         out['xy_ekf_minus_lqg_max_cm'] = round(max(dxy), 1)
@@ -192,10 +250,12 @@ def nav_notes(m: Dict) -> List[str]:
     lqg, ekf = m.get('climb_lqg_mean_cm_s'), m.get('climb_ekf_mean_cm_s')
     trend = m.get('height_trend_cm_s')
     if lqg is not None and ekf is not None and abs(lqg - ekf) > 1.0:
-        notes.append(f'vz: o Kalman do LQG viu {lqg:+.1f} cm/s de subida e o EKF '
-                     f'{ekf:+.1f} cm/s (altura medida {trend:+.2f} cm/s)'
-                     if trend is not None else
-                     f'vz: o Kalman do LQG viu {lqg:+.1f} cm/s e o EKF {ekf:+.1f} cm/s')
+        notes.append(
+            f'vz: o Kalman do LQG viu {lqg:+.1f} cm/s de subida e o EKF '
+            f'{ekf:+.1f} cm/s (altura medida {trend:+.2f} cm/s)'
+            if trend is not None
+            else f'vz: o Kalman do LQG viu {lqg:+.1f} cm/s e o EKF {ekf:+.1f} cm/s'
+        )
     rr = m.get('range_rejected', 0)
     if rr:
         notes.append(f'distância: {rr} leituras recusadas pelo filtro (saltos ou inválidas)')
@@ -210,11 +270,15 @@ def nav_line(m: Dict) -> Optional[str]:
         return None
     parts = [f'EKF nav: {m["samples"]} amostras']
     if 'climb_lqg_mean_cm_s' in m:
-        parts.append(f'subida LQG {m["climb_lqg_mean_cm_s"]:+.1f} / EKF '
-                     f'{m["climb_ekf_mean_cm_s"]:+.1f} cm/s')
+        parts.append(
+            f'subida LQG {m["climb_lqg_mean_cm_s"]:+.1f} / EKF {m["climb_ekf_mean_cm_s"]:+.1f} cm/s'
+        )
         parts.append(f'z EKF-medida RMS {m["z_ekf_minus_meas_rms_cm"]:.1f} cm')
-        parts.append(f'x,y EKF final ({m["xy_ekf_final_cm"][0]:+.1f}, '
-                     f'{m["xy_ekf_final_cm"][1]:+.1f}) cm')
-    parts.append(f'distância recusada {m["range_rejected"]}, fluxo recusado '
-                 f'{m["flow_rejected"]}, xy ok {m["xy_usable_pct"]:.0f}%')
+        parts.append(
+            f'x,y EKF final ({m["xy_ekf_final_cm"][0]:+.1f}, {m["xy_ekf_final_cm"][1]:+.1f}) cm'
+        )
+    parts.append(
+        f'distância recusada {m["range_rejected"]}, fluxo recusado '
+        f'{m["flow_rejected"]}, xy ok {m["xy_usable_pct"]:.0f}%'
+    )
     return ' · '.join(parts)

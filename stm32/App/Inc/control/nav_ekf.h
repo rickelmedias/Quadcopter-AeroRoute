@@ -43,15 +43,15 @@
 #include <stdint.h>
 
 /** Recusas seguidas até adotar a medida (0,5 s a 100 Hz). */
-#define NAV_EKF_MAX_REJECT 50U
+#define NAV_EKF_MAX_REJECT        50U
 /** Variância de velocidade abaixo da qual x, y contam como convergidos ((0,3 m/s)²). */
 #define NAV_EKF_CONVERGED_VEL_VAR 0.09F
 /** Passos sem correção de fluxo aceita até a velocidade x, y deixar de valer. */
-#define NAV_EKF_FLOW_STALE_STEPS 20U
+#define NAV_EKF_FLOW_STALE_STEPS  20U
 /** Passos (1 s a 100 Hz) em que a velocidade só pela inércia ainda vale. */
-#define NAV_EKF_INERTIAL_STEPS 100U
+#define NAV_EKF_INERTIAL_STEPS    100U
 /** Desvio da velocidade zero do ZUPT, em m/s. */
-#define NAV_EKF_ZUPT_SIGMA 0.03F
+#define NAV_EKF_ZUPT_SIGMA        0.03F
 /** Passos sem correção de distância aceita até o z deixar de valer. */
 #define NAV_EKF_RANGE_STALE_STEPS 20U
 
@@ -73,31 +73,31 @@ typedef struct {
 
 /** @brief Um eixo: estado [posição, velocidade, viés] e covariância. */
 typedef struct {
-  float x[3];     /**< Posição (m), velocidade (m/s), viés do acelerômetro (m/s²). */
-  float P[3][3];  /**< Covariância. */
+  float x[3];    /**< Posição (m), velocidade (m/s), viés do acelerômetro (m/s²). */
+  float P[3][3]; /**< Covariância. */
 } nav_ekf_axis_t;
 
 /** @brief Estado do filtro. */
 typedef struct {
-  nav_ekf_axis_t h[2];      /**< Eixos x, y do referencial local. */
-  nav_ekf_axis_t z;         /**< Eixo z (NED, negativo acima do chão). */
-  range_filter_t range;     /**< Gate e filtro da distância. */
-  float flow_innov[2];      /**< Última inovação de velocidade x, y, em m/s. */
-  float flow_ratio;         /**< Última razão de teste do par x, y (acima de 1: recusada). */
-  float z_innov;            /**< Última inovação de z, em m. */
-  float z_ratio;            /**< Última razão de teste de z. */
-  uint32_t flow_updates;    /**< Correções de fluxo aceitas. */
-  uint32_t flow_rejected;   /**< Correções de fluxo recusadas pelo gate. */
-  uint32_t flow_resets;     /**< Medidas de fluxo adotadas depois de recusas seguidas. */
-  uint32_t z_updates;       /**< Correções de distância aceitas. */
-  uint32_t z_rejected;      /**< Correções de distância recusadas pelo gate. */
-  uint32_t z_resets;        /**< Distâncias adotadas depois de recusas seguidas. */
-  uint16_t flow_run;        /**< Recusas seguidas de fluxo. */
-  uint16_t z_run;           /**< Recusas seguidas de distância. */
-  uint16_t flow_age;        /**< Passos desde a última correção de fluxo aceita. */
-  uint16_t z_age;           /**< Passos desde a última correção de distância aceita. */
-  bool h_started;           /**< x, y já receberam a primeira medida. */
-  bool z_started;           /**< z já recebeu a primeira medida. */
+  nav_ekf_axis_t h[2];    /**< Eixos x, y do referencial local. */
+  nav_ekf_axis_t z;       /**< Eixo z (NED, negativo acima do chão). */
+  range_filter_t range;   /**< Gate e filtro da distância. */
+  float flow_innov[2];    /**< Última inovação de velocidade x, y, em m/s. */
+  float flow_ratio;       /**< Última razão de teste do par x, y (acima de 1: recusada). */
+  float z_innov;          /**< Última inovação de z, em m. */
+  float z_ratio;          /**< Última razão de teste de z. */
+  uint32_t flow_updates;  /**< Correções de fluxo aceitas. */
+  uint32_t flow_rejected; /**< Correções de fluxo recusadas pelo gate. */
+  uint32_t flow_resets;   /**< Medidas de fluxo adotadas depois de recusas seguidas. */
+  uint32_t z_updates;     /**< Correções de distância aceitas. */
+  uint32_t z_rejected;    /**< Correções de distância recusadas pelo gate. */
+  uint32_t z_resets;      /**< Distâncias adotadas depois de recusas seguidas. */
+  uint16_t flow_run;      /**< Recusas seguidas de fluxo. */
+  uint16_t z_run;         /**< Recusas seguidas de distância. */
+  uint16_t flow_age;      /**< Passos desde a última correção de fluxo aceita. */
+  uint16_t z_age;         /**< Passos desde a última correção de distância aceita. */
+  bool h_started;         /**< x, y já receberam a primeira medida. */
+  bool z_started;         /**< z já recebeu a primeira medida. */
 } nav_ekf_t;
 
 /**

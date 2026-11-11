@@ -13,7 +13,7 @@
 #include "dronelink/dronelink_mavlink.h"
 
 /** Mensagens do voo enviadas por chamada de dronelink_telemetry_tick(). */
-#define TEXTS_PER_TICK 2U
+#define TEXTS_PER_TICK  2U
 /** Período de ATTITUDE e LOCAL_POSITION_NED, em ms (5 Hz). */
 #define STATE_PERIOD_MS 200U
 
@@ -56,8 +56,8 @@ static void send_state(const flight_telemetry_t *t) {
   dronelink_send(&m, DRONELINK_TX_NORMAL);
   mavlink_msg_local_position_ned_pack(DRONELINK_SYSTEM_ID, DRONELINK_FC_COMPONENT_ID, &m,
                                       t->time_ms, t->x_hat[LQG_X_X], t->x_hat[LQG_X_Y],
-                                      z_over_ground(t), t->x_hat[LQG_X_VX],
-                                      t->x_hat[LQG_X_VY], t->x_hat[LQG_X_VZ]);
+                                      z_over_ground(t), t->x_hat[LQG_X_VX], t->x_hat[LQG_X_VY],
+                                      t->x_hat[LQG_X_VZ]);
   dronelink_send(&m, DRONELINK_TX_NORMAL);
 }
 
@@ -69,9 +69,9 @@ static void send_debug(const flight_telemetry_t *t) {
     throttle[i] = (uint16_t)(v < 0.0F ? 0.0F : (v > 10000.0F ? 10000.0F : v));
   }
   mavlink_message_t m;
-  mavlink_msg_drone_ctrl_debug_pack(DRONELINK_SYSTEM_ID, DRONELINK_FC_COMPONENT_ID, &m,
-                                    t->time_ms, t->step, t->y, t->x_hat, t->du, t->ref,
-                                    throttle, t->state, t->meas_flags, t->flags);
+  mavlink_msg_drone_ctrl_debug_pack(DRONELINK_SYSTEM_ID, DRONELINK_FC_COMPONENT_ID, &m, t->time_ms,
+                                    t->step, t->y, t->x_hat, t->du, t->ref, throttle, t->state,
+                                    t->meas_flags, t->flags);
   dronelink_send(&m, DRONELINK_TX_NORMAL);
 }
 
@@ -104,15 +104,15 @@ void dronelink_telemetry_init(void) {
 static void send_flight_texts(void) {
   char text[MAVLINK_MSG_STATUSTEXT_FIELD_TEXT_LEN + 1U];
   for (unsigned n = 0U; n < TEXTS_PER_TICK && flight_ctrl_take_text(text, sizeof(text)); ++n) {
-    const uint8_t severity = strncmp(text, "FAILSAFE", 8) == 0 ? MAV_SEVERITY_CRITICAL
-                                                                : MAV_SEVERITY_INFO;
+    const uint8_t severity =
+        strncmp(text, "FAILSAFE", 8) == 0 ? MAV_SEVERITY_CRITICAL : MAV_SEVERITY_INFO;
     mavlink_message_t m;
-    mavlink_msg_statustext_pack(DRONELINK_SYSTEM_ID, DRONELINK_FC_COMPONENT_ID, &m, severity,
-                                text, 0U, 0U);
+    mavlink_msg_statustext_pack(DRONELINK_SYSTEM_ID, DRONELINK_FC_COMPONENT_ID, &m, severity, text,
+                                0U, 0U);
     /* O motivo de um FAILSAFE não pode se perder na fila normal, que a
        telemetria de 50 Hz quase enche; ele é raro e vai na fila das respostas. */
-    dronelink_send(&m, severity == MAV_SEVERITY_CRITICAL ? DRONELINK_TX_CRITICAL
-                                                          : DRONELINK_TX_NORMAL);
+    dronelink_send(&m,
+                   severity == MAV_SEVERITY_CRITICAL ? DRONELINK_TX_CRITICAL : DRONELINK_TX_NORMAL);
   }
 }
 
@@ -127,7 +127,8 @@ void dronelink_telemetry_tick(uint32_t now_ms) {
   const bool debug_due = debug_on && now_ms - last_debug_ms >= period;
   const float nav_rate = p.nav_debug_rate_hz;
   const bool nav_due = nav_rate > 0.0F && now_ms - last_nav_ms >= (uint32_t)(1000.0F / nav_rate);
-  if (!state_due && !debug_due && !nav_due) return;
+  if (!state_due && !debug_due && !nav_due)
+    return;
 
   static flight_telemetry_t t;
   flight_ctrl_get_telemetry(&t);

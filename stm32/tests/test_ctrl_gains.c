@@ -21,10 +21,18 @@ static void default_row(ctrl_gain_matrix_t m, uint8_t row, float *out, uint8_t *
   const lqg_gains_t *g = &LQG_ERT_DEFAULT_GAINS;
   for (uint8_t c = 0; c < cols; ++c) {
     switch (m) {
-      case CTRL_GAIN_KD: out[c] = (float)g->Kd[row][c]; break;
-      case CTRL_GAIN_KFD: out[c] = (float)g->Kfd[row][c]; break;
-      case CTRL_GAIN_L: out[c] = (float)g->L[row][c]; break;
-      default: out[c] = (float)g->M[row][c]; break;
+    case CTRL_GAIN_KD:
+      out[c] = (float)g->Kd[row][c];
+      break;
+    case CTRL_GAIN_KFD:
+      out[c] = (float)g->Kfd[row][c];
+      break;
+    case CTRL_GAIN_L:
+      out[c] = (float)g->L[row][c];
+      break;
+    default:
+      out[c] = (float)g->M[row][c];
+      break;
     }
   }
   *count = cols;
@@ -36,11 +44,13 @@ static void stage_all(uint32_t session, float scale, int skip_matrix, int skip_r
     uint8_t rows;
     assert(ctrl_gains_shape((ctrl_gain_matrix_t)m, &rows, NULL));
     for (uint8_t r = 0; r < rows; ++r) {
-      if (m == skip_matrix && r == skip_row) continue;
+      if (m == skip_matrix && r == skip_row)
+        continue;
       float v[CTRL_GAINS_MAX_COLS];
       uint8_t n;
       default_row((ctrl_gain_matrix_t)m, r, v, &n);
-      for (uint8_t i = 0; i < n; ++i) v[i] *= scale;
+      for (uint8_t i = 0; i < n; ++i)
+        v[i] *= scale;
       assert(ctrl_gains_stage_row(session, (ctrl_gain_matrix_t)m, r, v, n) == CTRL_GAINS_OK);
     }
   }
@@ -51,13 +61,17 @@ static uint32_t expected_crc(float scale) {
   static lqg_gains_t g;
   g = LQG_ERT_DEFAULT_GAINS;
   lqg_real_t *v = &g.Kd[0][0];
-  for (unsigned i = 0; i < sizeof(g.Kd) / sizeof(lqg_real_t); ++i) v[i] = (float)v[i] * scale;
+  for (unsigned i = 0; i < sizeof(g.Kd) / sizeof(lqg_real_t); ++i)
+    v[i] = (float)v[i] * scale;
   v = &g.Kfd[0][0];
-  for (unsigned i = 0; i < sizeof(g.Kfd) / sizeof(lqg_real_t); ++i) v[i] = (float)v[i] * scale;
+  for (unsigned i = 0; i < sizeof(g.Kfd) / sizeof(lqg_real_t); ++i)
+    v[i] = (float)v[i] * scale;
   v = &g.L[0][0];
-  for (unsigned i = 0; i < sizeof(g.L) / sizeof(lqg_real_t); ++i) v[i] = (float)v[i] * scale;
+  for (unsigned i = 0; i < sizeof(g.L) / sizeof(lqg_real_t); ++i)
+    v[i] = (float)v[i] * scale;
   v = &g.M[0][0];
-  for (unsigned i = 0; i < sizeof(g.M) / sizeof(lqg_real_t); ++i) v[i] = (float)v[i] * scale;
+  for (unsigned i = 0; i < sizeof(g.M) / sizeof(lqg_real_t); ++i)
+    v[i] = (float)v[i] * scale;
   return ctrl_gains_crc(&g);
 }
 

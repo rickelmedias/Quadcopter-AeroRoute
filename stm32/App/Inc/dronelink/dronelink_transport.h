@@ -44,8 +44,7 @@ bool dronelink_transport_init(UART_HandleTypeDef *uart);
  * @return Quantidade de bytes lidos (0 em caso de timeout ou argumento
  *         inválido).
  */
-size_t dronelink_transport_receive(uint8_t *destination, size_t capacity,
-                                   uint32_t timeout_ms);
+size_t dronelink_transport_receive(uint8_t *destination, size_t capacity, uint32_t timeout_ms);
 
 /**
  * @brief Coloca um frame na fila de transmissão, sem esperar.

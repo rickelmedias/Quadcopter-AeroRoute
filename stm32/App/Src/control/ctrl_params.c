@@ -12,11 +12,11 @@
 #include <string.h>
 
 /** Monta uma entrada da tabela a partir do campo de ::ctrl_params_t. */
-#define PARAM(name, field, min, max, def, flags, help) \
+#define PARAM(name, field, min, max, def, flags, help)                                             \
   {name, offsetof(ctrl_params_t, field), min, max, def, flags, help}
 
 /** Atalho para os sinais dos sensores. */
-#define SIGN_PARAM(name, field, def, help) \
+#define SIGN_PARAM(name, field, def, help)                                                         \
   PARAM(name, field, -1.0F, 1.0F, def, CTRL_PARAM_SIGN | CTRL_PARAM_DISARMED_ONLY, help)
 
 /** Tabela de parâmetros. A ordem define o índice no MAVLink. */
@@ -67,8 +67,8 @@ static const ctrl_param_desc_t TABLE[] = {
           "altura de fim do pouso (m)"),
     PARAM("FLT_DRY_RUN", dry_run, 0.0F, 1.0F, DEFAULT_DRY_RUN,
           CTRL_PARAM_BOOL | CTRL_PARAM_DISARMED_ONLY, "1 = LQG sem girar motores"),
-    PARAM("FLT_SIM", sim, 0.0F, 1.0F, DEFAULT_FLT_SIM,
-          CTRL_PARAM_BOOL | CTRL_PARAM_DISARMED_ONLY, "1 = drone simulado, motores parados"),
+    PARAM("FLT_SIM", sim, 0.0F, 1.0F, DEFAULT_FLT_SIM, CTRL_PARAM_BOOL | CTRL_PARAM_DISARMED_ONLY,
+          "1 = drone simulado, motores parados"),
     PARAM("DBG_RATE_HZ", debug_rate_hz, 0.0F, 50.0F, DEFAULT_DEBUG_RATE_HZ, CTRL_PARAM_LIVE,
           "DRONE_CTRL_DEBUG para a Pi (Hz)"),
     PARAM("LOG_EST_HZ", log_est_hz, 0.0F, 50.0F, DEFAULT_LOG_EST_HZ, CTRL_PARAM_LIVE,
@@ -79,8 +79,8 @@ static const ctrl_param_desc_t TABLE[] = {
           CTRL_PARAM_DISARMED_ONLY, "pitch cru do BNO nivelado (graus)"),
     PARAM("CTL_XY", use_xy, 0.0F, 1.0F, DEFAULT_CTL_XY, CTRL_PARAM_BOOL | CTRL_PARAM_DISARMED_ONLY,
           "1 = LQG segura x,y; 0 = so atitude e altura"),
-    PARAM("CTL_TRIM", trim, 0.0F, 1.0F, DEFAULT_CTL_TRIM, CTRL_PARAM_BOOL | CTRL_PARAM_DISARMED_ONLY,
-          "1 = ajuste lento de hover e equilibrio"),
+    PARAM("CTL_TRIM", trim, 0.0F, 1.0F, DEFAULT_CTL_TRIM,
+          CTRL_PARAM_BOOL | CTRL_PARAM_DISARMED_ONLY, "1 = ajuste lento de hover e equilibrio"),
     PARAM("CTL_KI_Z", trim_ki_z, 0.0F, 45.0F, DEFAULT_TRIM_KI_Z, CTRL_PARAM_LIVE,
           "ganho do hover (rad/s por m.s)"),
     PARAM("CTL_KI_ATT", trim_ki_att, 0.0F, 150.0F, DEFAULT_TRIM_KI_ATT, CTRL_PARAM_LIVE,
@@ -110,7 +110,8 @@ static const ctrl_param_desc_t TABLE[] = {
     PARAM("CTL_PSI_MAX", psi_max, 0.0F, 400.0F, DEFAULT_CTL_PSI_MAX, CTRL_PARAM_LIVE,
           "limite da guinada no du (rad/s, 0=sem)"),
     PARAM("FLT_RAMP_CM", ramp_common_mode, 0.0F, 1.0F, DEFAULT_FLT_RAMP_CM,
-          CTRL_PARAM_BOOL | CTRL_PARAM_DISARMED_ONLY, "1 = rampa so na media, sem encolher a diferenca"),
+          CTRL_PARAM_BOOL | CTRL_PARAM_DISARMED_ONLY,
+          "1 = rampa so na media, sem encolher a diferenca"),
     PARAM("FLOW_GYRO_XY", flow_gyro_xy, -3.0F, 3.0F, DEFAULT_FLOW_GYRO_XY, CTRL_PARAM_LIVE,
           "giro y do BNO (roll) no fluxo X (cruzado)"),
     PARAM("FLOW_GYRO_YX", flow_gyro_yx, -3.0F, 3.0F, DEFAULT_FLOW_GYRO_YX, CTRL_PARAM_LIVE,
@@ -132,7 +133,8 @@ static const ctrl_param_desc_t TABLE[] = {
     PARAM("FEKF_GATE", fekf_gate, 0.0F, 10.0F, DEFAULT_FEKF_GATE, CTRL_PARAM_LIVE,
           "gate de inovacao do EKF (desvios)"),
     PARAM("FLOW_GATE", flow_gate, 0.0F, 1.0F, DEFAULT_FLOW_GATE,
-          CTRL_PARAM_BOOL | CTRL_PARAM_DISARMED_ONLY, "1 = rejeita fluxo ruim (qualidade, inclinacao)"),
+          CTRL_PARAM_BOOL | CTRL_PARAM_DISARMED_ONLY,
+          "1 = rejeita fluxo ruim (qualidade, inclinacao)"),
     PARAM("FLOW_CENS", flow_cens, 0.0F, 1.0F, DEFAULT_FLOW_CENS,
           CTRL_PARAM_BOOL | CTRL_PARAM_DISARMED_ONLY, "1 = fluxo zero usa a predicao do Kalman"),
     PARAM("FLOW_BIAS_X", flow_bias_x, -0.3F, 0.3F, DEFAULT_FLOW_BIAS_X, CTRL_PARAM_LIVE,
@@ -168,7 +170,9 @@ void ctrl_params_init(void) {
   CTRL_EXIT_CRITICAL();
 }
 
-size_t ctrl_params_count(void) { return TABLE_COUNT; }
+size_t ctrl_params_count(void) {
+  return TABLE_COUNT;
+}
 
 const ctrl_param_desc_t *ctrl_params_desc(size_t index) {
   return index < TABLE_COUNT ? &TABLE[index] : NULL;
@@ -238,14 +242,14 @@ void ctrl_params_snapshot(ctrl_params_t *out) {
 
 const char *ctrl_params_status_text(ctrl_param_status_t status) {
   switch (status) {
-    case CTRL_PARAM_OK:
-      return "ok";
-    case CTRL_PARAM_UNKNOWN:
-      return "parametro desconhecido";
-    case CTRL_PARAM_OUT_OF_RANGE:
-      return "fora dos limites";
-    case CTRL_PARAM_LOCKED:
-    default:
-      return "so com o drone desarmado";
+  case CTRL_PARAM_OK:
+    return "ok";
+  case CTRL_PARAM_UNKNOWN:
+    return "parametro desconhecido";
+  case CTRL_PARAM_OUT_OF_RANGE:
+    return "fora dos limites";
+  case CTRL_PARAM_LOCKED:
+  default:
+    return "so com o drone desarmado";
   }
 }

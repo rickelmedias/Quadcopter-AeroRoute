@@ -19,14 +19,17 @@ void sim_plant_step(sim_plant_t *s, const lqg_real_t du[LQG_NU]) {
   lqg_real_t next[LQG_NX];
   for (unsigned i = 0U; i < LQG_NX; ++i) {
     lqg_real_t sum = 0.0;
-    for (unsigned j = 0U; j < LQG_NX; ++j) sum += LQG_ERT_A[i][j] * s->x[j];
-    for (unsigned j = 0U; j < LQG_NU; ++j) sum += LQG_ERT_B[i][j] * du[j];
+    for (unsigned j = 0U; j < LQG_NX; ++j)
+      sum += LQG_ERT_A[i][j] * s->x[j];
+    for (unsigned j = 0U; j < LQG_NU; ++j)
+      sum += LQG_ERT_B[i][j] * du[j];
     next[i] = sum;
   }
   /* No chão: não afunda e não acelera para baixo (z NED positivo é descer). */
   if (next[LQG_X_Z] >= (lqg_real_t)s->ground_z) {
     next[LQG_X_Z] = (lqg_real_t)s->ground_z;
-    if (next[LQG_X_VZ] > 0.0) next[LQG_X_VZ] = 0.0;
+    if (next[LQG_X_VZ] > 0.0)
+      next[LQG_X_VZ] = 0.0;
     /* Apoiado nas pernas, também não inclina, não gira e não escorrega. Sem
        isso, o desequilíbrio fixo (CTL_FF_*), que o drone simulado recebe
        inteiro mesmo com os motores em marcha lenta, o tombava na partida. */
@@ -36,7 +39,8 @@ void sim_plant_step(sim_plant_t *s, const lqg_real_t du[LQG_NU]) {
     for (unsigned k = 0U; k < sizeof(kept) / sizeof(kept[0]); ++k) {
       next[kept[k]] = s->x[kept[k]];
     }
-    for (unsigned k = 0U; k < sizeof(held) / sizeof(held[0]); ++k) next[held[k]] = 0.0;
+    for (unsigned k = 0U; k < sizeof(held) / sizeof(held[0]); ++k)
+      next[held[k]] = 0.0;
   }
   memcpy(s->x, next, sizeof(next));
 }
@@ -44,7 +48,8 @@ void sim_plant_step(sim_plant_t *s, const lqg_real_t du[LQG_NU]) {
 void sim_plant_measure(const sim_plant_t *s, lqg_real_t y[LQG_NY]) {
   for (unsigned i = 0U; i < LQG_NY; ++i) {
     lqg_real_t sum = 0.0;
-    for (unsigned j = 0U; j < LQG_NX; ++j) sum += LQG_ERT_C[i][j] * s->x[j];
+    for (unsigned j = 0U; j < LQG_NX; ++j)
+      sum += LQG_ERT_C[i][j] * s->x[j];
     y[i] = sum;
   }
 }

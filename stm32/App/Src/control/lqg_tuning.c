@@ -40,18 +40,20 @@ static lqg_aj_gains_t generated;
 static uint32_t crc_float(uint32_t crc, float value) {
   uint32_t bits;
   memcpy(&bits, &value, sizeof(bits));
-  const uint8_t bytes[4] = {(uint8_t)bits, (uint8_t)(bits >> 8),
-                            (uint8_t)(bits >> 16), (uint8_t)(bits >> 24)};
+  const uint8_t bytes[4] = {(uint8_t)bits, (uint8_t)(bits >> 8), (uint8_t)(bits >> 16),
+                            (uint8_t)(bits >> 24)};
   return ctrl_crc32(crc, bytes, sizeof(bytes));
 }
 
 uint32_t lqg_tuning_crc(const lqg_aj_gains_t *g) {
   uint32_t crc = 0U;
   for (unsigned i = 0U; i < LQG_NU; ++i) {
-    for (unsigned j = 0U; j < LQG_NX; ++j) crc = crc_float(crc, (float)g->Kd[i][j]);
+    for (unsigned j = 0U; j < LQG_NX; ++j)
+      crc = crc_float(crc, (float)g->Kd[i][j]);
   }
   for (unsigned i = 0U; i < LQG_NU; ++i) {
-    for (unsigned j = 0U; j < LQG_NR; ++j) crc = crc_float(crc, (float)g->Kfd[i][j]);
+    for (unsigned j = 0U; j < LQG_NR; ++j)
+      crc = crc_float(crc, (float)g->Kfd[i][j]);
   }
   return crc;
 }
@@ -68,25 +70,34 @@ static void install(const lqg_aj_gains_t *g, bool is_default, uint32_t crc) {
 
 void lqg_tuning_init(void) {
   for (unsigned i = 0U; i < LQG_NU; ++i) {
-    for (unsigned j = 0U; j < LQG_NX; ++j) generated.Kd[i][j] = LQG_AJ_KD[i][j];
-    for (unsigned j = 0U; j < LQG_NR; ++j) generated.Kfd[i][j] = LQG_AJ_KFD[i][j];
+    for (unsigned j = 0U; j < LQG_NX; ++j)
+      generated.Kd[i][j] = LQG_AJ_KD[i][j];
+    for (unsigned j = 0U; j < LQG_NR; ++j)
+      generated.Kfd[i][j] = LQG_AJ_KFD[i][j];
   }
   lqg_tuning_begin();
   lqg_tuning_restore_default();
 }
 
-uint32_t lqg_tuning_generation(void) { return generation; }
+uint32_t lqg_tuning_generation(void) {
+  return generation;
+}
 
 void lqg_tuning_copy_active(lqg_aj_gains_t *out, uint32_t *gen) {
   CTRL_ENTER_CRITICAL();
   *out = active;
-  if (gen != NULL) *gen = generation;
+  if (gen != NULL)
+    *gen = generation;
   CTRL_EXIT_CRITICAL();
 }
 
-bool lqg_tuning_is_default(void) { return active_default; }
+bool lqg_tuning_is_default(void) {
+  return active_default;
+}
 
-uint32_t lqg_tuning_active_crc(void) { return active_crc; }
+uint32_t lqg_tuning_active_crc(void) {
+  return active_crc;
+}
 
 void lqg_tuning_begin(void) {
   memset(staged, 0, sizeof(staged));
@@ -107,17 +118,23 @@ lqg_tuning_status_t lqg_tuning_stage(lqg_tuning_matrix_t m, unsigned row, unsign
 
 lqg_tuning_status_t lqg_tuning_commit(uint32_t expected_crc, uint32_t *computed) {
   uint32_t crc = 0U;
-  for (unsigned i = 0U; i < LQG_TUNING_VALUES; ++i) crc = crc_float(crc, staged[i]);
-  if (computed != NULL) *computed = crc;
+  for (unsigned i = 0U; i < LQG_TUNING_VALUES; ++i)
+    crc = crc_float(crc, staged[i]);
+  if (computed != NULL)
+    *computed = crc;
   for (unsigned i = 0U; i < LQG_TUNING_VALUES; ++i) {
-    if (!staged_set[i]) return LQG_TUNING_INCOMPLETE;
+    if (!staged_set[i])
+      return LQG_TUNING_INCOMPLETE;
   }
   for (unsigned i = 0U; i < LQG_TUNING_VALUES; ++i) {
-    if (!isfinite(staged[i])) return LQG_TUNING_NOT_FINITE;
+    if (!isfinite(staged[i]))
+      return LQG_TUNING_NOT_FINITE;
   }
-  if (crc != expected_crc) return LQG_TUNING_CRC_MISMATCH;
+  if (crc != expected_crc)
+    return LQG_TUNING_CRC_MISMATCH;
   for (unsigned i = 0U; i < LQG_NU; ++i) {
-    for (unsigned j = 0U; j < LQG_NX; ++j) incoming.Kd[i][j] = (lqg_real_t)staged[i * LQG_NX + j];
+    for (unsigned j = 0U; j < LQG_NX; ++j)
+      incoming.Kd[i][j] = (lqg_real_t)staged[i * LQG_NX + j];
     for (unsigned j = 0U; j < LQG_NR; ++j) {
       incoming.Kfd[i][j] = (lqg_real_t)staged[KFD_OFFSET + i * LQG_NR + j];
     }
@@ -133,8 +150,10 @@ void lqg_tuning_restore_default(void) {
 
 void lqg_tuning_apply(const lqg_aj_gains_t *aj, lqg_gains_t *gains) {
   for (unsigned i = 0U; i < LQG_NU; ++i) {
-    for (unsigned j = 0U; j < LQG_NX; ++j) gains->Kd[i][j] = aj->Kd[i][j];
-    for (unsigned j = 0U; j < LQG_NR; ++j) gains->Kfd[i][j] = aj->Kfd[i][j];
+    for (unsigned j = 0U; j < LQG_NX; ++j)
+      gains->Kd[i][j] = aj->Kd[i][j];
+    for (unsigned j = 0U; j < LQG_NR; ++j)
+      gains->Kfd[i][j] = aj->Kfd[i][j];
   }
 }
 

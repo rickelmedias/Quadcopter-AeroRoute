@@ -11,10 +11,10 @@ extern DMA_HandleTypeDef hdma_tim4_up;
 /** Bits de um pacote DShot. */
 #define FRAME_BITS 16U
 /** Períodos extras em zero no fim, para a linha voltar a nível baixo. */
-#define PAD_BITS 2U
+#define PAD_BITS   2U
 /** Flags do Stream6 no HIFCR: FEIF, DMEIF, TEIF, HTIF e TCIF. */
-#define STREAM6_FLAGS (DMA_HIFCR_CFEIF6 | DMA_HIFCR_CDMEIF6 | DMA_HIFCR_CTEIF6 | \
-                       DMA_HIFCR_CHTIF6 | DMA_HIFCR_CTCIF6)
+#define STREAM6_FLAGS                                                                              \
+  (DMA_HIFCR_CFEIF6 | DMA_HIFCR_CDMEIF6 | DMA_HIFCR_CTEIF6 | DMA_HIFCR_CHTIF6 | DMA_HIFCR_CTCIF6)
 
 /** Um grupo de quatro CCR por período de bit, na ordem CCR1..CCR4. */
 static uint16_t frame[(FRAME_BITS + PAD_BITS) * 4U];
@@ -28,7 +28,8 @@ static uint16_t t1h;
 void dshot_init(void) {
   DMA_Stream_TypeDef *s = hdma_tim4_up.Instance;
   s->CR &= ~DMA_SxCR_EN;
-  while (s->CR & DMA_SxCR_EN) {}
+  while (s->CR & DMA_SxCR_EN) {
+  }
   DMA1->HIFCR = STREAM6_FLAGS;
   s->PAR = (uint32_t)&TIM4->DMAR;
   s->M0AR = (uint32_t)frame;
@@ -56,13 +57,15 @@ uint16_t dshot_packet(uint16_t value, bool telemetry) {
 
 bool dshot_write(const uint16_t value[4], bool telemetry) {
   DMA_Stream_TypeDef *s = hdma_tim4_up.Instance;
-  if (s->CR & DMA_SxCR_EN) return false;  /* quadro anterior em andamento */
+  if (s->CR & DMA_SxCR_EN)
+    return false; /* quadro anterior em andamento */
   for (unsigned m = 0; m < 4U; ++m) {
     uint16_t p = dshot_packet(value[m], telemetry);
     for (unsigned b = 0; b < FRAME_BITS; ++b) {
       frame[b * 4U + m] = (p & (0x8000U >> b)) ? t1h : t0h;
     }
-    for (unsigned b = FRAME_BITS; b < FRAME_BITS + PAD_BITS; ++b) frame[b * 4U + m] = 0;
+    for (unsigned b = FRAME_BITS; b < FRAME_BITS + PAD_BITS; ++b)
+      frame[b * 4U + m] = 0;
   }
   DMA1->HIFCR = STREAM6_FLAGS;
   s->NDTR = (FRAME_BITS + PAD_BITS) * 4U;
@@ -71,8 +74,11 @@ bool dshot_write(const uint16_t value[4], bool telemetry) {
 }
 
 uint16_t dshot_from_permille(uint16_t permille) {
-  if (permille == 0U) return 0U;
-  if (permille > 1000U) permille = 1000U;
+  if (permille == 0U)
+    return 0U;
+  if (permille > 1000U)
+    permille = 1000U;
   return (uint16_t)(DSHOT_THROTTLE_MIN +
-      ((uint32_t)permille * (DSHOT_THROTTLE_MAX - DSHOT_THROTTLE_MIN) + 500U) / 1000U);
+                    ((uint32_t)permille * (DSHOT_THROTTLE_MAX - DSHOT_THROTTLE_MIN) + 500U) /
+                        1000U);
 }

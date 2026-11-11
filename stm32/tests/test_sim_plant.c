@@ -17,7 +17,7 @@
 #include <string.h>
 
 /** Passo, em s. */
-#define DT 0.01
+#define DT      0.01
 /** Tolerâncias padrão de flight_ctrl.c. */
 #define POS_TOL 0.05
 #define YAW_TOL 0.05
@@ -45,7 +45,8 @@ static double run_until_stable(const double target[LQG_NR]) {
     ref[LQG_R_PSI] = approach(ref[LQG_R_PSI], target[LQG_R_PSI], 0.5 * DT);
     lqg_real_t y[LQG_NY], r[LQG_NR], du[LQG_NU];
     sim_plant_measure(&sim, y);
-    for (unsigned i = 0U; i < LQG_NR; ++i) r[i] = ref[i];
+    for (unsigned i = 0U; i < LQG_NR; ++i)
+      r[i] = ref[i];
     lqg_ert_output(&lqg, &LQG_ERT_DEFAULT_GAINS, y, r, du);
     lqg_ert_update(&lqg, &LQG_ERT_DEFAULT_GAINS, du);
     sim_plant_step(&sim, du);
@@ -65,8 +66,10 @@ static double run_until_stable(const double target[LQG_NR]) {
       settle = -1.0;
       continue;
     }
-    if (settle < 0.0) settle = k * DT;
-    if (k * DT - settle >= FLIGHT_SETTLE_MS / 1000.0) return k * DT;
+    if (settle < 0.0)
+      settle = k * DT;
+    if (k * DT - settle >= FLIGHT_SETTLE_MS / 1000.0)
+      return k * DT;
   }
   return -1.0;
 }
@@ -88,17 +91,20 @@ int main(void) {
      real (CTL_FF_TH/PHI/PSI): apoiado no chão, não tomba nem gira. */
   const lqg_real_t unbalanced[LQG_NU] = {-900.0 - 140.0, -900.0 + 40.0, -900.0 + 60.0,
                                          -900.0 + 40.0};
-  for (int k = 0; k < 200; ++k) sim_plant_step(&sim, unbalanced);
+  for (int k = 0; k < 200; ++k)
+    sim_plant_step(&sim, unbalanced);
   assert(fabs(sim.x[LQG_X_Z] - SIM_PLANT_GROUND_Z) < 1e-9);
   for (unsigned i = LQG_X_PHI; i <= LQG_X_R; ++i) {
-    if (i != LQG_X_Z && i != LQG_X_PSI && i != LQG_X_VZ) assert(sim.x[i] == 0.0);
+    if (i != LQG_X_Z && i != LQG_X_PSI && i != LQG_X_VZ)
+      assert(sim.x[i] == 0.0);
   }
   assert(sim.x[LQG_X_PSI] == 0.0 && sim.x[LQG_X_X] == 0.0 && sim.x[LQG_X_Y] == 0.0);
   /* No ar, o mesmo desequilíbrio inclina: o chão só segura enquanto apoia. */
   sim_plant_t air = sim;
   air.x[LQG_X_Z] = SIM_PLANT_GROUND_Z - 0.3;
   const lqg_real_t tilt[LQG_NU] = {-140.0, 40.0, 60.0, 40.0};
-  for (int k = 0; k < 20; ++k) sim_plant_step(&air, tilt);
+  for (int k = 0; k < 20; ++k)
+    sim_plant_step(&air, tilt);
   assert(fabs(air.x[LQG_X_PHI]) + fabs(air.x[LQG_X_THETA]) > 1e-3);
 
   /* Decolar 0,5 m. */
@@ -129,7 +135,8 @@ int main(void) {
     lqg_real_t y[LQG_NY], r[LQG_NR], du[LQG_NU];
     ref[LQG_R_Z] = approach(ref[LQG_R_Z], target[LQG_R_Z], 0.3 * DT);
     sim_plant_measure(&sim, y);
-    for (unsigned i = 0U; i < LQG_NR; ++i) r[i] = ref[i];
+    for (unsigned i = 0U; i < LQG_NR; ++i)
+      r[i] = ref[i];
     lqg_ert_output(&lqg, &LQG_ERT_DEFAULT_GAINS, y, r, du);
     lqg_ert_update(&lqg, &LQG_ERT_DEFAULT_GAINS, du);
     sim_plant_step(&sim, du);

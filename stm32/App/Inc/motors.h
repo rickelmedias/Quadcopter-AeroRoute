@@ -28,15 +28,15 @@
 #include <stdint.h>
 
 /** Quantidade de motores. */
-#define MOTORS_COUNT 4U
+#define MOTORS_COUNT              4U
 /** Limite de aceleração da bancada, em décimos de por cento (1000 = 100%). */
 #define MOTORS_BENCH_MAX_PERMILLE 1000U
 
 /** @brief Quem está com a saída armada. */
 typedef enum {
-  MOTORS_OWNER_NONE = 0,  /**< Desarmado: só zeros. */
-  MOTORS_OWNER_BENCH,     /**< Teste de bancada (console USB). */
-  MOTORS_OWNER_FLIGHT     /**< Controle de voo. */
+  MOTORS_OWNER_NONE = 0, /**< Desarmado: só zeros. */
+  MOTORS_OWNER_BENCH,    /**< Teste de bancada (console USB). */
+  MOTORS_OWNER_FLIGHT    /**< Controle de voo. */
 } motors_owner_t;
 
 /** @brief Fotografia da saída, para status e log. */

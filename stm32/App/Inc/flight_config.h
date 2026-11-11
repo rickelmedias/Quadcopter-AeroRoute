@@ -46,20 +46,20 @@
  * Substitua pelos pontos medidos no dinamômetro (ou ajuste MOT_W_AT_100 em
  * voo até o hover ficar parado na altura pedida).
  */
-#define DEFAULT_MOT_W_AT_0    0.0F
+#define DEFAULT_MOT_W_AT_0   0.0F
 /** Rotação em 100% de aceleração, em rad/s (ver DEFAULT_MOT_W_AT_0). */
-#define DEFAULT_MOT_W_AT_100  1755.0F
+#define DEFAULT_MOT_W_AT_100 1755.0F
 
 /** Aceleração mínima com o controle ligado (fração 0..1). */
-#define DEFAULT_MOT_MIN   0.03F
+#define DEFAULT_MOT_MIN  0.03F
 /**
  * Aceleração máxima com o controle ligado (fração 0..1). Era 0,8; no voo de
  * 50 cm de 06/11 três motores ficaram em ~75% no hover, sem folga para o
  * controle com 0,8.
  */
-#define DEFAULT_MOT_MAX   0.95F
+#define DEFAULT_MOT_MAX  0.95F
 /** Aceleração durante a partida de decolagem (fração 0..1); ARMADO envia zero. */
-#define DEFAULT_MOT_IDLE  0.05F
+#define DEFAULT_MOT_IDLE 0.05F
 
 /* ---- Zero (nível) do BNO08x -------------------------------------------
    O BNO está montado de cabeça para baixo por exigência da montagem: com o
@@ -69,9 +69,9 @@
    ao norte). Para recalibrar, leia roll e pitch crus com o drone nivelado
    (log EST/BNO) e ajuste ZERO_ROLL e ZERO_PITCH em tempo de execução. */
 /** Roll cru lido com o drone nivelado, em graus. */
-#define DEFAULT_ZERO_ROLL_DEG   (-174.5F)
+#define DEFAULT_ZERO_ROLL_DEG  (-174.5F)
 /** Pitch cru lido com o drone nivelado, em graus. */
-#define DEFAULT_ZERO_PITCH_DEG  (-2.9F)
+#define DEFAULT_ZERO_PITCH_DEG (-2.9F)
 /**
  * Correção fina do nível, somada a φ e θ já no referencial do modelo, em graus.
  * O zero acima vem do drone parado no chão; o nível que importa é o do empuxo
@@ -79,9 +79,9 @@
  * posição, 0,5° de erro deixa o drone ~14 cm fora do ponto: a ferramenta da Pi
  * mede, num hover parado, a inclinação média que o segura e sugere a correção.
  */
-#define DEFAULT_LVL_PHI_DEG     0.0F
+#define DEFAULT_LVL_PHI_DEG    0.0F
 /** Correção fina do nível em θ, em graus (ver ::DEFAULT_LVL_PHI_DEG). */
-#define DEFAULT_LVL_TH_DEG      0.0F
+#define DEFAULT_LVL_TH_DEG     0.0F
 
 /* ---- Sinais dos sensores para NED ---------------------------------------
    O BNO está de cabeça para baixo e com o eixo x para o lado do drone, então
@@ -97,21 +97,21 @@
    graus: p = -giro y, q = +giro x, r = +giro z. Confirme os giros na
    bancada (roteiro em docs/controle_lqg.md). */
 /** Sinal de φ (vem do pitch do BNO08x). */
-#define DEFAULT_SGN_ROLL   (+1.0F)
+#define DEFAULT_SGN_ROLL  (+1.0F)
 /** Sinal de θ (vem do roll do BNO08x). */
-#define DEFAULT_SGN_PITCH  (+1.0F)
+#define DEFAULT_SGN_PITCH (+1.0F)
 /** Sinal da guinada do BNO08x. */
-#define DEFAULT_SGN_YAW    (-1.0F)
+#define DEFAULT_SGN_YAW   (-1.0F)
 /** Sinal de p (vem do giro y do BNO08x). */
-#define DEFAULT_SGN_P      (-1.0F)
+#define DEFAULT_SGN_P     (-1.0F)
 /** Sinal de q (vem do giro x do BNO08x). */
-#define DEFAULT_SGN_Q      (+1.0F)
+#define DEFAULT_SGN_Q     (+1.0F)
 /** Sinal de r (vem do giro z do BNO08x). */
-#define DEFAULT_SGN_R      (+1.0F)
+#define DEFAULT_SGN_R     (+1.0F)
 /** Sinal da velocidade x do fluxo (já girada pela guinada) para NED. */
-#define DEFAULT_SGN_VX     (+1.0F)
+#define DEFAULT_SGN_VX    (+1.0F)
 /** Sinal da velocidade y do fluxo para NED. */
-#define DEFAULT_SGN_VY     (+1.0F)
+#define DEFAULT_SGN_VY    (+1.0F)
 
 /**
  * Escala do fluxo óptico do MTF-01, medida contra o giroscópio na bancada
@@ -231,31 +231,31 @@
  * teste de controle sobe no máximo 50 cm (lidos pelo MTF-01; era 25 até 06/11); o painel escolhe
  * a altura de cada voo abaixo disso.
  */
-#define FLIGHT_MAX_HEIGHT_M    0.50F
+#define FLIGHT_MAX_HEIGHT_M       0.50F
 /** Folga numérica ao comparar uma altura pedida com ::FLIGHT_MAX_HEIGHT_M, em m. */
-#define FLIGHT_HEIGHT_TOL_M    0.001F
+#define FLIGHT_HEIGHT_TOL_M       0.001F
 /**
  * Se a altura medida passar de ::FLIGHT_MAX_HEIGHT_M mais esta folga, o voo
  * pousa sozinho, em m.
  */
-#define FLIGHT_OVERSHOOT_M     0.20F
+#define FLIGHT_OVERSHOOT_M        0.20F
 /**
  * Ao encostar no chão, a aceleração desce em rampa até a marcha lenta durante
  * este tempo antes de desarmar, em ms (em vez de cortar de uma vez).
  */
-#define FLIGHT_LAND_SPINDOWN_MS 1500U
+#define FLIGHT_LAND_SPINDOWN_MS   1500U
 /**
  * Depois da marcha lenta, a aceleração do controle entra em rampa durante
  * este tempo, em ms. Sem ela, o salto de 5% para o hover fazia o lado mais
  * leve pular e passar do corte de inclinação (ensaio de 04/11 com CTL_W0 = 800).
  */
-#define FLIGHT_TAKEOFF_RAMP_MS 2000U
+#define FLIGHT_TAKEOFF_RAMP_MS    2000U
 /** Altura estimada acima da qual o drone conta como "saiu do chão", em m. */
-#define FLIGHT_LIFTED_HEIGHT_M 0.03F
+#define FLIGHT_LIFTED_HEIGHT_M    0.03F
 /** Altura estimada abaixo da qual o drone conta como apoiado no chão (ZUPT do EKF), em m. */
-#define FLIGHT_GROUNDED_HEIGHT_M 0.01F
+#define FLIGHT_GROUNDED_HEIGHT_M  0.01F
 /** Menor velocidade de descida no pouso, em m/s (a rampa do pouso nunca é um degrau). */
-#define FLIGHT_LAND_MIN_RATE_M_S 0.03F
+#define FLIGHT_LAND_MIN_RATE_M_S  0.03F
 /**
  * No pouso, com o drone mais de ::FLIGHT_LAND_ABOVE_M acima da referência e
  * descendo a menos de ::FLIGHT_LAND_DESCENT_M_S, a correção de hover dos
@@ -263,11 +263,11 @@
  * integrador de altura sozinho desfaz devagar demais: no ensaio de 05/11 o
  * drone ficou 3–5 s parado no alto com a referência já no chão.
  */
-#define FLIGHT_LAND_BLEED_RATE 20.0F
+#define FLIGHT_LAND_BLEED_RATE    20.0F
 /** Drone acima da referência no pouso, em m (ver ::FLIGHT_LAND_BLEED_RATE). */
-#define FLIGHT_LAND_ABOVE_M    0.01F
+#define FLIGHT_LAND_ABOVE_M       0.01F
 /** Descida que já conta como "está descendo" no pouso, em m/s (ver ::FLIGHT_LAND_BLEED_RATE). */
-#define FLIGHT_LAND_DESCENT_M_S 0.03F
+#define FLIGHT_LAND_DESCENT_M_S   0.03F
 /**
  * Decolagem ou trecho com o alvo mais de ::FLIGHT_STUCK_ERROR_M acima da
  * altura medida e sem subir ::FLIGHT_STUCK_RISE_M em ::FLIGHT_STUCK_MS: o
@@ -277,14 +277,14 @@
  * e FAILSAFE). Usa a altura do MTF filtrada, não a velocidade do Kalman: preso,
  * o filtro estimava subida de 4–5 cm/s com a altura parada.
  */
-#define FLIGHT_STUCK_ERROR_M   0.04F
+#define FLIGHT_STUCK_ERROR_M      0.04F
 /**
  * 1 = detector de subida presa ligado (FLT_PRESO). Padrão desligado: ele serve
  * na bancada com cordinhas; sem elas, na qualificação de 05/11, disparou em 7
  * de 9 voos aos 7–10 s e trocou o alvo de 20 cm por "HOLD em 2 cm", porque fora
  * do efeito solo o drone sobe devagar enquanto o estimador acha o empuxo.
  */
-#define DEFAULT_FLT_PRESO      0.0F
+#define DEFAULT_FLT_PRESO         0.0F
 /**
  * 1 = a rampa de partida só reduz a aceleração média, e a diferença entre os
  * motores (atitude e desequilíbrio fixo) chega inteira (FLT_RAMP_CM). Em 7
@@ -292,17 +292,17 @@
  * quando a rampa ainda encolhia essa diferença a ~90%; o pico sempre cai no
  * fim da rampa. 0 = comportamento anterior, para comparar.
  */
-#define DEFAULT_FLT_RAMP_CM    0.0F
+#define DEFAULT_FLT_RAMP_CM       0.0F
 /**
  * Limite da guinada total (LQG + FF + estimador), em rad/s (0 = sem limite).
  * Em 5 voos reais de 08/11 um giro súbito (|r| de 1,2 a 3,7 rad/s) fez o LQG
  * pedir ±200 a ±400 rad/s e levou roll e pitch ao failsafe.
  */
-#define DEFAULT_CTL_PSI_MAX    0.0F
+#define DEFAULT_CTL_PSI_MAX       0.0F
 /** Subida que conta como progresso e recomeça a contagem, em m (ver ::FLIGHT_STUCK_ERROR_M). */
-#define FLIGHT_STUCK_RISE_M    0.02F
+#define FLIGHT_STUCK_RISE_M       0.02F
 /** Tempo travado até segurar na altura medida, em ms (ver ::FLIGHT_STUCK_ERROR_M). */
-#define FLIGHT_STUCK_MS        3000U
+#define FLIGHT_STUCK_MS           3000U
 /** Altura medida a partir da qual o drone conta como fora do chão para o travamento, em m. */
 #define FLIGHT_STUCK_MIN_HEIGHT_M 0.015F
 /**
@@ -310,7 +310,7 @@
  * derivada dela, em s. Usados pelo travamento e pelo pouso no lugar da
  * velocidade do Kalman, que fica enviesada quando o drone não segue o modelo.
  */
-#define FLIGHT_MEAS_Z_TAU_S    0.3F
+#define FLIGHT_MEAS_Z_TAU_S       0.3F
 
 /** Altura padrão do hover, em m (fora do efeito solo, abaixo do teto de 50 cm). */
 #define DEFAULT_HOVER_HEIGHT_M 0.30F
@@ -342,19 +342,19 @@
  * 1 = LQG ajustado: Kd e Kfd do mesmo projeto do TCC com Q mais firme em altura
  * e atitude (tools/lqg_ajustado.py); o Kalman continua o do Simulink.
  */
-#define DEFAULT_CTL_LQG_AJ     1.0F
+#define DEFAULT_CTL_LQG_AJ   1.0F
 /**
  * 1 = estimador de perturbação ("LQG melhorado", control/lqg_dist.h): o
  * Kalman também estima o hover errado e os desequilíbrios, e o controle os
  * cancela.
  */
-#define DEFAULT_CTL_DIST       1.0F
+#define DEFAULT_CTL_DIST     1.0F
 /**
  * Maior perturbação estimada de cada canal, em rad/s por motor. Era 250, o
  * limite que dividia com o LQI; com o chumbo (550 g, 06/11) o hover passou
  * do CTL_W0 do painel por mais que isso e o drone não saía do efeito solo.
  */
-#define DEFAULT_CTL_DIST_MAX   400.0F
+#define DEFAULT_CTL_DIST_MAX 400.0F
 
 /**
  * Desequilíbrio frente/trás fixo somado aos motores desde a decolagem, em
@@ -364,13 +364,13 @@
  * parou perto de θ = −22 e φ = −40 rad/s. Usa-se o valor conservador de θ
  * anterior à integração Pi; o estimador continua livre para corrigir o restante.
  */
-#define DEFAULT_CTL_FF_TH      (-20.0F)
+#define DEFAULT_CTL_FF_TH  (-20.0F)
 /**
  * Desequilíbrio esquerda/direita fixo, em rad/s (+ na esquerda; mesmo padrão do
  * φ do estimador). Nos hovers de 06/11 o estimador parou em −40 em todos os
  * voos; sem isso o drone sai para um lado ao subir, até ele aprender.
  */
-#define DEFAULT_CTL_FF_PHI     (-40.0F)
+#define DEFAULT_CTL_FF_PHI (-40.0F)
 /**
  * Torque de guinada fixo, em rad/s (mesmo padrão do ψ do estimador). Nos voos
  * de 06/11 com o estimador de guinada, ele parou em +49 a +61.
@@ -378,78 +378,78 @@
  * Desligado por padrão: o torque fixo de guinada não foi qualificado no voo
  * livre desta integração. Pode ser testado isoladamente com CTL_FF_PSI.
  */
-#define DEFAULT_CTL_FF_PSI     0.0F
+#define DEFAULT_CTL_FF_PSI 0.0F
 
 /** 1 = liga o ajuste lento (CTL_TRIM). Padrão desligado: o painel liga. */
-#define DEFAULT_CTL_TRIM       0.0F
+#define DEFAULT_CTL_TRIM         0.0F
 /**
  * Ganho do hover, em rad/s por (m·s). Acima de ~50 a malha de altura oscila.
  */
-#define DEFAULT_TRIM_KI_Z      20.0F
+#define DEFAULT_TRIM_KI_Z        20.0F
 /** Ganho do equilíbrio de arfagem e rolagem, em rad/s por (rad·s). */
-#define DEFAULT_TRIM_KI_ATT    80.0F
+#define DEFAULT_TRIM_KI_ATT      80.0F
 /**
  * Limite do termo de hover, em rad/s. No ensaio de 04/11 o hover médio passou
  * de 850 rad/s (48% de aceleração) sem o drone levantar por inteiro.
  */
-#define DEFAULT_TRIM_MAX       250.0F
+#define DEFAULT_TRIM_MAX         250.0F
 /**
  * Limite de cada termo de equilíbrio (arfagem e rolagem), em rad/s. No ensaio
  * de 04/11 a traseira precisou de ~125 rad/s a mais de cada lado (14% de
  * aceleração entre traseira e frente) e o limite de 120 saturou.
  */
-#define DEFAULT_TRIM_ATT_MAX   250.0F
+#define DEFAULT_TRIM_ATT_MAX     250.0F
 /**
  * Rampa do hover enquanto o drone ainda não se soltou do chão, em rad/s por s:
  * sem ela, sair do chão levaria dezenas de segundos. Era 10: com o CTL_W0
  * 350 abaixo do hover, o voo de 50 cm de 06/11 levou 13 s para sair do chão.
  * Para no desprendimento, então a folga ao sair é de poucos rad/s.
  */
-#define TRIM_GROUND_RATE       20.0F
+#define TRIM_GROUND_RATE         20.0F
 /** Altura acima do chão (estimada) que marca o desprendimento, em m. */
-#define TRIM_RELEASE_HEIGHT_M  0.010F
+#define TRIM_RELEASE_HEIGHT_M    0.010F
 /**
  * No ar, o erro de ângulo integrado pelo equilíbrio fica limitado a ± isto, em
  * rad (~4,6°). Em simulação, um empurrão que inclina o drone e some reduziu o
  * rebote de +57° para +12° com este limite.
  */
-#define TRIM_ATT_ERROR_MAX_RAD 0.08F
+#define TRIM_ATT_ERROR_MAX_RAD   0.08F
 /**
  * O equilíbrio é guardado para o próximo voo só com |φ| e |θ| abaixo disto,
  * em rad (~2°), com o drone no ar e assentado.
  */
-#define TRIM_LEARN_LEVEL_RAD   0.035F
+#define TRIM_LEARN_LEVEL_RAD     0.035F
 /**
  * ... e só em HOLD com a altura medida a menos disto do alvo, em m. Na
  * decolagem presa nas cordinhas (05/11) ele guardou θ = −128 e φ = −10 rad/s,
  * contra cerca de −85 e 0 do hover de verdade, e o voo seguinte saía torto.
  */
-#define TRIM_LEARN_Z_ERROR_M   0.015F
+#define TRIM_LEARN_Z_ERROR_M     0.015F
 /** O hover só integra no ar com |vz| abaixo disto, em m/s. */
-#define TRIM_SETTLED_VZ        0.05F
+#define TRIM_SETTLED_VZ          0.05F
 /** Começa em ensaio a seco: os motores só giram depois de FLT_DRY_RUN = 0. */
-#define DEFAULT_DRY_RUN        1.0F
+#define DEFAULT_DRY_RUN          1.0F
 /**
  * 1 = drone simulado (control/sim_plant.h): motores parados e as medidas vêm
  * do modelo do TCC controlado pelo próprio LQG. Para testar a comunicação com
  * a Pi na bancada.
  */
-#define DEFAULT_FLT_SIM        0.0F
+#define DEFAULT_FLT_SIM          0.0F
 /**
  * Decolagem e trechos só terminam (e o drone só aceita o próximo trecho)
  * depois de ficar este tempo seguido dentro da tolerância e parado, em ms.
  */
-#define FLIGHT_SETTLE_MS       1000U
+#define FLIGHT_SETTLE_MS         1000U
 /** Velocidade (vx, vy, vz) abaixo da qual o drone está parado, em m/s. */
-#define FLIGHT_SETTLE_SPEED_M_S 0.05F
+#define FLIGHT_SETTLE_SPEED_M_S  0.05F
 /** Taxa angular (p, q, r) abaixo da qual o drone está parado, em rad/s. */
 #define FLIGHT_SETTLE_RATE_RAD_S 0.1F
 
 /* ---- Telemetria --------------------------------------------------------- */
 
 /** Taxa do DRONE_CTRL_DEBUG para a Pi, em Hz (0 = desligado até pedirem). */
-#define DEFAULT_DEBUG_RATE_HZ  0.0F
+#define DEFAULT_DEBUG_RATE_HZ 0.0F
 /** Taxa da linha EST no log USB, em Hz. */
-#define DEFAULT_LOG_EST_HZ     10.0F
+#define DEFAULT_LOG_EST_HZ    10.0F
 
 #endif

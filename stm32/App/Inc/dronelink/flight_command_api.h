@@ -36,7 +36,7 @@ typedef enum {
 } flight_action_t;
 
 /** Referencial do corpo: x frente, y direita, z baixo (MAV_FRAME_BODY_FRD). */
-#define FLIGHT_FRAME_BODY_FRD 12U
+#define FLIGHT_FRAME_BODY_FRD  12U
 /** Referencial local fixo no ponto em que armou (MAV_FRAME_LOCAL_FRD). */
 #define FLIGHT_FRAME_LOCAL_FRD 20U
 

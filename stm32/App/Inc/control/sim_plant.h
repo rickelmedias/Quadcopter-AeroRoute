@@ -27,8 +27,8 @@
 
 /** @brief Estado do drone simulado. */
 typedef struct {
-  lqg_real_t x[LQG_NX];  /**< Estado no referencial do modelo (x y z φ θ ψ vx vy vz p q r). */
-  float ground_z;        /**< z (NED) do chão, em m. */
+  lqg_real_t x[LQG_NX]; /**< Estado no referencial do modelo (x y z φ θ ψ vx vy vz p q r). */
+  float ground_z;       /**< z (NED) do chão, em m. */
 } sim_plant_t;
 
 /**

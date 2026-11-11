@@ -5,14 +5,26 @@ mesmo eixo de tempo (desde a decolagem) - altura, XY, inclinação, guinada e
 motores - com as fases do voo e a janela de hover sombreadas. Grava
 ``grafico.png`` na pasta do ensaio.
 """
+
 from __future__ import annotations
 
 import json
 import math
 from pathlib import Path
 
-from .hover_report import (ARMED, DEG, HOLD, LAND, LEG, MOTOR_OF_INPUT, SETTLE_S, TAKEOFF,
-                           analyze, load_samples, load_texts)
+from .hover_report import (
+    ARMED,
+    DEG,
+    HOLD,
+    LAND,
+    LEG,
+    MOTOR_OF_INPUT,
+    SETTLE_S,
+    TAKEOFF,
+    analyze,
+    load_samples,
+    load_texts,
+)
 
 #: Cores das séries, em ordem fixa (paleta categórica validada para daltonismo).
 SERIES = ('#2a78d6', '#eb6834', '#1baf7a', '#eda100')
@@ -58,8 +70,13 @@ def plot_folder(folder: Path, out: Path | None = None) -> Path:
     t = [s.t - t_takeoff for s in samples]
     states = [s.state for s in samples]
 
-    fig, axes = plt.subplots(5, 1, figsize=(11, 11.5), sharex=True,
-                             gridspec_kw={'height_ratios': [1.3, 1.1, 1, 0.8, 1.1]})
+    fig, axes = plt.subplots(
+        5,
+        1,
+        figsize=(11, 11.5),
+        sharex=True,
+        gridspec_kw={'height_ratios': [1.3, 1.1, 1, 0.8, 1.1]},
+    )
     for ax in axes:
         for state, a, b in _spans(t, states):
             if state in PHASE_COLORS:
@@ -75,14 +92,28 @@ def plot_folder(folder: Path, out: Path | None = None) -> Path:
     if reached is not None:
         for ax in axes:
             ax.axvline(reached + SETTLE_S, color=NEUTRAL, lw=0.8, ls=':')
-        axes[-1].annotate('início da janela', (reached + SETTLE_S, 0.0),
-                          xycoords=('data', 'axes fraction'), fontsize=7, color=NEUTRAL,
-                          ha='left', va='bottom', xytext=(3, 2), textcoords='offset points')
+        axes[-1].annotate(
+            'início da janela',
+            (reached + SETTLE_S, 0.0),
+            xycoords=('data', 'axes fraction'),
+            fontsize=7,
+            color=NEUTRAL,
+            ha='left',
+            va='bottom',
+            xytext=(3, 2),
+            textcoords='offset points',
+        )
     for state, a, b in _spans(t, states):
         if state in PHASE_NAMES and b - a > 1.0:
-            axes[0].annotate(PHASE_NAMES[state], ((a + b) / 2, 1.0),
-                             xycoords=('data', 'axes fraction'), fontsize=7, color=NEUTRAL,
-                             ha='center', va='bottom')
+            axes[0].annotate(
+                PHASE_NAMES[state],
+                ((a + b) / 2, 1.0),
+                xycoords=('data', 'axes fraction'),
+                fontsize=7,
+                color=NEUTRAL,
+                ha='center',
+                va='bottom',
+            )
 
     lw = 1.1
     ax = axes[0]
@@ -119,8 +150,13 @@ def plot_folder(folder: Path, out: Path | None = None) -> Path:
     # Na ordem dos motores físicos (M1..M4), não das entradas do modelo.
     order = sorted(range(4), key=lambda i: MOTOR_OF_INPUT[i])
     for k, i in enumerate(order):
-        ax.plot(t, [s.thr[i] * 100 for s in samples], color=SERIES[k], lw=lw,
-                label=f'M{MOTOR_OF_INPUT[i]}')
+        ax.plot(
+            t,
+            [s.thr[i] * 100 for s in samples],
+            color=SERIES[k],
+            lw=lw,
+            label=f'M{MOTOR_OF_INPUT[i]}',
+        )
     ax.set_ylabel('motores (%)', fontsize=9)
     ax.set_xlabel('tempo desde a decolagem (s)', fontsize=9)
     ax.legend(**LEGEND)
@@ -133,8 +169,10 @@ def plot_folder(folder: Path, out: Path | None = None) -> Path:
     if 'height' in m:
         sub.append(f"h RMS {m['height']['err_rms_cm']} cm")
     if 'xy' in m:
-        sub.append(f"XY médio ({m['xy']['mean_cm'][0]:+}, {m['xy']['mean_cm'][1]:+}) cm, "
-                   f"RMS {m['xy']['rms_cm']} cm")
+        sub.append(
+            f"XY médio ({m['xy']['mean_cm'][0]:+}, {m['xy']['mean_cm'][1]:+}) cm, "
+            f"RMS {m['xy']['rms_cm']} cm"
+        )
     if 'attitude' in m:
         sub.append(f"φ {m['attitude']['phi_mean_deg']:+}°  θ {m['attitude']['theta_mean_deg']:+}°")
     fig.suptitle(title, fontsize=10, x=0.01, ha='left', y=0.995)

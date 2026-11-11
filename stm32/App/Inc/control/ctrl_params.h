@@ -205,10 +205,10 @@ typedef struct {
 
 /** @brief Resultado de ::ctrl_params_set(). */
 typedef enum {
-  CTRL_PARAM_OK = 0,        /**< Valor aplicado. */
-  CTRL_PARAM_UNKNOWN,       /**< Índice ou nome inexistente. */
-  CTRL_PARAM_OUT_OF_RANGE,  /**< Fora de [min, max] ou não finito. */
-  CTRL_PARAM_LOCKED         /**< Só pode mudar desarmado. */
+  CTRL_PARAM_OK = 0,       /**< Valor aplicado. */
+  CTRL_PARAM_UNKNOWN,      /**< Índice ou nome inexistente. */
+  CTRL_PARAM_OUT_OF_RANGE, /**< Fora de [min, max] ou não finito. */
+  CTRL_PARAM_LOCKED        /**< Só pode mudar desarmado. */
 } ctrl_param_status_t;
 
 /** @brief Põe todos os parâmetros no valor padrão. */

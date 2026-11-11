@@ -39,10 +39,10 @@
 
 /** @brief Medidas válidas neste passo (mesmos bits de DRONE_MEAS_FLAG). */
 typedef enum {
-  MEAS_ATTITUDE = 1U << 0,  /**< φ, θ, ψ do BNO08x. */
-  MEAS_GYRO = 1U << 1,      /**< p, q, r do BNO08x. */
-  MEAS_RANGE = 1U << 2,     /**< z do MTF-01. */
-  MEAS_FLOW = 1U << 3       /**< vx, vy do MTF-01. */
+  MEAS_ATTITUDE = 1U << 0, /**< φ, θ, ψ do BNO08x. */
+  MEAS_GYRO = 1U << 1,     /**< p, q, r do BNO08x. */
+  MEAS_RANGE = 1U << 2,    /**< z do MTF-01. */
+  MEAS_FLOW = 1U << 3      /**< vx, vy do MTF-01. */
 } meas_flags_t;
 
 /** @brief Leituras cruas de um passo, já copiadas dos drivers. */
@@ -97,14 +97,14 @@ typedef struct {
 
 /** @brief Bits de ::meas_diag_t::flags (o que o EKF de navegação fez neste passo). */
 typedef enum {
-  MEAS_DIAG_NEW_FRAME = 1U << 0,       /**< Chegou quadro novo do MTF. */
-  MEAS_DIAG_FLOW_FUSED = 1U << 1,      /**< Velocidade do fluxo fundida no EKF. */
-  MEAS_DIAG_FLOW_REJECTED = 1U << 2,   /**< Velocidade do fluxo recusada pelo gate. */
-  MEAS_DIAG_XY_USABLE = 1U << 3,       /**< Velocidade x, y do EKF convergida e recente. */
-  MEAS_DIAG_XY_TO_LQG = 1U << 4,       /**< O LQG recebeu a velocidade do EKF (FLOW_EKF). */
-  MEAS_DIAG_RANGE_REJECTED = 1U << 5,  /**< Distância recusada pelo filtro de distância. */
-  MEAS_DIAG_Z_REJECTED = 1U << 6,      /**< Altura recusada pelo gate do EKF. */
-  MEAS_DIAG_Z_USABLE = 1U << 7         /**< z do EKF recente. */
+  MEAS_DIAG_NEW_FRAME = 1U << 0,      /**< Chegou quadro novo do MTF. */
+  MEAS_DIAG_FLOW_FUSED = 1U << 1,     /**< Velocidade do fluxo fundida no EKF. */
+  MEAS_DIAG_FLOW_REJECTED = 1U << 2,  /**< Velocidade do fluxo recusada pelo gate. */
+  MEAS_DIAG_XY_USABLE = 1U << 3,      /**< Velocidade x, y do EKF convergida e recente. */
+  MEAS_DIAG_XY_TO_LQG = 1U << 4,      /**< O LQG recebeu a velocidade do EKF (FLOW_EKF). */
+  MEAS_DIAG_RANGE_REJECTED = 1U << 5, /**< Distância recusada pelo filtro de distância. */
+  MEAS_DIAG_Z_REJECTED = 1U << 6,     /**< Altura recusada pelo gate do EKF. */
+  MEAS_DIAG_Z_USABLE = 1U << 7        /**< z do EKF recente. */
 } meas_diag_flag_t;
 
 /** Bit extra (fora do uint8 de telemetria): o LQG recebeu o z do EKF (Z_EKF). */
@@ -112,13 +112,13 @@ typedef enum {
 
 /** @brief O que o EKF de navegação viu neste passo, para a telemetria. */
 typedef struct {
-  float flow_raw[2];   /**< Fluxo do MTF, x e y do sensor, em rad/s. */
-  float flow_body[2];  /**< Velocidade do fluxo nos eixos do corpo (frente, direita), em m/s. */
-  float range_raw;     /**< Distância lida, em m. */
-  float range_filt;    /**< Distância filtrada, em m. */
-  float accel[3];      /**< Aceleração usada na predição: x, y locais e para baixo, em m/s². */
-  uint16_t flags;      /**< Combinação de ::meas_diag_flag_t e ::MEAS_DIAG_Z_TO_LQG. */
-  uint8_t quality;     /**< Qualidade do fluxo, 0..255. */
+  float flow_raw[2];  /**< Fluxo do MTF, x e y do sensor, em rad/s. */
+  float flow_body[2]; /**< Velocidade do fluxo nos eixos do corpo (frente, direita), em m/s. */
+  float range_raw;    /**< Distância lida, em m. */
+  float range_filt;   /**< Distância filtrada, em m. */
+  float accel[3];     /**< Aceleração usada na predição: x, y locais e para baixo, em m/s². */
+  uint16_t flags;     /**< Combinação de ::meas_diag_flag_t e ::MEAS_DIAG_Z_TO_LQG. */
+  uint8_t quality;    /**< Qualidade do fluxo, 0..255. */
 } meas_diag_t;
 
 /** @brief Estado da conversão (referência da guinada e última medida). */

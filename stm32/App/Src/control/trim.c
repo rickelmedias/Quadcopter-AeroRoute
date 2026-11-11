@@ -13,8 +13,10 @@ static const float PHI_SIGN[TRIM_INPUTS] = {+1.0F, -1.0F, -1.0F, +1.0F};
 
 /** @brief Limita @p v a [-limit, limit]. */
 static float clamp(float v, float limit) {
-  if (v > limit) return limit;
-  if (v < -limit) return -limit;
+  if (v > limit)
+    return limit;
+  if (v < -limit)
+    return -limit;
   return v;
 }
 
@@ -27,9 +29,10 @@ void trim_reset(trim_state_t *t) {
 /** Erro de altura que ainda conta como "alvo acima", em m, para a rampa de partida. */
 #define GROUND_ERROR_M 0.02F
 
-void trim_update(trim_state_t *t, const trim_config_t *cfg, bool enabled, float dt,
-                 bool grounded, float vz, float z_error, float phi, float theta) {
-  if (!enabled || !isfinite(z_error) || !isfinite(phi) || !isfinite(theta)) return;
+void trim_update(trim_state_t *t, const trim_config_t *cfg, bool enabled, float dt, bool grounded,
+                 float vz, float z_error, float phi, float theta) {
+  if (!enabled || !isfinite(z_error) || !isfinite(phi) || !isfinite(theta))
+    return;
   /* Abaixo do alvo (z_error > 0) pede mais rotação. Nariz para cima (theta > 0)
      pede menos na frente; lado direito para baixo (phi > 0) pede menos na esquerda. */
   /* No ar, a altura só integra com o drone assentado: enquanto sobe ou desce
@@ -44,7 +47,8 @@ void trim_update(trim_state_t *t, const trim_config_t *cfg, bool enabled, float 
      iria para o lado leve (ensaio de 04/11: a frente subiu e a traseira
      voltou ao chão). O hover então só pode descer até elas saírem do limite. */
   const bool attitude_at_limit = fabsf(t->theta) >= cfg->max_att || fabsf(t->phi) >= cfg->max_att;
-  if (attitude_at_limit && z_step > 0.0F) z_step = 0.0F;
+  if (attitude_at_limit && z_step > 0.0F)
+    z_step = 0.0F;
   t->z = clamp(t->z + z_step, cfg->max_z);
   const float theta_used = grounded ? theta : clamp(theta, cfg->att_error_max);
   const float phi_used = grounded ? phi : clamp(phi, cfg->att_error_max);

@@ -39,15 +39,15 @@
 #include <stdbool.h>
 
 /** Número de estados. */
-#define LQG_NX 12U
+#define LQG_NX    12U
 /** Número de entradas (motores). */
-#define LQG_NU 4U
+#define LQG_NU    4U
 /** Número de medidas. */
-#define LQG_NY 9U
+#define LQG_NY    9U
 /** Número de referências. */
-#define LQG_NR 4U
+#define LQG_NR    4U
 /** Período de amostragem do modelo, em s (taxa base do Simulink: 100 Hz). */
-#define LQG_TS_S 0.01
+#define LQG_TS_S  0.01
 /** Período de amostragem do modelo, em ms. */
 #define LQG_TS_MS 10U
 
@@ -68,39 +68,39 @@ typedef double lqg_real_t;
 
 /** @brief Índices do vetor de estados (eixos NED, desvios do hover). */
 typedef enum {
-  LQG_X_X = 0,   /**< Posição x (frente), em m. */
-  LQG_X_Y,       /**< Posição y (direita), em m. */
-  LQG_X_Z,       /**< Posição z (para baixo), em m. Altura h = -z. */
-  LQG_X_PHI,     /**< Rolagem φ, em rad. */
-  LQG_X_THETA,   /**< Arfagem θ, em rad. */
-  LQG_X_PSI,     /**< Guinada ψ, em rad. */
-  LQG_X_VX,      /**< Velocidade vx, em m/s. */
-  LQG_X_VY,      /**< Velocidade vy, em m/s. */
-  LQG_X_VZ,      /**< Velocidade vz, em m/s. */
-  LQG_X_P,       /**< Velocidade angular p, em rad/s. */
-  LQG_X_Q,       /**< Velocidade angular q, em rad/s. */
-  LQG_X_R        /**< Velocidade angular r, em rad/s. */
+  LQG_X_X = 0, /**< Posição x (frente), em m. */
+  LQG_X_Y,     /**< Posição y (direita), em m. */
+  LQG_X_Z,     /**< Posição z (para baixo), em m. Altura h = -z. */
+  LQG_X_PHI,   /**< Rolagem φ, em rad. */
+  LQG_X_THETA, /**< Arfagem θ, em rad. */
+  LQG_X_PSI,   /**< Guinada ψ, em rad. */
+  LQG_X_VX,    /**< Velocidade vx, em m/s. */
+  LQG_X_VY,    /**< Velocidade vy, em m/s. */
+  LQG_X_VZ,    /**< Velocidade vz, em m/s. */
+  LQG_X_P,     /**< Velocidade angular p, em rad/s. */
+  LQG_X_Q,     /**< Velocidade angular q, em rad/s. */
+  LQG_X_R      /**< Velocidade angular r, em rad/s. */
 } lqg_x_t;
 
 /** @brief Índices do vetor de medidas, na ordem da matriz C do modelo. */
 typedef enum {
-  LQG_Y_Z = 0,   /**< Altura medida pelo MTF-01, como z NED (m). */
-  LQG_Y_PHI,     /**< Rolagem do BNO08x (rad). */
-  LQG_Y_THETA,   /**< Arfagem do BNO08x (rad). */
-  LQG_Y_PSI,     /**< Guinada do BNO08x (rad), relativa ao início. */
-  LQG_Y_VX,      /**< Velocidade x do fluxo óptico (m/s). */
-  LQG_Y_VY,      /**< Velocidade y do fluxo óptico (m/s). */
-  LQG_Y_P,       /**< Giroscópio p (rad/s). */
-  LQG_Y_Q,       /**< Giroscópio q (rad/s). */
-  LQG_Y_R        /**< Giroscópio r (rad/s). */
+  LQG_Y_Z = 0, /**< Altura medida pelo MTF-01, como z NED (m). */
+  LQG_Y_PHI,   /**< Rolagem do BNO08x (rad). */
+  LQG_Y_THETA, /**< Arfagem do BNO08x (rad). */
+  LQG_Y_PSI,   /**< Guinada do BNO08x (rad), relativa ao início. */
+  LQG_Y_VX,    /**< Velocidade x do fluxo óptico (m/s). */
+  LQG_Y_VY,    /**< Velocidade y do fluxo óptico (m/s). */
+  LQG_Y_P,     /**< Giroscópio p (rad/s). */
+  LQG_Y_Q,     /**< Giroscópio q (rad/s). */
+  LQG_Y_R      /**< Giroscópio r (rad/s). */
 } lqg_y_t;
 
 /** @brief Índices do vetor de referência (entrada In1 do modelo). */
 typedef enum {
-  LQG_R_X = 0,   /**< Posição x desejada (m). */
-  LQG_R_Y,       /**< Posição y desejada (m). */
-  LQG_R_Z,       /**< Posição z desejada (m, NED: negativa acima do chão). */
-  LQG_R_PSI      /**< Guinada desejada (rad). */
+  LQG_R_X = 0, /**< Posição x desejada (m). */
+  LQG_R_Y,     /**< Posição y desejada (m). */
+  LQG_R_Z,     /**< Posição z desejada (m, NED: negativa acima do chão). */
+  LQG_R_PSI    /**< Guinada desejada (rad). */
 } lqg_ref_t;
 
 /**
@@ -157,9 +157,8 @@ void lqg_ert_init(lqg_ert_t *s);
  * @param[in]     r   Referência (::lqg_ref_t).
  * @param[out]    du  Desvio da rotação de cada motor, em rad/s.
  */
-void lqg_ert_output(lqg_ert_t *s, const lqg_gains_t *g,
-                    const lqg_real_t y[LQG_NY], const lqg_real_t r[LQG_NR],
-                    lqg_real_t du[LQG_NU]);
+void lqg_ert_output(lqg_ert_t *s, const lqg_gains_t *g, const lqg_real_t y[LQG_NY],
+                    const lqg_real_t r[LQG_NR], lqg_real_t du[LQG_NU]);
 
 /**
  * @brief Predição do Kalman (segunda metade do passo).
@@ -173,8 +172,7 @@ void lqg_ert_output(lqg_ert_t *s, const lqg_gains_t *g,
  *                            é o próprio du (como no Simulink); no ensaio a
  *                            seco, com os motores parados, é zero.
  */
-void lqg_ert_update(lqg_ert_t *s, const lqg_gains_t *g,
-                    const lqg_real_t du_applied[LQG_NU]);
+void lqg_ert_update(lqg_ert_t *s, const lqg_gains_t *g, const lqg_real_t du_applied[LQG_NU]);
 
 /**
  * @brief Um passo completo, idêntico a `STM32_step()`.
@@ -185,8 +183,7 @@ void lqg_ert_update(lqg_ert_t *s, const lqg_gains_t *g,
  * @param[in]     r   Referência.
  * @param[out]    du  Saída Out1 do modelo.
  */
-void lqg_ert_step(lqg_ert_t *s, const lqg_gains_t *g,
-                  const lqg_real_t y[LQG_NY], const lqg_real_t r[LQG_NR],
-                  lqg_real_t du[LQG_NU]);
+void lqg_ert_step(lqg_ert_t *s, const lqg_gains_t *g, const lqg_real_t y[LQG_NY],
+                  const lqg_real_t r[LQG_NR], lqg_real_t du[LQG_NU]);
 
 #endif

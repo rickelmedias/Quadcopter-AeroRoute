@@ -1,4 +1,5 @@
 """Testes dos algoritmos de rota (dronectl/rotas.py). Não precisam do drone."""
+
 import itertools
 import os
 import sys
@@ -21,8 +22,9 @@ class RotasTest(unittest.TestCase):
     def test_forca_bruta_igual_ao_held_karp(self):
         for semente in range(1, 4):
             p = rotas.pontos_aleatorios(9, semente)
-            self.assertAlmostEqual(rotas.custo(rotas.forca_bruta(p), p),
-                                   rotas.custo(rotas.held_karp(p), p), places=6)
+            self.assertAlmostEqual(
+                rotas.custo(rotas.forca_bruta(p), p), rotas.custo(rotas.held_karp(p), p), places=6
+            )
 
     def test_todos_dao_permutacao_e_nunca_abaixo_do_otimo(self):
         for n in (3, 6, 9, 12):
@@ -55,8 +57,10 @@ class RotasTest(unittest.TestCase):
         self.assertTrue(all(30 <= z <= 150 for _, _, z in p))
         # Mesmo xy, alturas diferentes: a ordem ótima muda com o z.
         pts = [(100, 0, 50), (100, 0, 150), (200, 0, 50)]
-        self.assertAlmostEqual(rotas.custo(rotas.held_karp(pts), pts),
-                               min(rotas.custo(list(o), pts) for o in itertools.permutations(range(3))))
+        self.assertAlmostEqual(
+            rotas.custo(rotas.held_karp(pts), pts),
+            min(rotas.custo(list(o), pts) for o in itertools.permutations(range(3))),
+        )
 
     def test_multipartida_e_ordenar(self):
         p = rotas.pontos_aleatorios(12, 4)
@@ -68,13 +72,16 @@ class RotasTest(unittest.TestCase):
                 continue
             self.assertEqual(rotas.ordenar(nome, p), rotas.ALGORITMOS[nome](p), nome)
         origem = (50.0, -50.0, 120.0)
-        self.assertLessEqual(rotas.custo(rotas.ordenar('exato', p, origem), p, origem),
-                             rotas.custo(rotas.ordenar('guloso', p, origem), p, origem) + 1e-9)
+        self.assertLessEqual(
+            rotas.custo(rotas.ordenar('exato', p, origem), p, origem),
+            rotas.custo(rotas.ordenar('guloso', p, origem), p, origem) + 1e-9,
+        )
 
 
 class LimiteExatoTest(unittest.TestCase):
     def test_mede_em_processo_separado(self):
         from dronectl import rotas_limite
+
         m = rotas_limite.medir(7)
         p = rotas.pontos_aleatorios(7, 1)
         self.assertAlmostEqual(m['custo_cm'], rotas.custo(rotas.held_karp(p), p), places=6)
@@ -82,9 +89,11 @@ class LimiteExatoTest(unittest.TestCase):
 
     def test_para_no_limite_de_memoria(self):
         from dronectl import rotas_limite
+
         # Limite minúsculo: com 9 pontos o Held-Karp já passaria de 0,04 MB.
-        r = rotas_limite.rodar(n_max=12, mem_max_mb=0.04, escrever=lambda *_: None,
-                              forca_tempo_max_s=0.05)
+        r = rotas_limite.rodar(
+            n_max=12, mem_max_mb=0.04, escrever=lambda *_: None, forca_tempo_max_s=0.05
+        )
         self.assertGreaterEqual(r['forca_bruta']['ultimo_medido'], 5)
         self.assertIn('Força bruta', rotas_limite.markdown(r))
         self.assertEqual(r['parou_em'], 9)

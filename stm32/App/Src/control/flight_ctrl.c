@@ -40,76 +40,76 @@
 #include <string.h>
 
 /** Passos seguidos sem BNO que disparam o failsafe (50 ms). */
-#define BNO_TIMEOUT_STEPS 5U
+#define BNO_TIMEOUT_STEPS     5U
 /** Tempo sem telêmetro, em voo, que dispara o pouso, em ms. */
-#define MTF_LOST_MS 300U
+#define MTF_LOST_MS           300U
 /** Tempo em MOT_IDLE depois de armar, antes de a decolagem começar, em ms. */
-#define SPINUP_MS 1000U
+#define SPINUP_MS             1000U
 /** Armado no chão sem decolar por este tempo, desarma, em ms. */
 #define ARMED_IDLE_TIMEOUT_MS 15000U
 /** Tempo perto do chão que encerra o pouso, em ms. */
-#define LAND_TOUCH_MS 500U
+#define LAND_TOUCH_MS         500U
 /** Pouso sem telêmetro: tempo extra depois de a rampa chegar ao chão, em ms. */
-#define LAND_BLIND_EXTRA_MS 3000U
+#define LAND_BLIND_EXTRA_MS   3000U
 /** Menor velocidade de descida no pouso, em m/s (FLT_Z_RATE = 0 seria um degrau). */
-#define LAND_MIN_RATE_M_S FLIGHT_LAND_MIN_RATE_M_S
+#define LAND_MIN_RATE_M_S     FLIGHT_LAND_MIN_RATE_M_S
 /** Tolerância padrão de posição para concluir decolagem e trechos, em m. */
-#define DEFAULT_POS_TOL_M 0.05F
+#define DEFAULT_POS_TOL_M     0.05F
 /** Tolerância padrão de guinada, em rad. */
-#define DEFAULT_YAW_TOL_RAD 0.05F
+#define DEFAULT_YAW_TOL_RAD   0.05F
 /** Intervalo mínimo entre avisos de fluxo do MTF ausente com o XY ligado, em ms. */
-#define FLOW_LOST_REPORT_MS 2000U
+#define FLOW_LOST_REPORT_MS   2000U
 /** Erro de altura que ainda conta como "alvo acima" para a rampa do estimador no chão, em m. */
-#define DIST_GROUND_ERROR_M 0.02F
+#define DIST_GROUND_ERROR_M   0.02F
 /** Intervalo do relato do trim no log, em ms. */
-#define TRIM_REPORT_MS 2000U
+#define TRIM_REPORT_MS        2000U
 /** Pedidos que cabem na fila. */
-#define REQUEST_QUEUE_DEPTH 4U
+#define REQUEST_QUEUE_DEPTH   4U
 /** Mensagens do voo esperando o DroneLink (as mais antigas saem quando enche). */
-#define TEXT_QUEUE_DEPTH 8U
+#define TEXT_QUEUE_DEPTH      8U
 /** Tamanho de cada mensagem guardada para a Pi (o STATUSTEXT leva 50). */
-#define TEXT_LEN 51U
+#define TEXT_LEN              51U
 /** Distância máxima do ponto de decolagem aceita em um setpoint, em m. */
-#define SETPOINT_XY_MAX_M 3.0F
+#define SETPOINT_XY_MAX_M     3.0F
 /** Período do passo, em s. */
-#define DT_S ((float)LQG_TS_S)
+#define DT_S                  ((float)LQG_TS_S)
 
 /** @brief Tipos de pedido vindos de outras tasks. */
 typedef enum {
-  REQ_ARM,      /**< Armar. */
-  REQ_DISARM,   /**< Desarmar. */
-  REQ_TAKEOFF,  /**< Decolar. */
-  REQ_LEG,      /**< Executar um trecho. */
-  REQ_HOLD,     /**< Parar e manter. */
-  REQ_LAND,     /**< Pousar. */
-  REQ_CANCEL,   /**< Cancelar o trecho ativo. */
-  REQ_XY_ZERO   /**< Zerar a posição horizontal: o ponto atual vira o (0, 0). */
+  REQ_ARM,     /**< Armar. */
+  REQ_DISARM,  /**< Desarmar. */
+  REQ_TAKEOFF, /**< Decolar. */
+  REQ_LEG,     /**< Executar um trecho. */
+  REQ_HOLD,    /**< Parar e manter. */
+  REQ_LAND,    /**< Pousar. */
+  REQ_CANCEL,  /**< Cancelar o trecho ativo. */
+  REQ_XY_ZERO  /**< Zerar a posição horizontal: o ponto atual vira o (0, 0). */
 } request_type_t;
 
 /** @brief Pedido na fila. */
 typedef struct {
-  request_type_t type;      /**< Tipo do pedido. */
-  flight_origin_t origin;   /**< REQ_ARM. */
-  bool dry;                 /**< REQ_ARM: ensaio a seco. */
-  float height;             /**< REQ_TAKEOFF: altura, em m. */
-  float pos_tol;            /**< REQ_TAKEOFF: tolerância, em m (0 = padrão). */
-  uint32_t timeout_ms;      /**< REQ_TAKEOFF: tempo máximo (0 = sem limite). */
-  flight_leg_t leg;         /**< REQ_LEG. */
-  bool height_mode;         /**< REQ_LEG: leg.z é a altura acima do chão, não o z local. */
-  flight_reason_t reason;   /**< REQ_HOLD e REQ_LAND. */
-  const char *why;          /**< REQ_DISARM. */
+  request_type_t type;    /**< Tipo do pedido. */
+  flight_origin_t origin; /**< REQ_ARM. */
+  bool dry;               /**< REQ_ARM: ensaio a seco. */
+  float height;           /**< REQ_TAKEOFF: altura, em m. */
+  float pos_tol;          /**< REQ_TAKEOFF: tolerância, em m (0 = padrão). */
+  uint32_t timeout_ms;    /**< REQ_TAKEOFF: tempo máximo (0 = sem limite). */
+  flight_leg_t leg;       /**< REQ_LEG. */
+  bool height_mode;       /**< REQ_LEG: leg.z é a altura acima do chão, não o z local. */
+  flight_reason_t reason; /**< REQ_HOLD e REQ_LAND. */
+  const char *why;        /**< REQ_DISARM. */
 } request_t;
 
 /** @brief Alvo em andamento (decolagem, trecho ou pouso). */
 typedef struct {
-  bool active;              /**< Há um alvo sendo perseguido. */
-  float target[LQG_NR];     /**< Referência final. */
-  float speed_xy;           /**< Rampa horizontal, em m/s (0 = degrau). */
-  float pos_tol;            /**< Tolerância de posição, em m. */
-  float yaw_tol;            /**< Tolerância de guinada, em rad. */
-  bool check_xy;            /**< Conferir x e y ao concluir (não na decolagem). */
-  uint32_t start_ms;        /**< Início. */
-  uint32_t timeout_ms;      /**< Tempo máximo (0 = sem limite). */
+  bool active;          /**< Há um alvo sendo perseguido. */
+  float target[LQG_NR]; /**< Referência final. */
+  float speed_xy;       /**< Rampa horizontal, em m/s (0 = degrau). */
+  float pos_tol;        /**< Tolerância de posição, em m. */
+  float yaw_tol;        /**< Tolerância de guinada, em rad. */
+  bool check_xy;        /**< Conferir x e y ao concluir (não na decolagem). */
+  uint32_t start_ms;    /**< Início. */
+  uint32_t timeout_ms;  /**< Tempo máximo (0 = sem limite). */
 } goal_t;
 
 /* ---- Compartilhado com outras tasks ----------------------------------- */
@@ -259,7 +259,9 @@ static float sim_input[LQG_NU];
  * No ensaio a seco nada se move e o controle não pode aprender nada; com o
  * drone simulado, o modelo recebe o que os motores receberiam.
  */
-static bool motors_follow(void) { return !dry_run || sim_active; }
+static bool motors_follow(void) {
+  return !dry_run || sim_active;
+}
 
 /** @brief Monta um resultado de pedido. */
 static flight_request_result_t result(flight_request_status_t status, flight_reason_t reason) {
@@ -275,8 +277,8 @@ static bool is_armed_state(uint8_t s) {
 
 /** @brief Estados em que o drone pode estar no ar. */
 static bool is_airborne_state(uint8_t s) {
-  return s == FLIGHT_STATE_TAKEOFF || s == FLIGHT_STATE_HOLD ||
-         s == FLIGHT_STATE_EXECUTING_LEG || s == FLIGHT_STATE_LAND;
+  return s == FLIGHT_STATE_TAKEOFF || s == FLIGHT_STATE_HOLD || s == FLIGHT_STATE_EXECUTING_LEG ||
+         s == FLIGHT_STATE_LAND;
 }
 
 /** @brief Escreve uma linha de texto formatada no log. */
@@ -294,7 +296,8 @@ static void say(const char *fmt, ...) {
   strncpy(texts[text_head], text, TEXT_LEN - 1U);
   texts[text_head][TEXT_LEN - 1U] = '\0';
   text_head = (uint8_t)((text_head + 1U) % TEXT_QUEUE_DEPTH);
-  if (text_count < TEXT_QUEUE_DEPTH) ++text_count;
+  if (text_count < TEXT_QUEUE_DEPTH)
+    ++text_count;
   taskEXIT_CRITICAL();
 }
 
@@ -305,18 +308,25 @@ static bool post(const request_t *req) {
 
 /** @brief Aproxima @p cur de @p goal em no máximo @p max_step (<= 0: salta). */
 static float approach(float cur, float target, float max_step) {
-  if (!(max_step > 0.0F)) return target;
+  if (!(max_step > 0.0F))
+    return target;
   const float d = target - cur;
-  if (d > max_step) return cur + max_step;
-  if (d < -max_step) return cur - max_step;
+  if (d > max_step)
+    return cur + max_step;
+  if (d < -max_step)
+    return cur - max_step;
   return target;
 }
 
 /* ---- API pública (outras tasks) ---------------------------------------- */
 
-bool flight_ctrl_is_armed(void) { return is_armed_state(state); }
+bool flight_ctrl_is_armed(void) {
+  return is_armed_state(state);
+}
 
-flight_origin_t flight_ctrl_origin(void) { return origin; }
+flight_origin_t flight_ctrl_origin(void) {
+  return origin;
+}
 
 flight_request_result_t flight_ctrl_arm(flight_origin_t from) {
   const uint8_t s = state;
@@ -344,7 +354,8 @@ flight_request_result_t flight_ctrl_arm(flight_origin_t from) {
   arm_pending = true;
   if (!post(&req)) {
     arm_pending = false;
-    if (!dry) motors_stop("fila do voo cheia");
+    if (!dry)
+      motors_stop("fila do voo cheia");
     return result(FLIGHT_REQUEST_TEMPORARILY_REJECTED, FLIGHT_REASON_BUSY);
   }
   return result(FLIGHT_REQUEST_ACCEPTED, FLIGHT_REASON_NONE);
@@ -352,7 +363,8 @@ flight_request_result_t flight_ctrl_arm(flight_origin_t from) {
 
 void flight_ctrl_disarm(const char *why) {
   /* Os motores param já, sem esperar o próximo passo do voo. */
-  if (motors_owner() == MOTORS_OWNER_FLIGHT) motors_stop(why);
+  if (motors_owner() == MOTORS_OWNER_FLIGHT)
+    motors_stop(why);
   const request_t req = {.type = REQ_DISARM, .why = why};
   (void)post(&req);
 }
@@ -370,7 +382,8 @@ flight_request_result_t flight_ctrl_takeoff(float height_m) {
     return result(FLIGHT_REQUEST_DENIED, FLIGHT_REASON_OUT_OF_BOUNDS);
   }
   const request_t req = {.type = REQ_TAKEOFF, .height = height_m};
-  if (!post(&req)) return result(FLIGHT_REQUEST_TEMPORARILY_REJECTED, FLIGHT_REASON_BUSY);
+  if (!post(&req))
+    return result(FLIGHT_REQUEST_TEMPORARILY_REJECTED, FLIGHT_REASON_BUSY);
   return result(FLIGHT_REQUEST_IN_PROGRESS, FLIGHT_REASON_NONE);
 }
 
@@ -382,15 +395,17 @@ flight_request_result_t flight_ctrl_takeoff(float height_m) {
  * telemetria e o chão de quando armou (escritos pela task do voo).
  */
 static bool leg_height_ok(const flight_leg_t *leg) {
-  if (leg->action == FLIGHT_ACTION_ROTATE_RELATIVE) return true;
+  if (leg->action == FLIGHT_ACTION_ROTATE_RELATIVE)
+    return true;
   const float ground = z_ground;
-  if (!isfinite(ground)) return true;  /* a task do voo confere de novo */
+  if (!isfinite(ground))
+    return true; /* a task do voo confere de novo */
   flight_telemetry_t t;
   flight_ctrl_get_telemetry(&t);
   ctrl_params_t p;
   ctrl_params_snapshot(&p);
-  const bool absolute = leg->action == FLIGHT_ACTION_GOTO_LOCAL &&
-                        leg->frame != FLIGHT_FRAME_BODY_FRD;
+  const bool absolute =
+      leg->action == FLIGHT_ACTION_GOTO_LOCAL && leg->frame != FLIGHT_FRAME_BODY_FRD;
   const float z = absolute ? leg->z : t.ref[LQG_R_Z] + leg->z;
   return isfinite(z) && z <= ground - p.land_height &&
          z >= ground - (FLIGHT_MAX_HEIGHT_M + FLIGHT_HEIGHT_TOL_M);
@@ -405,14 +420,18 @@ flight_request_result_t flight_ctrl_leg(const flight_leg_t *leg) {
     if (!(leg->z < 0.0F && leg->z >= -(FLIGHT_MAX_HEIGHT_M + FLIGHT_HEIGHT_TOL_M))) {
       return result(FLIGHT_REQUEST_DENIED, FLIGHT_REASON_OUT_OF_BOUNDS);
     }
-    const request_t req = {.type = REQ_TAKEOFF, .height = -leg->z,
+    const request_t req = {.type = REQ_TAKEOFF,
+                           .height = -leg->z,
                            .pos_tol = leg->position_tolerance,
                            .timeout_ms = leg->timeout_ms};
-    if (!post(&req)) return result(FLIGHT_REQUEST_TEMPORARILY_REJECTED, FLIGHT_REASON_BUSY);
+    if (!post(&req))
+      return result(FLIGHT_REQUEST_TEMPORARILY_REJECTED, FLIGHT_REASON_BUSY);
     return result(FLIGHT_REQUEST_IN_PROGRESS, FLIGHT_REASON_NONE);
   }
-  if (leg->action == FLIGHT_ACTION_HOLD) return flight_ctrl_hold(FLIGHT_REASON_NONE);
-  if (leg->action == FLIGHT_ACTION_LAND) return flight_ctrl_land(FLIGHT_REASON_NONE);
+  if (leg->action == FLIGHT_ACTION_HOLD)
+    return flight_ctrl_hold(FLIGHT_REASON_NONE);
+  if (leg->action == FLIGHT_ACTION_LAND)
+    return flight_ctrl_land(FLIGHT_REASON_NONE);
   if (state == FLIGHT_STATE_EXECUTING_LEG || state == FLIGHT_STATE_TAKEOFF) {
     return result(FLIGHT_REQUEST_TEMPORARILY_REJECTED, FLIGHT_REASON_BUSY);
   }
@@ -425,7 +444,8 @@ flight_request_result_t flight_ctrl_leg(const flight_leg_t *leg) {
   }
   request_t req = {.type = REQ_LEG};
   req.leg = *leg;
-  if (!post(&req)) return result(FLIGHT_REQUEST_TEMPORARILY_REJECTED, FLIGHT_REASON_BUSY);
+  if (!post(&req))
+    return result(FLIGHT_REQUEST_TEMPORARILY_REJECTED, FLIGHT_REASON_BUSY);
   return result(FLIGHT_REQUEST_IN_PROGRESS, FLIGHT_REASON_NONE);
 }
 
@@ -438,7 +458,8 @@ flight_request_result_t flight_ctrl_leg(const flight_leg_t *leg) {
  * isso X, Y e a guinada do setpoint nunca entrariam (06/11).
  */
 static bool setpoint_allowed(uint32_t now) {
-  if (state == FLIGHT_STATE_HOLD || state == FLIGHT_STATE_EXECUTING_LEG) return true;
+  if (state == FLIGHT_STATE_HOLD || state == FLIGHT_STATE_EXECUTING_LEG)
+    return true;
   return state == FLIGHT_STATE_TAKEOFF && lifted &&
          now - armed_ms >= SPINUP_MS + FLIGHT_TAKEOFF_RAMP_MS;
 }
@@ -451,15 +472,21 @@ flight_request_result_t flight_ctrl_setpoint(float x_m, float y_m, float height_
     return result(FLIGHT_REQUEST_DENIED, FLIGHT_REASON_OUT_OF_BOUNDS);
   }
   request_t req = {.type = REQ_LEG, .height_mode = true};
-  req.leg = (flight_leg_t){.action = FLIGHT_ACTION_GOTO_LOCAL, .frame = FLIGHT_FRAME_LOCAL_FRD,
-                           .x = x_m, .y = y_m, .z = height_m, .yaw = yaw_rad};
-  if (!post(&req)) return result(FLIGHT_REQUEST_TEMPORARILY_REJECTED, FLIGHT_REASON_BUSY);
+  req.leg = (flight_leg_t){.action = FLIGHT_ACTION_GOTO_LOCAL,
+                           .frame = FLIGHT_FRAME_LOCAL_FRD,
+                           .x = x_m,
+                           .y = y_m,
+                           .z = height_m,
+                           .yaw = yaw_rad};
+  if (!post(&req))
+    return result(FLIGHT_REQUEST_TEMPORARILY_REJECTED, FLIGHT_REASON_BUSY);
   return result(FLIGHT_REQUEST_IN_PROGRESS, FLIGHT_REASON_NONE);
 }
 
 flight_request_result_t flight_ctrl_xy_zero(void) {
   const request_t req = {.type = REQ_XY_ZERO};
-  if (!post(&req)) return result(FLIGHT_REQUEST_TEMPORARILY_REJECTED, FLIGHT_REASON_BUSY);
+  if (!post(&req))
+    return result(FLIGHT_REQUEST_TEMPORARILY_REJECTED, FLIGHT_REASON_BUSY);
   return result(FLIGHT_REQUEST_ACCEPTED, FLIGHT_REASON_NONE);
 }
 
@@ -468,16 +495,18 @@ flight_request_result_t flight_ctrl_hold(flight_reason_t reason) {
     return result(FLIGHT_REQUEST_DENIED, FLIGHT_REASON_BAD_STATE);
   }
   const request_t req = {.type = REQ_HOLD, .reason = reason};
-  if (!post(&req)) return result(FLIGHT_REQUEST_TEMPORARILY_REJECTED, FLIGHT_REASON_BUSY);
+  if (!post(&req))
+    return result(FLIGHT_REQUEST_TEMPORARILY_REJECTED, FLIGHT_REASON_BUSY);
   return result(FLIGHT_REQUEST_ACCEPTED, FLIGHT_REASON_NONE);
 }
 
 flight_request_result_t flight_ctrl_land(flight_reason_t reason) {
   if (!is_armed_state(state)) {
-    return result(FLIGHT_REQUEST_ACCEPTED, FLIGHT_REASON_NONE);  /* já está no chão */
+    return result(FLIGHT_REQUEST_ACCEPTED, FLIGHT_REASON_NONE); /* já está no chão */
   }
   const request_t req = {.type = REQ_LAND, .reason = reason};
-  if (!post(&req)) return result(FLIGHT_REQUEST_TEMPORARILY_REJECTED, FLIGHT_REASON_BUSY);
+  if (!post(&req))
+    return result(FLIGHT_REQUEST_TEMPORARILY_REJECTED, FLIGHT_REASON_BUSY);
   return result(FLIGHT_REQUEST_ACCEPTED, FLIGHT_REASON_NONE);
 }
 
@@ -486,7 +515,8 @@ flight_request_result_t flight_ctrl_cancel(void) {
     return result(FLIGHT_REQUEST_DENIED, FLIGHT_REASON_SEQUENCE_ERROR);
   }
   const request_t req = {.type = REQ_CANCEL};
-  if (!post(&req)) return result(FLIGHT_REQUEST_TEMPORARILY_REJECTED, FLIGHT_REASON_BUSY);
+  if (!post(&req))
+    return result(FLIGHT_REQUEST_TEMPORARILY_REJECTED, FLIGHT_REASON_BUSY);
   return result(FLIGHT_REQUEST_ACCEPTED, FLIGHT_REASON_NONE);
 }
 
@@ -509,7 +539,8 @@ bool flight_ctrl_take_leg_event(flight_leg_event_t *out) {
 }
 
 bool flight_ctrl_take_text(char *out, size_t size) {
-  if (out == NULL || size == 0U) return false;
+  if (out == NULL || size == 0U)
+    return false;
   bool pending;
   taskENTER_CRITICAL();
   pending = text_count > 0U;
@@ -525,9 +556,9 @@ bool flight_ctrl_take_text(char *out, size_t size) {
 }
 
 const char *flight_ctrl_state_name(uint8_t s) {
-  static const char *const names[] = {"BOOT", "SELF_TEST", "STANDBY", "PREARM", "ARMED",
-                                      "TAKEOFF", "HOLD", "LEG", "LAND", "FAILSAFE",
-                                      "TERMINATION"};
+  static const char *const names[] = {"BOOT",  "SELF_TEST", "STANDBY",    "PREARM",
+                                      "ARMED", "TAKEOFF",   "HOLD",       "LEG",
+                                      "LAND",  "FAILSAFE",  "TERMINATION"};
   return s < sizeof(names) / sizeof(names[0]) ? names[s] : "?";
 }
 
@@ -539,10 +570,11 @@ const char *flight_ctrl_state_name(uint8_t s) {
  * @param[in] reason  Motivo.
  */
 static void finish_goal(flight_request_status_t status, flight_reason_t reason) {
-  const bool was_leg = goal.active &&
-                       (state == FLIGHT_STATE_TAKEOFF || state == FLIGHT_STATE_EXECUTING_LEG);
+  const bool was_leg =
+      goal.active && (state == FLIGHT_STATE_TAKEOFF || state == FLIGHT_STATE_EXECUTING_LEG);
   goal.active = false;
-  if (!was_leg) return;
+  if (!was_leg)
+    return;
   taskENTER_CRITICAL();
   leg_event.status = status;
   leg_event.reason = reason;
@@ -580,16 +612,19 @@ static void report_and_reset_trim(void) {
 
 /** @brief Desarma e volta a STANDBY. */
 static void enter_standby(const char *why) {
-  if (!dry_run && motors_owner() == MOTORS_OWNER_FLIGHT) motors_stop(why);
+  if (!dry_run && motors_owner() == MOTORS_OWNER_FLIGHT)
+    motors_stop(why);
   finish_goal(FLIGHT_REQUEST_FAILED, FLIGHT_REASON_CANCELLED);
-  if (is_armed_state(state)) say("voo: desarmado (%s)", why);
+  if (is_armed_state(state))
+    say("voo: desarmado (%s)", why);
   report_and_reset_trim();
   state = FLIGHT_STATE_STANDBY;
 }
 
 /** @brief Corta os motores e entra em FAILSAFE. */
 static void enter_failsafe(const char *why, flight_reason_t reason) {
-  if (!dry_run) motors_stop(why);
+  if (!dry_run)
+    motors_stop(why);
   finish_goal(FLIGHT_REQUEST_FAILED, reason);
   say("FAILSAFE: %s", why);
   report_and_reset_trim();
@@ -613,7 +648,8 @@ static void enter_land(flight_reason_t reason) {
 
 /** @brief Começa a descida suave da aceleração (o desarme vem ao fim da rampa). */
 static void begin_spindown(uint32_t now) {
-  if (land_spindown_ms != 0U) return;
+  if (land_spindown_ms != 0U)
+    return;
   land_spindown_ms = now != 0U ? now : 1U;
   say("pouso: reduzindo motores");
 }
@@ -631,29 +667,29 @@ static bool goal_from_leg(const flight_leg_t *leg) {
   const float dx = body ? leg->x * cosf(psi) - leg->y * sinf(psi) : leg->x;
   const float dy = body ? leg->x * sinf(psi) + leg->y * cosf(psi) : leg->y;
   switch (leg->action) {
-    case FLIGHT_ACTION_GOTO_LOCAL:
-      if (body) {
-        t[LQG_R_X] += dx;
-        t[LQG_R_Y] += dy;
-        t[LQG_R_Z] += leg->z;
-        t[LQG_R_PSI] += leg->yaw;
-      } else {
-        t[LQG_R_X] = leg->x;
-        t[LQG_R_Y] = leg->y;
-        t[LQG_R_Z] = leg->z;
-        t[LQG_R_PSI] = leg->yaw;
-      }
-      break;
-    case FLIGHT_ACTION_TRANSLATE_RELATIVE:
+  case FLIGHT_ACTION_GOTO_LOCAL:
+    if (body) {
       t[LQG_R_X] += dx;
       t[LQG_R_Y] += dy;
       t[LQG_R_Z] += leg->z;
-      break;
-    case FLIGHT_ACTION_ROTATE_RELATIVE:
       t[LQG_R_PSI] += leg->yaw;
-      break;
-    default:
-      return false;
+    } else {
+      t[LQG_R_X] = leg->x;
+      t[LQG_R_Y] = leg->y;
+      t[LQG_R_Z] = leg->z;
+      t[LQG_R_PSI] = leg->yaw;
+    }
+    break;
+  case FLIGHT_ACTION_TRANSLATE_RELATIVE:
+    t[LQG_R_X] += dx;
+    t[LQG_R_Y] += dy;
+    t[LQG_R_Z] += leg->z;
+    break;
+  case FLIGHT_ACTION_ROTATE_RELATIVE:
+    t[LQG_R_PSI] += leg->yaw;
+    break;
+  default:
+    return false;
   }
   /* Não descer abaixo da altura de pouso nem subir acima de FLIGHT_MAX_HEIGHT_M. */
   if (t[LQG_R_Z] > z_ground - prm.land_height ||
@@ -672,151 +708,159 @@ static bool goal_from_leg(const flight_leg_t *leg) {
 /** @brief Atende um pedido da fila. */
 static void handle_request(const request_t *req, uint32_t now) {
   switch (req->type) {
-    case REQ_ARM:
-      arm_pending = false;
-      if (state != FLIGHT_STATE_STANDBY && state != FLIGHT_STATE_FAILSAFE) break;
-      /* Referencial local novo: Kalman e posição começam aqui. A guinada
+  case REQ_ARM:
+    arm_pending = false;
+    if (state != FLIGHT_STATE_STANDBY && state != FLIGHT_STATE_FAILSAFE)
+      break;
+    /* Referencial local novo: Kalman e posição começam aqui. A guinada
          continua zerada na energização (ver meas_rearm). */
-      lqg_ert_init(&lqg);
-      meas_rearm(&meas);
-      /* O estimador começa do zero a cada voo, por cima do desequilíbrio fixo
+    lqg_ert_init(&lqg);
+    meas_rearm(&meas);
+    /* O estimador começa do zero a cada voo, por cima do desequilíbrio fixo
          (CTL_FF_TH/PHI). Lembrar o do voo anterior já trouxe valores de quando
          o drone estava preso (05/11). */
-      lqg_dist_reset(&dist);
-      dist_released = false;
-      xy_engaged = false;
-      xy_int[0] = xy_int[1] = 0.0F;
-      trim_reset(&trim);
-      if (trim_learned_valid) {
-        trim.theta = trim_learned.theta;
-        trim.phi = trim_learned.phi;
-        say("trim inicial th=%d phi=%d (voo anterior)", (int)trim.theta, (int)trim.phi);
-      }
-      trim_released = false;
-      land_spindown_ms = 0U;
-      stuck_since_ms = 0U;
-      meas_z_tracking = false;
-      lifted = false;
-      memset(ref, 0, sizeof(ref));
-      memset(&goal, 0, sizeof(goal));
-      settle_since_ms = 0U;
-      if (sim_active) {
-        /* O drone simulado volta ao (0, 0), no chão, com a guinada que tinha. */
-        sim_plant_reset(&sim, SIM_PLANT_GROUND_Z, (float)sim.x[LQG_X_PSI]);
-      }
-      origin = req->origin;
-      dry_run = req->dry;
-      armed_ms = now;
-      bno_bad_steps = 0U;
-      mtf_lost_since_ms = 0U;
-      z_ground = NAN;  /* definido com a primeira medida deste passo */
-      ground_samples = 0U;
-      state = FLIGHT_STATE_ARMED;
-      say("voo: ARMADO%s (%s)", sim_active ? " SIMULADO" : dry_run ? " a seco" : "",
-          origin == FLIGHT_ORIGIN_PI ? "Pi" : "USB");
+    lqg_dist_reset(&dist);
+    dist_released = false;
+    xy_engaged = false;
+    xy_int[0] = xy_int[1] = 0.0F;
+    trim_reset(&trim);
+    if (trim_learned_valid) {
+      trim.theta = trim_learned.theta;
+      trim.phi = trim_learned.phi;
+      say("trim inicial th=%d phi=%d (voo anterior)", (int)trim.theta, (int)trim.phi);
+    }
+    trim_released = false;
+    land_spindown_ms = 0U;
+    stuck_since_ms = 0U;
+    meas_z_tracking = false;
+    lifted = false;
+    memset(ref, 0, sizeof(ref));
+    memset(&goal, 0, sizeof(goal));
+    settle_since_ms = 0U;
+    if (sim_active) {
+      /* O drone simulado volta ao (0, 0), no chão, com a guinada que tinha. */
+      sim_plant_reset(&sim, SIM_PLANT_GROUND_Z, (float)sim.x[LQG_X_PSI]);
+    }
+    origin = req->origin;
+    dry_run = req->dry;
+    armed_ms = now;
+    bno_bad_steps = 0U;
+    mtf_lost_since_ms = 0U;
+    z_ground = NAN; /* definido com a primeira medida deste passo */
+    ground_samples = 0U;
+    state = FLIGHT_STATE_ARMED;
+    say("voo: ARMADO%s (%s)",
+        sim_active ? " SIMULADO"
+        : dry_run  ? " a seco"
+                   : "",
+        origin == FLIGHT_ORIGIN_PI ? "Pi" : "USB");
+    break;
+  case REQ_DISARM:
+    enter_standby(req->why != NULL ? req->why : "disarm");
+    break;
+  case REQ_TAKEOFF:
+    if (state != FLIGHT_STATE_ARMED)
       break;
-    case REQ_DISARM:
-      enter_standby(req->why != NULL ? req->why : "disarm");
-      break;
-    case REQ_TAKEOFF:
-      if (state != FLIGHT_STATE_ARMED) break;
-      memcpy(goal.target, ref, sizeof(ref));
-      {
-        const float wanted = req->height > 0.0F ? req->height : prm.hover_height;
-        goal.target[LQG_R_Z] = z_ground - fminf(wanted, FLIGHT_MAX_HEIGHT_M);
-      }
-      goal.speed_xy = 0.0F;
-      goal.pos_tol = req->pos_tol > 0.0F ? req->pos_tol : DEFAULT_POS_TOL_M;
-      goal.yaw_tol = DEFAULT_YAW_TOL_RAD;
-      goal.check_xy = false;
-      goal.timeout_ms = req->timeout_ms;
-      goal.start_ms = now;
-      goal.active = true;
-      state = FLIGHT_STATE_TAKEOFF;
-      say("voo: decolando para %d cm", (int)((z_ground - goal.target[LQG_R_Z]) * 100.0F));
-      break;
-    case REQ_LEG: {
-      /* Um setpoint também vale com um trecho em andamento ou, fora do chão,
+    memcpy(goal.target, ref, sizeof(ref));
+    {
+      const float wanted = req->height > 0.0F ? req->height : prm.hover_height;
+      goal.target[LQG_R_Z] = z_ground - fminf(wanted, FLIGHT_MAX_HEIGHT_M);
+    }
+    goal.speed_xy = 0.0F;
+    goal.pos_tol = req->pos_tol > 0.0F ? req->pos_tol : DEFAULT_POS_TOL_M;
+    goal.yaw_tol = DEFAULT_YAW_TOL_RAD;
+    goal.check_xy = false;
+    goal.timeout_ms = req->timeout_ms;
+    goal.start_ms = now;
+    goal.active = true;
+    state = FLIGHT_STATE_TAKEOFF;
+    say("voo: decolando para %d cm", (int)((z_ground - goal.target[LQG_R_Z]) * 100.0F));
+    break;
+  case REQ_LEG: {
+    /* Um setpoint também vale com um trecho em andamento ou, fora do chão,
          na decolagem (ver setpoint_allowed): troca o alvo. */
-      if (state != FLIGHT_STATE_HOLD && !(req->height_mode && setpoint_allowed(now))) {
-        if (req->height_mode) say("voo: setpoint recusado no estado %s", flight_ctrl_state_name(state));
-        break;
-      }
-      flight_leg_t leg = req->leg;
-      if (req->height_mode) leg.z = z_ground - leg.z;
-      const bool was_takeoff = state == FLIGHT_STATE_TAKEOFF;
-      if (req->height_mode && !goal_from_leg(&leg)) {
-        say("voo: setpoint fora dos limites");
-        break;
-      }
-      if (!req->height_mode && !goal_from_leg(&leg)) {
-        taskENTER_CRITICAL();
-        leg_event.status = FLIGHT_REQUEST_DENIED;
-        leg_event.reason = FLIGHT_REASON_OUT_OF_BOUNDS;
-        leg_event_pending = true;
-        taskEXIT_CRITICAL();
-        break;
-      }
-      if (req->height_mode && prm.use_xy < 0.5F) {
-        /* Sem o XY na malha, x e y não são seguidos: não esperar por eles. */
-        goal.target[LQG_R_X] = ref[LQG_R_X];
-        goal.target[LQG_R_Y] = ref[LQG_R_Y];
-        goal.check_xy = false;
-      }
-      if (was_takeoff) {
-        /* A decolagem acaba aqui; o setpoint segue dali (já fora do chão). */
-        goal.active = true;
-        finish_goal(FLIGHT_REQUEST_FAILED, FLIGHT_REASON_CANCELLED);
-      }
-      goal.start_ms = now;
-      goal.active = true;
-      state = FLIGHT_STATE_EXECUTING_LEG;
-      if (req->height_mode) {
-        say("voo: setpoint x=%d y=%d cm, altura %d cm, guinada %d graus",
-            (int)(goal.target[LQG_R_X] * 100.0F), (int)(goal.target[LQG_R_Y] * 100.0F),
-            (int)((z_ground - goal.target[LQG_R_Z]) * 100.0F),
-            (int)(goal.target[LQG_R_PSI] * 57.29578F));
-      }
+    if (state != FLIGHT_STATE_HOLD && !(req->height_mode && setpoint_allowed(now))) {
+      if (req->height_mode)
+        say("voo: setpoint recusado no estado %s", flight_ctrl_state_name(state));
       break;
     }
-    case REQ_HOLD:
-      if (!is_airborne_state(state)) break;
-      finish_goal(FLIGHT_REQUEST_FAILED,
-                  req->reason == FLIGHT_REASON_NONE ? FLIGHT_REASON_CANCELLED : req->reason);
+    flight_leg_t leg = req->leg;
+    if (req->height_mode)
+      leg.z = z_ground - leg.z;
+    const bool was_takeoff = state == FLIGHT_STATE_TAKEOFF;
+    if (req->height_mode && !goal_from_leg(&leg)) {
+      say("voo: setpoint fora dos limites");
+      break;
+    }
+    if (!req->height_mode && !goal_from_leg(&leg)) {
+      taskENTER_CRITICAL();
+      leg_event.status = FLIGHT_REQUEST_DENIED;
+      leg_event.reason = FLIGHT_REASON_OUT_OF_BOUNDS;
+      leg_event_pending = true;
+      taskEXIT_CRITICAL();
+      break;
+    }
+    if (req->height_mode && prm.use_xy < 0.5F) {
+      /* Sem o XY na malha, x e y não são seguidos: não esperar por eles. */
+      goal.target[LQG_R_X] = ref[LQG_R_X];
+      goal.target[LQG_R_Y] = ref[LQG_R_Y];
+      goal.check_xy = false;
+    }
+    if (was_takeoff) {
+      /* A decolagem acaba aqui; o setpoint segue dali (já fora do chão). */
+      goal.active = true;
+      finish_goal(FLIGHT_REQUEST_FAILED, FLIGHT_REASON_CANCELLED);
+    }
+    goal.start_ms = now;
+    goal.active = true;
+    state = FLIGHT_STATE_EXECUTING_LEG;
+    if (req->height_mode) {
+      say("voo: setpoint x=%d y=%d cm, altura %d cm, guinada %d graus",
+          (int)(goal.target[LQG_R_X] * 100.0F), (int)(goal.target[LQG_R_Y] * 100.0F),
+          (int)((z_ground - goal.target[LQG_R_Z]) * 100.0F),
+          (int)(goal.target[LQG_R_PSI] * 57.29578F));
+    }
+    break;
+  }
+  case REQ_HOLD:
+    if (!is_airborne_state(state))
+      break;
+    finish_goal(FLIGHT_REQUEST_FAILED,
+                req->reason == FLIGHT_REASON_NONE ? FLIGHT_REASON_CANCELLED : req->reason);
+    enter_hold();
+    break;
+  case REQ_LAND:
+    if (state == FLIGHT_STATE_ARMED) {
+      enter_standby("pouso no chao");
+    } else if (is_airborne_state(state) && state != FLIGHT_STATE_LAND) {
+      enter_land(req->reason);
+      if (lifted) {
+        say("voo: pousando");
+      } else {
+        /* Ainda no chão: não há o que descer, só reduzir os motores. */
+        begin_spindown(now);
+      }
+    }
+    break;
+  case REQ_CANCEL:
+    if (state == FLIGHT_STATE_TAKEOFF || state == FLIGHT_STATE_EXECUTING_LEG) {
+      goal.active = false; /* o DroneLink publica o cancelamento */
       enter_hold();
-      break;
-    case REQ_LAND:
-      if (state == FLIGHT_STATE_ARMED) {
-        enter_standby("pouso no chao");
-      } else if (is_airborne_state(state) && state != FLIGHT_STATE_LAND) {
-        enter_land(req->reason);
-        if (lifted) {
-          say("voo: pousando");
-        } else {
-          /* Ainda no chão: não há o que descer, só reduzir os motores. */
-          begin_spindown(now);
-        }
-      }
-      break;
-    case REQ_CANCEL:
-      if (state == FLIGHT_STATE_TAKEOFF || state == FLIGHT_STATE_EXECUTING_LEG) {
-        goal.active = false;  /* o DroneLink publica o cancelamento */
-        enter_hold();
-      }
-      break;
-    case REQ_XY_ZERO: {
-      /* A posição vem só da soma do fluxo e deriva: o operador declara o
+    }
+    break;
+  case REQ_XY_ZERO: {
+    /* A posição vem só da soma do fluxo e deriva: o operador declara o
          ponto atual como (0, 0). A referência e o alvo vão junto, então o
          drone passa a segurar onde está; as velocidades (medidas) ficam. */
-      lqg.x_filt[LQG_X_X] = lqg.x_filt[LQG_X_Y] = 0.0;
-      lqg.x_pred[LQG_X_X] = lqg.x_pred[LQG_X_Y] = 0.0;
-      ref[LQG_R_X] = ref[LQG_R_Y] = 0.0F;
-      goal.target[LQG_R_X] = goal.target[LQG_R_Y] = 0.0F;
-      say("XY: zerado, o ponto atual e o (0,0)");
-      break;
-    }
-    default:
-      break;
+    lqg.x_filt[LQG_X_X] = lqg.x_filt[LQG_X_Y] = 0.0;
+    lqg.x_pred[LQG_X_X] = lqg.x_pred[LQG_X_Y] = 0.0;
+    ref[LQG_R_X] = ref[LQG_R_Y] = 0.0F;
+    goal.target[LQG_R_X] = goal.target[LQG_R_Y] = 0.0F;
+    say("XY: zerado, o ponto atual e o (0,0)");
+    break;
+  }
+  default:
+    break;
   }
 }
 
@@ -847,9 +891,9 @@ static void read_sensors(meas_input_t *in) {
   in->accel_valid = bno.online;
   /* ZUPT só com o drone de fato apoiado: preso a "velocidade zero" depois de sair do chão, o
      EKF esconderia o deslize (voo de 08/11 21:10: andou ~40 cm com o log em y = -0,9 cm). */
-  in->on_ground = is_armed_state(state) && !lifted &&
-                  (!isfinite(z_ground) ||
-                   z_ground - (float)lqg.x_filt[LQG_X_Z] < FLIGHT_GROUNDED_HEIGHT_M);
+  in->on_ground =
+      is_armed_state(state) && !lifted &&
+      (!isfinite(z_ground) || z_ground - (float)lqg.x_filt[LQG_X_Z] < FLIGHT_GROUNDED_HEIGHT_M);
   in->mtf_frame = mtf.frames;
   in->mtf_time_ms = mtf.time_ms;
 }
@@ -861,7 +905,8 @@ static void read_sensors(meas_input_t *in) {
  * @param[in] now    Tick atual.
  */
 static void supervise(uint8_t flags, const lqg_real_t y[LQG_NY], uint32_t now) {
-  if (!is_armed_state(state)) return;
+  if (!is_armed_state(state))
+    return;
 
   const bool bno_ok = (flags & (MEAS_ATTITUDE | MEAS_GYRO)) == (MEAS_ATTITUDE | MEAS_GYRO);
   bno_bad_steps = bno_ok ? 0U : bno_bad_steps + 1U;
@@ -870,8 +915,8 @@ static void supervise(uint8_t flags, const lqg_real_t y[LQG_NY], uint32_t now) {
     return;
   }
   const bool active = state != FLIGHT_STATE_ARMED;
-  if (active && (fabsf((float)y[LQG_Y_PHI]) > prm.tilt_max ||
-                 fabsf((float)y[LQG_Y_THETA]) > prm.tilt_max)) {
+  if (active &&
+      (fabsf((float)y[LQG_Y_PHI]) > prm.tilt_max || fabsf((float)y[LQG_Y_THETA]) > prm.tilt_max)) {
     enter_failsafe("inclinacao excessiva", FLIGHT_REASON_OUT_OF_BOUNDS);
     return;
   }
@@ -926,9 +971,10 @@ static void update_xy_integral(uint8_t flags) {
     xy_int[0] = xy_int[1] = 0.0F;
     return;
   }
-  const bool integrate = lifted && is_airborne_state(state) && state != FLIGHT_STATE_LAND &&
-                         (flags & MEAS_FLOW) != 0U;
-  if (!integrate) return;
+  const bool integrate =
+      lifted && is_airborne_state(state) && state != FLIGHT_STATE_LAND && (flags & MEAS_FLOW) != 0U;
+  if (!integrate)
+    return;
   xy_int[0] += prm.ki_xy * (ref[LQG_R_X] - (float)lqg.x_filt[LQG_X_X]) * DT_S;
   xy_int[1] += prm.ki_xy * (ref[LQG_R_Y] - (float)lqg.x_filt[LQG_X_Y]) * DT_S;
   const float norm = sqrtf(xy_int[0] * xy_int[0] + xy_int[1] * xy_int[1]);
@@ -942,8 +988,10 @@ static void update_xy_integral(uint8_t flags) {
 /** @brief Avança a referência em rampa até o alvo. */
 static void update_reference(uint32_t now) {
   /* A referência só sobe depois da marcha lenta e da rampa de partida. */
-  if (state == FLIGHT_STATE_TAKEOFF && now - armed_ms < SPINUP_MS + FLIGHT_TAKEOFF_RAMP_MS) return;
-  if (!goal.active && state != FLIGHT_STATE_HOLD) return;
+  if (state == FLIGHT_STATE_TAKEOFF && now - armed_ms < SPINUP_MS + FLIGHT_TAKEOFF_RAMP_MS)
+    return;
+  if (!goal.active && state != FLIGHT_STATE_HOLD)
+    return;
 
   /* Horizontal: em linha reta, na velocidade do trecho. */
   const float ex = goal.target[LQG_R_X] - ref[LQG_R_X];
@@ -958,15 +1006,15 @@ static void update_reference(uint32_t now) {
     ref[LQG_R_Y] += ey / dist * step_xy;
   }
   float z_rate = prm.z_rate;
-  if (state == FLIGHT_STATE_LAND && z_rate < LAND_MIN_RATE_M_S) z_rate = LAND_MIN_RATE_M_S;
+  if (state == FLIGHT_STATE_LAND && z_rate < LAND_MIN_RATE_M_S)
+    z_rate = LAND_MIN_RATE_M_S;
   ref[LQG_R_Z] = approach(ref[LQG_R_Z], goal.target[LQG_R_Z], z_rate * DT_S);
   ref[LQG_R_PSI] = approach(ref[LQG_R_PSI], goal.target[LQG_R_PSI], prm.yaw_rate * DT_S);
 }
 
 /** @brief Confere se a decolagem ou o trecho terminou (ou estourou o tempo). */
 static void check_goal(const float x[LQG_NX], uint32_t now) {
-  if (!goal.active ||
-      (state != FLIGHT_STATE_TAKEOFF && state != FLIGHT_STATE_EXECUTING_LEG)) {
+  if (!goal.active || (state != FLIGHT_STATE_TAKEOFF && state != FLIGHT_STATE_EXECUTING_LEG)) {
     return;
   }
   if (goal.timeout_ms != 0U && now - goal.start_ms > goal.timeout_ms) {
@@ -977,11 +1025,9 @@ static void check_goal(const float x[LQG_NX], uint32_t now) {
   }
   const bool ramp_done = memcmp(ref, goal.target, sizeof(ref)) == 0;
   const bool z_ok = fabsf(x[LQG_X_Z] - goal.target[LQG_R_Z]) < goal.pos_tol;
-  const bool xy_ok = !goal.check_xy ||
-                     (fabsf(x[LQG_X_X] - goal.target[LQG_R_X]) < goal.pos_tol &&
-                      fabsf(x[LQG_X_Y] - goal.target[LQG_R_Y]) < goal.pos_tol);
-  const bool yaw_ok =
-      fabsf(attitude_wrap_pi(x[LQG_X_PSI] - goal.target[LQG_R_PSI])) < goal.yaw_tol;
+  const bool xy_ok = !goal.check_xy || (fabsf(x[LQG_X_X] - goal.target[LQG_R_X]) < goal.pos_tol &&
+                                        fabsf(x[LQG_X_Y] - goal.target[LQG_R_Y]) < goal.pos_tol);
+  const bool yaw_ok = fabsf(attitude_wrap_pi(x[LQG_X_PSI] - goal.target[LQG_R_PSI])) < goal.yaw_tol;
   /* Estável: no alvo e parado por FLIGHT_SETTLE_MS. Só então o trecho termina
      e a Pi pode mandar o próximo (girar ou andar sem estar parado no ar não
      faz sentido). Enquanto isso o voo segue o alvo do mesmo jeito. */
@@ -995,14 +1041,15 @@ static void check_goal(const float x[LQG_NX], uint32_t now) {
     settle_since_ms = 0U;
     return;
   }
-  if (settle_since_ms == 0U) settle_since_ms = now != 0U ? now : 1U;
-  if (now - settle_since_ms < FLIGHT_SETTLE_MS) return;
+  if (settle_since_ms == 0U)
+    settle_since_ms = now != 0U ? now : 1U;
+  if (now - settle_since_ms < FLIGHT_SETTLE_MS)
+    return;
   settle_since_ms = 0U;
   finish_goal(FLIGHT_REQUEST_ACCEPTED, FLIGHT_REASON_NONE);
   enter_hold();
   say("voo: estavel em HOLD a %d cm", (int)((z_ground - ref[LQG_R_Z]) * 100.0F));
 }
-
 
 /**
  * @brief Filtra a altura medida e deriva dela a velocidade vertical.
@@ -1016,7 +1063,8 @@ static void check_goal(const float x[LQG_NX], uint32_t now) {
  * @param[in] y      Medidas.
  */
 static void track_height(uint8_t flags, const lqg_real_t y[LQG_NY]) {
-  if ((flags & MEAS_RANGE) == 0U) return;
+  if ((flags & MEAS_RANGE) == 0U)
+    return;
   const float z = (float)y[LQG_Y_Z];
   if (!meas_z_tracking) {
     meas_z_smooth = z;
@@ -1044,8 +1092,7 @@ static void check_stuck(uint32_t now) {
   const bool chasing = state == FLIGHT_STATE_TAKEOFF || state == FLIGHT_STATE_EXECUTING_LEG;
   const float z = meas_z_smooth;
   const bool behind = chasing && prm.stuck_detect >= 0.5F && motors_follow() && meas_z_tracking &&
-                      isfinite(z_ground) &&
-                      z_ground - z >= FLIGHT_STUCK_MIN_HEIGHT_M &&
+                      isfinite(z_ground) && z_ground - z >= FLIGHT_STUCK_MIN_HEIGHT_M &&
                       z - ref[LQG_R_Z] > FLIGHT_STUCK_ERROR_M;
   if (!behind) {
     stuck_since_ms = 0U;
@@ -1059,10 +1106,13 @@ static void check_stuck(uint32_t now) {
     stuck_trim_z = trim.z;
     return;
   }
-  if (now - stuck_since_ms < FLIGHT_STUCK_MS) return;
+  if (now - stuck_since_ms < FLIGHT_STUCK_MS)
+    return;
   /* O empuxo acumulado desde o travamento só empurrava contra o que prende. */
-  if (lqg_dist_get(&dist, LQG_DIST_Z) > stuck_dist_z) lqg_dist_set(&dist, LQG_DIST_Z, stuck_dist_z);
-  if (trim.z > stuck_trim_z) trim.z = stuck_trim_z;
+  if (lqg_dist_get(&dist, LQG_DIST_Z) > stuck_dist_z)
+    lqg_dist_set(&dist, LQG_DIST_Z, stuck_dist_z);
+  if (trim.z > stuck_trim_z)
+    trim.z = stuck_trim_z;
   ref[LQG_R_Z] = z;
   finish_goal(FLIGHT_REQUEST_FAILED, FLIGHT_REASON_OUT_OF_BOUNDS);
   enter_hold();
@@ -1087,7 +1137,8 @@ static void land_bleed(void) {
      é a medida (track_height): a do Kalman acha que ele desce quando o LQR pede. */
   const bool above = ref[LQG_R_Z] - meas_z_smooth > FLIGHT_LAND_ABOVE_M;
   const bool descending = meas_vz > FLIGHT_LAND_DESCENT_M_S;
-  if (!above || descending) return;
+  if (!above || descending)
+    return;
   const float delta = FLIGHT_LAND_BLEED_RATE * DT_S;
   if (dist_active) {
     lqg_dist_set(&dist, LQG_DIST_Z, fmaxf(lqg_dist_get(&dist, LQG_DIST_Z) - delta, -prm.dist_max));
@@ -1098,18 +1149,22 @@ static void land_bleed(void) {
 
 /** @brief Termina o pouso ao encostar no chão (ou pelo tempo, sem telêmetro). */
 static void check_land(uint8_t flags, const lqg_real_t y[LQG_NY], uint32_t now) {
-  if (state != FLIGHT_STATE_LAND) return;
+  if (state != FLIGHT_STATE_LAND)
+    return;
   if (land_spindown_ms != 0U) {
     /* Encostou: a aceleração desce em rampa (compute_output) e só então desarma. */
-    if (now - land_spindown_ms >= FLIGHT_LAND_SPINDOWN_MS) enter_standby("pouso concluido");
+    if (now - land_spindown_ms >= FLIGHT_LAND_SPINDOWN_MS)
+      enter_standby("pouso concluido");
     return;
   }
   const bool ramp_down = ref[LQG_R_Z] == goal.target[LQG_R_Z];
   if ((flags & MEAS_RANGE) != 0U) {
     const float height = z_ground - (float)y[LQG_Y_Z];
     if (ramp_down && height < prm.land_height) {
-      if (land_touch_ms == 0U) land_touch_ms = now;
-      if (now - land_touch_ms > LAND_TOUCH_MS) begin_spindown(now);
+      if (land_touch_ms == 0U)
+        land_touch_ms = now;
+      if (now - land_touch_ms > LAND_TOUCH_MS)
+        begin_spindown(now);
     } else {
       land_touch_ms = 0U;
     }
@@ -1146,12 +1201,17 @@ static bool balance_is_learnable(void) {
  * @param[in] enabled  O controle está ativo e nada saturou neste passo.
  */
 static void update_trim(bool enabled) {
-  if (prm.trim < 0.5F) return;
+  if (prm.trim < 0.5F)
+    return;
   const float height = isfinite(z_ground) ? z_ground - (float)lqg.x_filt[LQG_X_Z] : 0.0F;
-  if (enabled && height >= TRIM_RELEASE_HEIGHT_M) trim_released = true;
-  const trim_config_t cfg = {.ki_z = prm.trim_ki_z, .ki_att = prm.trim_ki_att,
-                             .ground_rate = TRIM_GROUND_RATE, .settled_vz = TRIM_SETTLED_VZ,
-                             .max_z = prm.trim_max, .max_att = prm.trim_att_max,
+  if (enabled && height >= TRIM_RELEASE_HEIGHT_M)
+    trim_released = true;
+  const trim_config_t cfg = {.ki_z = prm.trim_ki_z,
+                             .ki_att = prm.trim_ki_att,
+                             .ground_rate = TRIM_GROUND_RATE,
+                             .settled_vz = TRIM_SETTLED_VZ,
+                             .max_z = prm.trim_max,
+                             .max_att = prm.trim_att_max,
                              .att_error_max = TRIM_ATT_ERROR_MAX_RAD};
   const uint32_t now = HAL_GetTick();
   if (enabled && now - trim_report_ms >= TRIM_REPORT_MS) {
@@ -1194,10 +1254,8 @@ static void update_dist(bool enabled, const float u[LQG_NU]) {
       say("XY I cm x=%d y=%d", (int)(xy_int[0] * 100.0F), (int)(xy_int[1] * 100.0F));
     }
     if (meas_z_tracking && isfinite(z_ground)) {
-      say("Z cm h=%d ref=%d vz=%d vd=%d",
-          (int)((z_ground - meas_z_smooth) * 100.0F),
-          (int)((z_ground - ref[LQG_R_Z]) * 100.0F),
-          (int)(lqg.x_filt[LQG_X_VZ] * 100.0),
+      say("Z cm h=%d ref=%d vz=%d vd=%d", (int)((z_ground - meas_z_smooth) * 100.0F),
+          (int)((z_ground - ref[LQG_R_Z]) * 100.0F), (int)(lqg.x_filt[LQG_X_VZ] * 100.0),
           (int)(dist.s[LQG_DIST_Z][1] * 100.0F));
     }
   }
@@ -1206,7 +1264,8 @@ static void update_dist(bool enabled, const float u[LQG_NU]) {
      ele se soltar, nada é estimado; com o alvo acima, o hover sobe numa rampa
      fixa, como no ajuste lento. */
   const float height = isfinite(z_ground) ? z_ground - meas_z_smooth : 0.0F;
-  if (enabled && meas_z_tracking && height >= TRIM_RELEASE_HEIGHT_M) dist_released = true;
+  if (enabled && meas_z_tracking && height >= TRIM_RELEASE_HEIGHT_M)
+    dist_released = true;
   lqg_dist_predict(&dist, u, !enabled || !dist_released, !meas_range_ok, prm.dist_max);
   if (enabled && !dist_released && meas_z_tracking &&
       meas_z_smooth - ref[LQG_R_Z] > DIST_GROUND_ERROR_M) {
@@ -1233,7 +1292,8 @@ static void compute_output(const lqg_real_t du_lqg[LQG_NU], float throttle[LQG_N
   const uint32_t since_arm = now - armed_ms;
   const bool taking_off = state == FLIGHT_STATE_TAKEOFF;
   const bool spinning_up = taking_off && since_arm < SPINUP_MS;
-  const bool ramping_up = taking_off && !spinning_up && since_arm < SPINUP_MS + FLIGHT_TAKEOFF_RAMP_MS;
+  const bool ramping_up =
+      taking_off && !spinning_up && since_arm < SPINUP_MS + FLIGHT_TAKEOFF_RAMP_MS;
   const bool spinning_down = state == FLIGHT_STATE_LAND && land_spindown_ms != 0U;
   const bool active = is_airborne_state(state) && !spinning_up;
   for (unsigned i = 0U; i < LQG_NU; ++i) {
@@ -1274,11 +1334,13 @@ static void compute_output(const lqg_real_t du_lqg[LQG_NU], float throttle[LQG_N
   } else if (prm.trim >= 0.5F) {
     trim_values(&trim, slow_w);
   }
-  for (unsigned i = 0U; i < LQG_NU; ++i) trim_w[i] += slow_w[i];
+  for (unsigned i = 0U; i < LQG_NU; ++i)
+    trim_w[i] += slow_w[i];
   /* Limita o pedido completo: FF e estimador também produzem torque de yaw.
      Limitar só du deixava essas parcelas ultrapassarem CTL_PSI_MAX. */
   lqg_real_t requested[LQG_NU], limited[LQG_NU];
-  for (unsigned i = 0U; i < LQG_NU; ++i) requested[i] = du_lqg[i] + trim_w[i];
+  for (unsigned i = 0U; i < LQG_NU; ++i)
+    requested[i] = du_lqg[i] + trim_w[i];
   const bool yaw_cut = lqg_dist_limit_yaw(requested, limited, prm.psi_max);
   for (unsigned i = 0U; i < LQG_NU; ++i) {
     const float w = prm.w0 + (float)limited[i];
@@ -1286,12 +1348,14 @@ static void compute_output(const lqg_real_t du_lqg[LQG_NU], float throttle[LQG_N
   }
   /* Um motor no teto desloca os quatro: a diferença que segura o nível fica. */
   bool modified = throttle_desaturate(throttle, LQG_NU, prm.mot_min, prm.mot_max);
-  if (modified || yaw_cut) *flags |= FLIGHT_FLAG_SATURATED;
-  if (yaw_cut) modified = true;
+  if (modified || yaw_cut)
+    *flags |= FLIGHT_FLAG_SATURATED;
+  if (yaw_cut)
+    modified = true;
   if (ramping_up || spinning_down) {
     const float factor = ramping_up
-        ? throttle_ramp_up(since_arm - SPINUP_MS, FLIGHT_TAKEOFF_RAMP_MS)
-        : throttle_ramp_down(now - land_spindown_ms, FLIGHT_LAND_SPINDOWN_MS);
+                             ? throttle_ramp_up(since_arm - SPINUP_MS, FLIGHT_TAKEOFF_RAMP_MS)
+                             : throttle_ramp_down(now - land_spindown_ms, FLIGHT_LAND_SPINDOWN_MS);
     if (ramping_up && prm.ramp_common_mode >= 0.5F) {
       throttle_blend_common(throttle, LQG_NU, prm.mot_idle, factor);
       (void)throttle_desaturate(throttle, LQG_NU, prm.mot_min, prm.mot_max);
@@ -1308,19 +1372,20 @@ static void compute_output(const lqg_real_t du_lqg[LQG_NU], float throttle[LQG_N
          (compensa um peso que o filtro não conhece), não uma entrada. Sem
          saturação nem rampa, é exatamente o du do LQG. */
       du_applied[i] = modified
-          ? (lqg_real_t)(prm.mot_w_at_0 + throttle[i] * span - prm.w0 - trim_w[i])
-          : du_lqg[i];
+                          ? (lqg_real_t)(prm.mot_w_at_0 + throttle[i] * span - prm.w0 - trim_w[i])
+                          : du_lqg[i];
       /* A planta simulada recebe o comando físico completo. O Kalman continua
          usando du_applied, pois FF/trim são perturbações fora do modelo. */
       sim_input[i] = (float)du_applied[i] + trim_w[i];
     }
   }
   *flags |= FLIGHT_FLAG_CONTROL_ACTIVE;
-  const bool integrate = motors_follow() && !ramping_up && !spinning_down &&
-                         (*flags & FLIGHT_FLAG_SATURATED) == 0U;
+  const bool integrate =
+      motors_follow() && !ramping_up && !spinning_down && (*flags & FLIGHT_FLAG_SATURATED) == 0U;
   if (dist_active) {
     float u[LQG_NU];
-    for (unsigned i = 0U; i < LQG_NU; ++i) u[i] = (float)du_applied[i] + slow_w[i];
+    for (unsigned i = 0U; i < LQG_NU; ++i)
+      u[i] = (float)du_applied[i] + slow_w[i];
     update_dist(integrate, u);
   } else {
     update_trim(integrate);
@@ -1361,8 +1426,10 @@ static void publish(uint32_t now, uint32_t step_count, uint8_t meas_flags, uint8
   t.state = state;
   t.meas_flags = meas_flags;
   t.flags = flags;
-  for (unsigned i = 0U; i < LQG_NY; ++i) t.y[i] = (float)y[i];
-  for (unsigned i = 0U; i < LQG_NX; ++i) t.x_hat[i] = (float)lqg.x_filt[i];
+  for (unsigned i = 0U; i < LQG_NY; ++i)
+    t.y[i] = (float)y[i];
+  for (unsigned i = 0U; i < LQG_NX; ++i)
+    t.x_hat[i] = (float)lqg.x_filt[i];
   for (unsigned i = 0U; i < LQG_NU; ++i) {
     t.du[i] = (float)du[i];
     t.throttle[i] = throttle[i];
@@ -1371,9 +1438,12 @@ static void publish(uint32_t now, uint32_t step_count, uint8_t meas_flags, uint8
   memcpy(t.q, bno.q, sizeof(t.q));
   t.z_ground = z_ground;
   nav_snapshot(&t.nav);
-  if (step_us > t.max_step_us) t.max_step_us = step_us;
-  if ((meas_flags & (MEAS_ATTITUDE | MEAS_GYRO)) != (MEAS_ATTITUDE | MEAS_GYRO)) ++t.bno_misses;
-  if ((meas_flags & MEAS_RANGE) == 0U) ++t.mtf_misses;
+  if (step_us > t.max_step_us)
+    t.max_step_us = step_us;
+  if ((meas_flags & (MEAS_ATTITUDE | MEAS_GYRO)) != (MEAS_ATTITUDE | MEAS_GYRO))
+    ++t.bno_misses;
+  if ((meas_flags & MEAS_RANGE) == 0U)
+    ++t.mtf_misses;
 
   taskENTER_CRITICAL();
   telemetry = t;
@@ -1382,7 +1452,8 @@ static void publish(uint32_t now, uint32_t step_count, uint8_t meas_flags, uint8
   est_accumulator += prm.log_est_hz * DT_S;
   if (est_accumulator >= 1.0F) {
     est_accumulator -= 1.0F;
-    if (est_accumulator > 1.0F) est_accumulator = 0.0F;
+    if (est_accumulator > 1.0F)
+      est_accumulator = 0.0F;
     log_est(t.state, t.meas_flags, t.flags, t.y, t.x_hat, t.du, t.ref);
   }
 }
@@ -1395,7 +1466,8 @@ static void step(uint32_t step_count) {
   ctrl_params_snapshot(&prm);
   if (ctrl_gains_generation() != gains_generation) {
     ctrl_gains_copy_active(&gains, &gains_generation);
-    if (is_armed_state(state)) say("voo: ganhos novos em uso");
+    if (is_armed_state(state))
+      say("voo: ganhos novos em uso");
   }
   if (lqg_tuning_generation() != lqg_aj_generation && !is_armed_state(state)) {
     lqg_tuning_copy_active(&lqg_aj_gains, &lqg_aj_generation);
@@ -1406,7 +1478,8 @@ static void step(uint32_t step_count) {
      decolagem precisa da altura do chão, que só é medida neste passo. */
   request_t req;
   while (xQueuePeek(requests, &req, 0) == pdPASS) {
-    if (state == FLIGHT_STATE_ARMED && isnan(z_ground)) break;
+    if (state == FLIGHT_STATE_ARMED && isnan(z_ground))
+      break;
     (void)xQueueReceive(requests, &req, 0);
     handle_request(&req, now);
   }
@@ -1414,7 +1487,8 @@ static void step(uint32_t step_count) {
   lqg_real_t y[LQG_NY];
   uint8_t meas_flags;
   /* O simulado só liga e desliga desarmado (FLT_SIM é DISARMED_ONLY). */
-  if (!is_armed_state(state)) sim_active = prm.sim >= 0.5F;
+  if (!is_armed_state(state))
+    sim_active = prm.sim >= 0.5F;
   if (sim_active) {
     sim_plant_measure(&sim, y);
     meas_flags = MEAS_ATTITUDE | MEAS_GYRO | MEAS_RANGE | MEAS_FLOW;
@@ -1492,7 +1566,8 @@ static void step(uint32_t step_count) {
     const float shift = ((float)y[LQG_Y_Z] - z_ground) / (float)ground_samples;
     z_ground += shift;
     ref[LQG_R_Z] += shift;
-    if (goal.active) goal.target[LQG_R_Z] += shift;
+    if (goal.active)
+      goal.target[LQG_R_Z] += shift;
   }
   if (!is_armed_state(state)) {
     /* Desarmado, a referência acompanha a estimativa: du mostra o que o
@@ -1517,7 +1592,8 @@ static void step(uint32_t step_count) {
 
   update_xy_integral(meas_flags);
   lqg_real_t r[LQG_NR];
-  for (unsigned i = 0U; i < LQG_NR; ++i) r[i] = (lqg_real_t)ref[i];
+  for (unsigned i = 0U; i < LQG_NR; ++i)
+    r[i] = (lqg_real_t)ref[i];
   /* Só o LQG vê o deslocamento integral; ref (e o log) continua sendo o alvo. */
   r[LQG_R_X] += (lqg_real_t)xy_int[0];
   r[LQG_R_Y] += (lqg_real_t)xy_int[1];
@@ -1528,7 +1604,8 @@ static void step(uint32_t step_count) {
   if (heading_frame) {
     attitude_mode_rotate_pair(&y[LQG_Y_VX], &y[LQG_Y_VY], -psi_now);
     attitude_mode_rotate_pair(&r[LQG_R_X], &r[LQG_R_Y], -psi_now);
-    if (!lqg.ic_load) attitude_mode_rotate_horizontal(lqg.x_pred, -psi_now);
+    if (!lqg.ic_load)
+      attitude_mode_rotate_horizontal(lqg.x_pred, -psi_now);
   }
   /* O Kalman do LQG não mede vz: ele a tira do modelo de empuxo, e o erro do modelo vira um
      viés (−14 a −18 cm/s com a altura parada nos voos de 08/11, que segurava o drone a ~5 cm).
@@ -1541,8 +1618,10 @@ static void step(uint32_t step_count) {
   lqg_ert_output(&lqg, &gains_effective, y, r, du);
 
   uint8_t flags = 0U;
-  if (dry_run || !is_armed_state(state)) flags |= FLIGHT_FLAG_DRY_RUN;
-  if (!ctrl_gains_active_is_default()) flags |= FLIGHT_FLAG_CUSTOM_GAINS;
+  if (dry_run || !is_armed_state(state))
+    flags |= FLIGHT_FLAG_DRY_RUN;
+  if (!ctrl_gains_active_is_default())
+    flags |= FLIGHT_FLAG_CUSTOM_GAINS;
   float throttle[LQG_NU];
   lqg_real_t du_applied[LQG_NU];
   compute_output(du, throttle, du_applied, &flags);
@@ -1564,7 +1643,8 @@ static void step(uint32_t step_count) {
     /* O drone simulado é o modelo do TCC; com o ajustado, na escala real de
        guinada e altura (a mesma que o projeto do ajustado supõe). */
     lqg_real_t u_plant[LQG_NU];
-    for (unsigned i = 0U; i < LQG_NU; ++i) u_plant[i] = (lqg_real_t)sim_input[i];
+    for (unsigned i = 0U; i < LQG_NU; ++i)
+      u_plant[i] = (lqg_real_t)sim_input[i];
     if (prm.lqg_adjusted >= 0.5F) {
       lqg_real_t u_scaled[LQG_NU];
       lqg_dist_kalman_input(u_plant, u_scaled);
@@ -1576,11 +1656,12 @@ static void step(uint32_t step_count) {
   if (heading_frame) {
     attitude_mode_rotate_horizontal(lqg.x_pred, psi_now);
     attitude_mode_rotate_horizontal(lqg.x_filt, psi_now);
-    attitude_mode_rotate_pair(&y[LQG_Y_VX], &y[LQG_Y_VY], psi_now);  /* o log mostra o local */
+    attitude_mode_rotate_pair(&y[LQG_Y_VX], &y[LQG_Y_VY], psi_now); /* o log mostra o local */
   }
 
   float x[LQG_NX];
-  for (unsigned i = 0U; i < LQG_NX; ++i) x[i] = (float)lqg.x_filt[i];
+  for (unsigned i = 0U; i < LQG_NX; ++i)
+    x[i] = (float)lqg.x_filt[i];
   check_goal(x, now);
   check_land(meas_flags, y, now);
 

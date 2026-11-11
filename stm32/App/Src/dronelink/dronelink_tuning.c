@@ -15,7 +15,7 @@
 
 /** Intervalo entre dois PARAM_VALUE da lista, em ms. A 115200 bit/s cada um
     leva ~3,2 ms; 8 ms deixa espaço para a telemetria e não enche a fila. */
-#define PARAM_LIST_PERIOD_MS 8U
+#define PARAM_LIST_PERIOD_MS  8U
 /** Valor do campo action no DRONE_GAIN_ACK que responde a uma linha recusada. */
 #define GAIN_ACK_ROW_REJECTED 255U
 
@@ -39,7 +39,8 @@ static bool for_fc(uint8_t system, uint8_t component) {
 /** @brief Envia o PARAM_VALUE de um parâmetro. */
 static void send_param(size_t index) {
   const ctrl_param_desc_t *d = ctrl_params_desc(index);
-  if (d == NULL) return;
+  if (d == NULL)
+    return;
   char id[CTRL_PARAM_NAME_MAX + 1U] = {0};
   strncpy(id, d->name, CTRL_PARAM_NAME_MAX);
   mavlink_message_t m;
@@ -54,8 +55,8 @@ static void send_text(uint8_t severity, const char *text) {
   char buffer[MAVLINK_MSG_STATUSTEXT_FIELD_TEXT_LEN + 1U] = {0};
   strncpy(buffer, text, MAVLINK_MSG_STATUSTEXT_FIELD_TEXT_LEN);
   mavlink_message_t m;
-  mavlink_msg_statustext_pack(DRONELINK_SYSTEM_ID, DRONELINK_FC_COMPONENT_ID, &m, severity,
-                              buffer, 0U, 0U);
+  mavlink_msg_statustext_pack(DRONELINK_SYSTEM_ID, DRONELINK_FC_COMPONENT_ID, &m, severity, buffer,
+                              0U, 0U);
   dronelink_send(&m, DRONELINK_TX_NORMAL);
 }
 
@@ -74,7 +75,8 @@ static void send_gain_ack(uint32_t session, uint8_t action, ctrl_gains_status_t 
 static void handle_request_list(const mavlink_message_t *message) {
   mavlink_param_request_list_t req;
   mavlink_msg_param_request_list_decode(message, &req);
-  if (!for_fc(req.target_system, req.target_component)) return;
+  if (!for_fc(req.target_system, req.target_component))
+    return;
   list_next = 0U;
   list_active = true;
 }
@@ -83,10 +85,10 @@ static void handle_request_list(const mavlink_message_t *message) {
 static void handle_request_read(const mavlink_message_t *message) {
   mavlink_param_request_read_t req;
   mavlink_msg_param_request_read_decode(message, &req);
-  if (!for_fc(req.target_system, req.target_component)) return;
-  const int index = req.param_index >= 0
-                        ? req.param_index
-                        : ctrl_params_find(req.param_id, sizeof(req.param_id));
+  if (!for_fc(req.target_system, req.target_component))
+    return;
+  const int index =
+      req.param_index >= 0 ? req.param_index : ctrl_params_find(req.param_id, sizeof(req.param_id));
   if (index >= 0 && (size_t)index < ctrl_params_count()) {
     send_param((size_t)index);
   }
@@ -96,7 +98,8 @@ static void handle_request_read(const mavlink_message_t *message) {
 static void handle_param_set(const mavlink_message_t *message) {
   mavlink_param_set_t req;
   mavlink_msg_param_set_decode(message, &req);
-  if (!for_fc(req.target_system, req.target_component)) return;
+  if (!for_fc(req.target_system, req.target_component))
+    return;
   const int index = ctrl_params_find(req.param_id, sizeof(req.param_id));
   char text[64];
   if (index < 0) {
@@ -118,7 +121,8 @@ static void handle_param_set(const mavlink_message_t *message) {
 static void handle_gain_row(const mavlink_message_t *message) {
   mavlink_drone_gain_row_t row;
   mavlink_msg_drone_gain_row_decode(message, &row);
-  if (!for_fc(row.target_system, row.target_component)) return;
+  if (!for_fc(row.target_system, row.target_component))
+    return;
   const uint8_t count = row.count > CTRL_GAINS_MAX_COLS ? CTRL_GAINS_MAX_COLS + 1U : row.count;
   const ctrl_gains_status_t status = ctrl_gains_stage_row(
       row.session_id, (ctrl_gain_matrix_t)row.matrix, row.row, row.values, count);
@@ -132,31 +136,32 @@ static void handle_gain_row(const mavlink_message_t *message) {
 static void handle_gain_commit(const mavlink_message_t *message) {
   mavlink_drone_gain_commit_t req;
   mavlink_msg_drone_gain_commit_decode(message, &req);
-  if (!for_fc(req.target_system, req.target_component)) return;
+  if (!for_fc(req.target_system, req.target_component))
+    return;
   ctrl_gains_status_t status = CTRL_GAINS_OK;
   uint32_t staged_crc = 0U;
   uint32_t rows = 0U;
   char text[61];
   switch (req.action) {
-    case DRONE_GAIN_ACTION_COMMIT:
-      status = ctrl_gains_commit(req.session_id, req.crc32, &staged_crc, &rows);
-      if (status == CTRL_GAINS_OK) {
-        snprintf(text, sizeof(text), "Pi: ganhos novos crc=%08lX", (unsigned long)req.crc32);
-        log_text(text);
-      }
-      break;
-    case DRONE_GAIN_ACTION_ABORT:
-      ctrl_gains_abort();
-      break;
-    case DRONE_GAIN_ACTION_RESTORE_DEFAULT:
-      ctrl_gains_restore_default();
-      log_text("Pi: ganhos do Simulink restaurados");
-      break;
-    case DRONE_GAIN_ACTION_QUERY:
-      break;
-    default:
-      status = CTRL_GAINS_BAD_INDEX;
-      break;
+  case DRONE_GAIN_ACTION_COMMIT:
+    status = ctrl_gains_commit(req.session_id, req.crc32, &staged_crc, &rows);
+    if (status == CTRL_GAINS_OK) {
+      snprintf(text, sizeof(text), "Pi: ganhos novos crc=%08lX", (unsigned long)req.crc32);
+      log_text(text);
+    }
+    break;
+  case DRONE_GAIN_ACTION_ABORT:
+    ctrl_gains_abort();
+    break;
+  case DRONE_GAIN_ACTION_RESTORE_DEFAULT:
+    ctrl_gains_restore_default();
+    log_text("Pi: ganhos do Simulink restaurados");
+    break;
+  case DRONE_GAIN_ACTION_QUERY:
+    break;
+  default:
+    status = CTRL_GAINS_BAD_INDEX;
+    break;
   }
   send_gain_ack(req.session_id, req.action, status, staged_crc, rows);
 }
@@ -169,29 +174,31 @@ void dronelink_tuning_init(void) {
 
 bool dronelink_tuning_handle(const mavlink_message_t *message) {
   switch (message->msgid) {
-    case MAVLINK_MSG_ID_PARAM_REQUEST_LIST:
-      handle_request_list(message);
-      return true;
-    case MAVLINK_MSG_ID_PARAM_REQUEST_READ:
-      handle_request_read(message);
-      return true;
-    case MAVLINK_MSG_ID_PARAM_SET:
-      handle_param_set(message);
-      return true;
-    case MAVLINK_MSG_ID_DRONE_GAIN_ROW:
-      handle_gain_row(message);
-      return true;
-    case MAVLINK_MSG_ID_DRONE_GAIN_COMMIT:
-      handle_gain_commit(message);
-      return true;
-    default:
-      return false;
+  case MAVLINK_MSG_ID_PARAM_REQUEST_LIST:
+    handle_request_list(message);
+    return true;
+  case MAVLINK_MSG_ID_PARAM_REQUEST_READ:
+    handle_request_read(message);
+    return true;
+  case MAVLINK_MSG_ID_PARAM_SET:
+    handle_param_set(message);
+    return true;
+  case MAVLINK_MSG_ID_DRONE_GAIN_ROW:
+    handle_gain_row(message);
+    return true;
+  case MAVLINK_MSG_ID_DRONE_GAIN_COMMIT:
+    handle_gain_commit(message);
+    return true;
+  default:
+    return false;
   }
 }
 
 void dronelink_tuning_tick(uint32_t now_ms) {
-  if (!list_active || now_ms - list_last_ms < PARAM_LIST_PERIOD_MS) return;
+  if (!list_active || now_ms - list_last_ms < PARAM_LIST_PERIOD_MS)
+    return;
   list_last_ms = now_ms;
   send_param(list_next);
-  if (++list_next >= ctrl_params_count()) list_active = false;
+  if (++list_next >= ctrl_params_count())
+    list_active = false;
 }

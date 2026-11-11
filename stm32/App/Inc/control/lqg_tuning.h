@@ -33,24 +33,24 @@
 
 /** @brief Ganhos que o painel pode trocar. */
 typedef struct {
-  lqg_real_t Kd[LQG_NU][LQG_NX];   /**< Ganho de estado, 4 x 12. */
-  lqg_real_t Kfd[LQG_NU][LQG_NR];  /**< Ganho de referência, 4 x 4. */
+  lqg_real_t Kd[LQG_NU][LQG_NX];  /**< Ganho de estado, 4 x 12. */
+  lqg_real_t Kfd[LQG_NU][LQG_NR]; /**< Ganho de referência, 4 x 4. */
 } lqg_aj_gains_t;
 
 /** @brief Matrizes que podem ser enviadas. */
 typedef enum {
-  LQG_TUNING_KD = 0,  /**< Kd, 4 x 12. */
-  LQG_TUNING_KFD,     /**< Kfd, 4 x 4. */
+  LQG_TUNING_KD = 0, /**< Kd, 4 x 12. */
+  LQG_TUNING_KFD,    /**< Kfd, 4 x 4. */
   LQG_TUNING_COUNT
 } lqg_tuning_matrix_t;
 
 /** @brief Resultado do preparo e do commit. */
 typedef enum {
-  LQG_TUNING_OK = 0,         /**< Aceito. */
-  LQG_TUNING_BAD_INDEX,      /**< Matriz, linha ou coluna inválida. */
-  LQG_TUNING_INCOMPLETE,     /**< Commit sem todos os valores. */
-  LQG_TUNING_CRC_MISMATCH,   /**< O CRC não confere com o enviado. */
-  LQG_TUNING_NOT_FINITE      /**< Algum valor é NaN ou infinito. */
+  LQG_TUNING_OK = 0,       /**< Aceito. */
+  LQG_TUNING_BAD_INDEX,    /**< Matriz, linha ou coluna inválida. */
+  LQG_TUNING_INCOMPLETE,   /**< Commit sem todos os valores. */
+  LQG_TUNING_CRC_MISMATCH, /**< O CRC não confere com o enviado. */
+  LQG_TUNING_NOT_FINITE    /**< Algum valor é NaN ou infinito. */
 } lqg_tuning_status_t;
 
 /** Total de valores de um conjunto (48 + 16). */

@@ -32,7 +32,8 @@ void attitude_mode_repeat_prediction(const lqg_ert_t *s, lqg_real_t y[LQG_NY]) {
     const unsigned row = HORIZONTAL_MEASUREMENTS[k];
     lqg_real_t predicted = 0.0;
     if (!s->ic_load) {
-      for (unsigned j = 0U; j < LQG_NX; ++j) predicted += LQG_ERT_C[row][j] * s->x_pred[j];
+      for (unsigned j = 0U; j < LQG_NX; ++j)
+        predicted += LQG_ERT_C[row][j] * s->x_pred[j];
     }
     y[row] = predicted;
   }

@@ -42,22 +42,22 @@
 
 /** @brief Índice de cada canal. */
 typedef enum {
-  LQG_DIST_Z = 0,   /**< Altura: hover errado (os quatro motores iguais). */
-  LQG_DIST_PHI,     /**< Rolagem: esquerda (u1, u4) contra direita (u2, u3). */
-  LQG_DIST_THETA,   /**< Arfagem: frente (u1, u2) contra trás (u3, u4). */
-  LQG_DIST_PSI      /**< Guinada: u2, u4 contra u1, u3 (torque das hélices). */
+  LQG_DIST_Z = 0, /**< Altura: hover errado (os quatro motores iguais). */
+  LQG_DIST_PHI,   /**< Rolagem: esquerda (u1, u4) contra direita (u2, u3). */
+  LQG_DIST_THETA, /**< Arfagem: frente (u1, u2) contra trás (u3, u4). */
+  LQG_DIST_PSI    /**< Guinada: u2, u4 contra u1, u3 (torque das hélices). */
 } lqg_dist_index_t;
 
 /** @brief Modelo e ganho de regime de um canal. */
 typedef struct {
-  uint8_t pos;          /**< Estado de posição no modelo (LQG_X_*). */
-  uint8_t vel;          /**< Estado de velocidade no modelo. */
-  uint8_t ny;           /**< Medidas usadas (1: só posição; 2: posição e velocidade). */
-  uint8_t y[2];         /**< Índice de cada medida em y (LQG_Y_*). */
-  float pattern[LQG_NU];  /**< Padrão da perturbação em u1..u4 (+1 ou -1). */
-  float A[3][3];        /**< Ac. */
-  float B[3];           /**< Bc. */
-  float M[3][2];        /**< Ganho de correção de regime. */
+  uint8_t pos;           /**< Estado de posição no modelo (LQG_X_*). */
+  uint8_t vel;           /**< Estado de velocidade no modelo. */
+  uint8_t ny;            /**< Medidas usadas (1: só posição; 2: posição e velocidade). */
+  uint8_t y[2];          /**< Índice de cada medida em y (LQG_Y_*). */
+  float pattern[LQG_NU]; /**< Padrão da perturbação em u1..u4 (+1 ou -1). */
+  float A[3][3];         /**< Ac. */
+  float B[3];            /**< Bc. */
+  float M[3][2];         /**< Ganho de correção de regime. */
 } lqg_dist_channel_t;
 
 /** Canais gerados por tools/lqg_ajustado.py. */
@@ -103,9 +103,9 @@ extern const float LQG_AJ_Z_SCALE;
 
 /** @brief Estado do estimador: [posição, velocidade, d] de cada canal. */
 typedef struct {
-  float s[LQG_DIST_NC][3];  /**< Estados; s[c][2] é d̂, em rad/s por motor. */
-  float d_before[LQG_DIST_NC];  /**< d̂ antes da última correção (para congelar). */
-  bool started[LQG_DIST_NC];  /**< O canal já recebeu a primeira medida. */
+  float s[LQG_DIST_NC][3];     /**< Estados; s[c][2] é d̂, em rad/s por motor. */
+  float d_before[LQG_DIST_NC]; /**< d̂ antes da última correção (para congelar). */
+  bool started[LQG_DIST_NC];   /**< O canal já recebeu a primeira medida. */
 } lqg_dist_t;
 
 /** @brief Troca Kd e Kfd pelos do LQG ajustado numa cópia dos ganhos (L e M não mudam). */

@@ -21,6 +21,7 @@ Gera App/Src/control/lqg_ajustado_gains.c, usado pelos modos "LQG ajustado" e
     python3 tools/lqg_ajustado.py            # grava a tabela
     python3 tools/lqg_ajustado.py --check    # confere (tests/run.sh)
 """
+
 from __future__ import annotations
 
 import struct
@@ -67,7 +68,7 @@ RN_AJUSTADO = RN[:5] + [RN[4]] + RN[6:]
 SIGMA_V_FUNDIDO = 0.03
 #: Variância das medidas do Kalman com a velocidade fundida: a do ajustado com
 #: vx e vy em SIGMA_V_FUNDIDO² (o LQG passa a confiar mais na velocidade).
-RN_FUNDIDO = RN_AJUSTADO[:4] + [SIGMA_V_FUNDIDO ** 2] * 2 + RN_AJUSTADO[6:]
+RN_FUNDIDO = RN_AJUSTADO[:4] + [SIGMA_V_FUNDIDO**2] * 2 + RN_AJUSTADO[6:]
 #: Variância (por passo) da perturbação de altura, em (rad/s)²: rápida o
 #: bastante para achar um hover 30 rad/s errado em poucos segundos.
 QD_ALTURA = 1.0
@@ -206,15 +207,16 @@ def comandos(Kd: Matriz, Kfd: Matriz) -> List[str]:
     return linhas
 
 
-def kalman_canal(pos: str, vel: str, medidas: List[str], padrao: List[int],
-                 qd: float) -> Tuple[Matriz, List[float], Matriz]:
+def kalman_canal(
+    pos: str, vel: str, medidas: List[str], padrao: List[int], qd: float
+) -> Tuple[Matriz, List[float], Matriz]:
     """A (3x3), B (3) e M (3x2) de regime de um canal do estimador."""
     A, B = modelo_corrigido()
     p, v = X[pos], X[vel]
     bp, bv = B[p][0] * padrao[0], B[v][0] * padrao[0]
     Ac = [[A[p][p], A[p][v], -4.0 * bp], [A[v][p], A[v][v], -4.0 * bv], [0.0, 0.0, 1.0]]
     Bc = [bp, bv, 0.0]
-    C = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]][:len(medidas)]
+    C = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]][: len(medidas)]
     Qn = [QN_POSICAO, QN_VELOCIDADE, qd]
     Rn = [RN[Y[m]] for m in medidas]
     P = [[1.0 if i == j else 0.0 for j in range(3)] for i in range(3)]
@@ -226,7 +228,10 @@ def kalman_canal(pos: str, vel: str, medidas: List[str], padrao: List[int],
             S[k][k] += r
         M = lp._mul(PCt, lp._inv(S))
         MC = lp._mul(M, C)
-        Pf = [[P[i][j] - sum(MC[i][m] * P[m][j] for m in range(3)) for j in range(3)] for i in range(3)]
+        Pf = [
+            [P[i][j] - sum(MC[i][m] * P[m][j] for m in range(3)) for j in range(3)]
+            for i in range(3)
+        ]
         Pn = lp._mul(lp._mul(Ac, Pf), lp._t(Ac))
         for i in range(3):
             Pn[i][i] += Qn[i]
@@ -285,7 +290,11 @@ def gerar() -> str:
     out += ["};", "", "const lqg_real_t LQG_AJ_L[LQG_NX][LQG_NY] = {"]
     out += [f"  {_linha(l)},  /* {n} */" for l, n in zip(L, lp.ESTADOS)]
     Mf, Lf = kalman_lqg(RN_FUNDIDO)
-    out += ["};", "", f"/* Kalman com a velocidade fundida (FLOW_EKF): vx, vy com desvio de {SIGMA_V_FUNDIDO:g} m/s. */"]
+    out += [
+        "};",
+        "",
+        f"/* Kalman com a velocidade fundida (FLOW_EKF): vx, vy com desvio de {SIGMA_V_FUNDIDO:g} m/s. */",
+    ]
     out += ["const lqg_real_t LQG_AJ_M_FUSED[LQG_NX][LQG_NY] = {"]
     out += [f"  {_linha(l)},  /* {n} */" for l, n in zip(Mf, lp.ESTADOS)]
     out += ["};", "", "const lqg_real_t LQG_AJ_L_FUSED[LQG_NX][LQG_NY] = {"]

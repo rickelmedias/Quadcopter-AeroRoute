@@ -11,6 +11,7 @@ Os ganhos exportados do Simulink são reproduzidos por (erro relativo < 1e-9):
 A, B e C vêm da exportação do Simulink (reference/STM32_ert_rtw), então só os
 pesos mudam durante o ajuste: o modelo continua sendo o do TCC.
 """
+
 from __future__ import annotations
 
 import json
@@ -74,8 +75,11 @@ class Weights:
             for i in range(len(vec)):
                 vec[i] = float(value)
             return f'{kind}[todos] = {value:g}'
-        index = which if isinstance(which, int) else (
-            names.index(which) if which in names else int(which))
+        index = (
+            which
+            if isinstance(which, int)
+            else (names.index(which) if which in names else int(which))
+        )
         old = vec[index]
         vec[index] = float(value)
         return f'{kind}[{names[index]}]: {old:g} -> {value:g}'
@@ -95,8 +99,9 @@ class Weights:
         return w
 
 
-def dare(A: np.ndarray, B: np.ndarray, Q: np.ndarray, R: np.ndarray,
-         iterations: int = 100) -> np.ndarray:
+def dare(
+    A: np.ndarray, B: np.ndarray, Q: np.ndarray, R: np.ndarray, iterations: int = 100
+) -> np.ndarray:
     """Equação de Riccati discreta pelo algoritmo de duplicação (SDA).
 
     Resolve P = A' P A - A' P B (R + B' P B)^-1 B' P A + Q sem depender do
