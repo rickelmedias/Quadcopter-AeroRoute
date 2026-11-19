@@ -1,0 +1,7 @@
+# Etapa 1: decolar, pairar perto de (0,0) e pousar.
+# O "takeoff" só termina com o drone 1 s parado a menos de 5 cm do alvo
+# (altura 30 cm e x,y = 0,0 da origem fixada quando o fluxo passou a valer).
+#   ~/drone/dronectl mission ~/drone/rpi/missions/stage1_hover.txt --record
+takeoff 30
+wait 15
+land

@@ -1,0 +1,9 @@
+# Etapa 2: de A (decolagem) até B, 40 cm à frente, e de volta a A, sem girar.
+#   ~/drone/dronectl mission ~/drone/rpi/missions/stage2_a_b_a.txt --record
+takeoff 30
+wait 5
+forward 40
+wait 5
+back 40
+wait 5
+land

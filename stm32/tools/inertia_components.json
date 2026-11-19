@@ -1,0 +1,305 @@
+{
+ "_nota": "NAO USAR O CG: estimativa por foto/CAD (CG x = +8 mm) refutada pelos voos de 11 e 12/11 (CG entre 0 e 2 mm atras do centro dos motores). O tensor serve so como ordem de grandeza. Estimativa de 14/11/2026: placas do CAD GEPRC Cinelog35 V2 (carbono 1,6 g/cm3 suposto) e posições medidas na foto de cima (escala: 100,4 mm entre motores). Massas da tabela de 551 g, nao conferidas na balanca. Z da bateria, contrapesos, dutos (4 aneis de 37 mm, 65 g = carcaca 119 g menos as placas) e dimensoes sao estimativas. FRD, origem no centro dos motores, mm e g.",
+ "components": [
+  {
+   "name": "arm-plate",
+   "mass_g": 46.28031215240533,
+   "pos_mm": [
+    -13.23,
+    0.0,
+    -1.89
+   ],
+   "shape": "tensor",
+   "inertia_kgm2": [
+    [
+     3.074890514104834e-05,
+     -1.1057941661167146e-08,
+     5.285472448045016e-09
+    ],
+    [
+     -1.1057941661167146e-08,
+     8.256554691115838e-05,
+     1.4500384584069254e-12
+    ],
+    [
+     5.285472448045016e-09,
+     1.4500384584069254e-12,
+     0.00011320363227163925
+    ]
+   ]
+  },
+  {
+   "name": "top-plate",
+   "mass_g": 3.9390626328056566,
+   "pos_mm": [
+    -101.0,
+    0.0,
+    -3.0
+   ],
+   "shape": "tensor",
+   "inertia_kgm2": [
+    [
+     5.049744957290099e-07,
+     1.491609138186276e-09,
+     -6.522047988651321e-12
+    ],
+    [
+     1.491609138186276e-09,
+     1.1086507548645557e-06,
+     3.230062586839777e-11
+    ],
+    [
+     -6.522047988651321e-12,
+     3.230062586839777e-11,
+     1.6109856217965576e-06
+    ]
+   ]
+  },
+  {
+   "name": "bottom-plate",
+   "mass_g": 3.6174870542557604,
+   "pos_mm": [
+    0.0,
+    0.0,
+    4.0
+   ],
+   "shape": "tensor",
+   "inertia_kgm2": [
+    [
+     4.664702556415439e-07,
+     0.0,
+     1.7188950498548803e-10
+    ],
+    [
+     0.0,
+     7.248790270171434e-07,
+     4.656612873077393e-23
+    ],
+    [
+     1.7188950498548803e-10,
+     4.656612873077393e-23,
+     1.1897999111979664e-06
+    ]
+   ]
+  },
+  {
+   "name": "duto",
+   "mass_g": 16.290784540133313,
+   "shape": "ring",
+   "radius_mm": 37.0,
+   "pos_mm": [
+    50.2,
+    50.2,
+    -2
+   ]
+  },
+  {
+   "name": "motor+helice",
+   "mass_g": 24,
+   "shape": "point",
+   "pos_mm": [
+    50.2,
+    50.2,
+    -5
+   ]
+  },
+  {
+   "name": "duto",
+   "mass_g": 16.290784540133313,
+   "shape": "ring",
+   "radius_mm": 37.0,
+   "pos_mm": [
+    50.2,
+    -50.2,
+    -2
+   ]
+  },
+  {
+   "name": "motor+helice",
+   "mass_g": 24,
+   "shape": "point",
+   "pos_mm": [
+    50.2,
+    -50.2,
+    -5
+   ]
+  },
+  {
+   "name": "duto",
+   "mass_g": 16.290784540133313,
+   "shape": "ring",
+   "radius_mm": 37.0,
+   "pos_mm": [
+    -50.2,
+    50.2,
+    -2
+   ]
+  },
+  {
+   "name": "motor+helice",
+   "mass_g": 24,
+   "shape": "point",
+   "pos_mm": [
+    -50.2,
+    50.2,
+    -5
+   ]
+  },
+  {
+   "name": "duto",
+   "mass_g": 16.290784540133313,
+   "shape": "ring",
+   "radius_mm": 37.0,
+   "pos_mm": [
+    -50.2,
+    -50.2,
+    -2
+   ]
+  },
+  {
+   "name": "motor+helice",
+   "mass_g": 24,
+   "shape": "point",
+   "pos_mm": [
+    -50.2,
+    -50.2,
+    -5
+   ]
+  },
+  {
+   "name": "contrapeso",
+   "mass_g": 63,
+   "shape": "box",
+   "dims_mm": [
+    20,
+    20,
+    30
+   ],
+   "pos_mm": [
+    50.2,
+    50.2,
+    -12
+   ]
+  },
+  {
+   "name": "contrapeso",
+   "mass_g": 63,
+   "shape": "box",
+   "dims_mm": [
+    20,
+    20,
+    30
+   ],
+   "pos_mm": [
+    50.2,
+    -50.2,
+    -12
+   ]
+  },
+  {
+   "name": "bateria",
+   "mass_g": 145,
+   "shape": "box",
+   "dims_mm": [
+    40,
+    80,
+    25
+   ],
+   "pos_mm": [
+    20.8,
+    0,
+    -15
+   ]
+  },
+  {
+   "name": "ESC",
+   "mass_g": 17,
+   "shape": "box",
+   "dims_mm": [
+    36,
+    36,
+    8
+   ],
+   "pos_mm": [
+    -5,
+    0,
+    -6
+   ]
+  },
+  {
+   "name": "protoboard",
+   "mass_g": 9,
+   "shape": "box",
+   "dims_mm": [
+    51,
+    100,
+    2
+   ],
+   "pos_mm": [
+    -56,
+    0,
+    -22
+   ]
+  },
+  {
+   "name": "STM32+BNO",
+   "mass_g": 7,
+   "shape": "box",
+   "dims_mm": [
+    21,
+    53,
+    5
+   ],
+   "pos_mm": [
+    -56,
+    0,
+    -25
+   ]
+  },
+  {
+   "name": "Pi",
+   "mass_g": 12,
+   "shape": "box",
+   "dims_mm": [
+    30,
+    65,
+    5
+   ],
+   "pos_mm": [
+    -113,
+    -4,
+    -10
+   ]
+  },
+  {
+   "name": "MTF-01",
+   "mass_g": 15,
+   "shape": "box",
+   "dims_mm": [
+    20,
+    20,
+    10
+   ],
+   "pos_mm": [
+    -89,
+    21,
+    6
+   ]
+  },
+  {
+   "name": "cabos+MPU",
+   "mass_g": 5,
+   "shape": "box",
+   "dims_mm": [
+    40,
+    40,
+    5
+   ],
+   "pos_mm": [
+    -30,
+    0,
+    -10
+   ]
+  }
+ ]
+}

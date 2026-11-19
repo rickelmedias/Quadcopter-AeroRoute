@@ -1,9 +1,82 @@
-\begin{folhadeaprovacao}
-    % =========================================================
-    % SUBSTITUA pelo PDF digitalizado após recolher as
-    % assinaturas dos avaliadores da banca examinadora.
-    % O formulário em branco (FSGQ-21.02.02) está disponível
-    % na coordenadoria do seu curso.
-    % =========================================================
-    \includepdf[pages=1]{samples/FSGQ_21_02_02_FOLHA_DE_APROV_ALUNO_PEDE_ASSINATURAS.pdf}
-\end{folhadeaprovacao}
+% ============================================================================
+% FOLHA DE APROVACAO - UNIFACENS (Limpo e Corrigido)
+% ============================================================================
+\providecommand{\FapNomeUm}{RICKELME GABRIEL DIAS}
+\providecommand{\FapNomeDois}{THALISON HENRIQUE SILVA ROSA}
+\providecommand{\FapTituloLinhaUm}{DESENVOLVIMENTO DE VANT AUTOMATIZADO}
+\providecommand{\FapTituloLinhaDois}{PARA LOGÍSTICA URBANA E OTIMIZAÇÃO DE ROTAS}
+\providecommand{\FapOrientador}{Me. Sidney Montebeller}
+\providecommand{\FapAvaliadorUm}{Dr. Denis Borg}
+\providecommand{\FapAfiliacaoUm}{Centro Universitário Facens}
+\providecommand{\FapAvaliadorDois}{Me. Marcos Fábio Jardini}
+\providecommand{\FapAfiliacaoDois}{Centro Universitário Facens}
+\providecommand{\FapAvaliadorTres}{Me. Sidney Montebeller}
+\providecommand{\FapAfiliacaoTres}{Centro Universitário Facens}
+
+\clearpage
+\begingroup
+  \thispagestyle{empty}
+  \setlength{\parindent}{0pt}
+  \setlength{\parskip}{0pt}
+  \frenchspacing
+
+  \newcommand{\FapCentro}[3]{%
+    \node[anchor=base,inner sep=0pt,outer sep=0pt,text=black] at
+      ([xshift=297.65bp,yshift=-#1bp]current page.north west)
+      {{\fontsize{#2bp}{#2bp}\selectfont #3}};%
+  }
+  \newcommand{\FapLinhaAssinatura}[1]{%
+    \draw[black,line width=0.58bp]
+      ([xshift=180.95bp,yshift=-#1bp]current page.north west)--
+      ([xshift=414.5bp,yshift=-#1bp]current page.north west);%
+  }
+
+  \begin{tikzpicture}[remember picture,overlay]
+    % ------------------------------------------------------------------------
+    % 1 - ALUNO(S): Arial 12, Maiúsculas (Um nome por linha)
+    % ------------------------------------------------------------------------
+    \FapCentro{78.00}{12}{\bfseries \FapNomeUm}
+    \FapCentro{93.00}{12}{\bfseries \FapNomeDois}
+
+    % ------------------------------------------------------------------------
+    % 2 - TÍTULO DO TRABALHO: Arial 14, Maiúsculas
+    % ------------------------------------------------------------------------
+    \FapCentro{152.00}{14}{\bfseries \MakeUppercase{\FapTituloLinhaUm}}
+    \FapCentro{170.00}{14}{\bfseries \MakeUppercase{\FapTituloLinhaDois}}
+
+    % ------------------------------------------------------------------------
+    % 3 - NATUREZA DO TRABALHO: Recuo de 8cm, Texto Justificado, Arial 11
+    % ------------------------------------------------------------------------
+    \node[anchor=north west,align=justify,text width=7.2cm] at ([xshift=311.95bp,yshift=-270bp]current page.north west) {
+      \fontsize{11bp}{13bp}\selectfont
+      Trabalho de conclusão de curso apresentado ao Centro Universitário Facens como exigência parcial para obtenção do certificado de conclusão do curso de Engenharia da Computação e Engenharia Mecatrônica.\\
+      Orientador: \FapOrientador.
+    };
+
+    % ------------------------------------------------------------------------
+    % 4 - BANCA EXAMINADORA
+    % ------------------------------------------------------------------------
+    \FapCentro{455.00}{14}{\bfseries BANCA EXAMINADORA}
+
+    % ------------------------------------------------------------------------
+    % 5 - ASSINATURAS DOS AVALIADORES
+    % ------------------------------------------------------------------------
+    % 1º Avaliador
+    \FapLinhaAssinatura{505.00}
+    \FapCentro{520.00}{11}{\FapAvaliadorUm}
+    \FapCentro{535.00}{11}{\FapAfiliacaoUm}
+
+    % 2º Avaliador
+    \FapLinhaAssinatura{590.00}
+    \FapCentro{605.00}{11}{\FapAvaliadorDois}
+    \FapCentro{620.00}{11}{\FapAfiliacaoDois}
+
+    % 3º Avaliador
+    \FapLinhaAssinatura{675.00}
+    \FapCentro{690.00}{11}{\FapAvaliadorTres}
+    \FapCentro{705.00}{11}{\FapAfiliacaoTres}
+
+  \end{tikzpicture}
+  \null
+\endgroup
+\clearpage

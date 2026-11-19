@@ -1,4 +1,0 @@
-247.680	voo: ARMADO SIMULADO (Pi)
-247.685	voo: decolando para 30 cm
-248.799	FAILSAFE: inclinacao excessiva
-248.805	dist z=0 th=0 phi=0 psi=0 rad/s

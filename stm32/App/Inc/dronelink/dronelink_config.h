@@ -7,36 +7,40 @@
 #define DRONELINK_CONFIG_H
 
 /** ID de sistema MAVLink do drone (compartilhado pelo STM32 e pela Pi). */
-#define DRONELINK_SYSTEM_ID               1U
+#define DRONELINK_SYSTEM_ID                 1U
 /** ID de componente MAVLink da controladora de voo (este firmware). */
-#define DRONELINK_FC_COMPONENT_ID         1U
+#define DRONELINK_FC_COMPONENT_ID           1U
 /** ID de componente MAVLink da Raspberry Pi; mensagens de outras origens são ignoradas. */
-#define DRONELINK_PI_COMPONENT_ID         191U
+#define DRONELINK_PI_COMPONENT_ID           191U
 /** Versão principal do protocolo DroneLink. */
-#define DRONELINK_PROTOCOL_MAJOR          1U
-/** Versão secundária do protocolo DroneLink. */
-#define DRONELINK_PROTOCOL_MINOR          1U
+#define DRONELINK_PROTOCOL_MAJOR            1U
+/** Versão secundária do protocolo DroneLink (2: sem PARAM_* nem DRONE_GAIN_*, ajuste pela IHM). */
+#define DRONELINK_PROTOCOL_MINOR            2U
 /** Maior timeout aceito num comando de trecho (leg), em ms. */
-#define DRONELINK_MAX_LEG_TIMEOUT_MS      120000UL
+#define DRONELINK_MAX_LEG_TIMEOUT_MS         120000UL
 /** Período de envio do HEARTBEAT, em ms. */
-#define DRONELINK_HEARTBEAT_PERIOD_MS     500UL
+#define DRONELINK_HEARTBEAT_PERIOD_MS        500UL
 /** Período de envio do SYS_STATUS, em ms. */
-#define DRONELINK_STATUS_PERIOD_MS        500UL
+#define DRONELINK_STATUS_PERIOD_MS           500UL
 /** Período de envio do DRONE_PROTOCOL_INFO, em ms. */
-#define DRONELINK_PROTOCOL_INFO_PERIOD_MS 1000UL
+#define DRONELINK_PROTOCOL_INFO_PERIOD_MS    1000UL
 /** Sem HEARTBEAT da Pi por este tempo, o enlace é considerado degradado: novos
     trechos são recusados e, em voo, é pedido HOLD. Em ms. */
-#define DRONELINK_LINK_DEGRADED_MS        1000UL
+#define DRONELINK_LINK_DEGRADED_MS           1000UL
 /** Sem HEARTBEAT por este tempo e com navegação degradada, é pedido pouso. Em ms. */
-#define DRONELINK_LINK_LOST_MS            2000UL
+#define DRONELINK_LINK_LOST_MS               2000UL
 /** Sem enlace (ou sem autorização do operador) por este tempo, é pedido pouso
     em qualquer caso. Em ms. */
-#define DRONELINK_FAILSAFE_LAND_MS        5000UL
+#define DRONELINK_FAILSAFE_LAND_MS           5000UL
 /** Tamanho do buffer DMA de recepção da USART1, em bytes. */
-#define DRONELINK_RX_DMA_SIZE             512U
+#define DRONELINK_RX_DMA_SIZE                512U
 /** Tamanho do stream buffer entre a interrupção e a task, em bytes. */
-#define DRONELINK_RX_STREAM_SIZE          1024U
+#define DRONELINK_RX_STREAM_SIZE             1024U
 /** Frames em cada uma das duas filas de transmissão. */
-#define DRONELINK_TX_QUEUE_DEPTH          6U
+#define DRONELINK_TX_QUEUE_DEPTH             6U
+/** Período do DRONE_CTRL_DEBUG, em ms (10 Hz, ~13 % do enlace a 115200 bit/s). */
+#define DRONELINK_DEBUG_PERIOD_MS            100UL
+/** Período de ATTITUDE e LOCAL_POSITION_NED, em ms (5 Hz). */
+#define DRONELINK_STATE_PERIOD_MS            200UL
 
 #endif

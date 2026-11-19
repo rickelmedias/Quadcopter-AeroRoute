@@ -1,7 +1,0 @@
-[
-  "README.md",
-  "tools/pi/README.md",
-  "tools/pi/dronectl/cli.py",
-  "tools/pi/dronectl/hover_test.py",
-  "tools/pi/tests/test_hover.py"
-]

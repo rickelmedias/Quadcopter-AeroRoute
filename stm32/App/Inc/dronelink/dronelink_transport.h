@@ -3,9 +3,9 @@
  * @brief Transporte serial do DroneLink: recepção por DMA e transmissão com
  *        duas filas de prioridade.
  *
- * Também é dono dos callbacks globais de UART da HAL
- * (HAL_UARTEx_RxEventCallback, HAL_UART_TxCpltCallback e
- * HAL_UART_ErrorCallback), que repassam os eventos da USART2 ao MTF-01.
+ * Os callbacks globais de UART da HAL ficam em transport/uart_callbacks.c, que
+ * repassa os eventos a este módulo (USART1) e ao MTF-01 (USART2). Filas, stream
+ * buffer e pilha são estáticos: nada vem do heap do FreeRTOS.
  */
 #ifndef DRONELINK_TRANSPORT_H
 #define DRONELINK_TRANSPORT_H
@@ -27,7 +27,7 @@ typedef enum {
 } dronelink_tx_priority_t;
 
 /**
- * @brief Cria o stream buffer e as filas e inicia a recepção por DMA.
+ * @brief Cria (estáticos) o stream buffer e as filas e inicia a recepção por DMA.
  *
  * @param[in] uart  UART do enlace (a USART1).
  * @return false se a UART for NULL, se algum recurso não puder ser criado ou
@@ -44,7 +44,8 @@ bool dronelink_transport_init(UART_HandleTypeDef *uart);
  * @return Quantidade de bytes lidos (0 em caso de timeout ou argumento
  *         inválido).
  */
-size_t dronelink_transport_receive(uint8_t *destination, size_t capacity, uint32_t timeout_ms);
+size_t dronelink_transport_receive(uint8_t *destination, size_t capacity,
+                                   uint32_t timeout_ms);
 
 /**
  * @brief Coloca um frame na fila de transmissão, sem esperar.
@@ -77,5 +78,14 @@ uint32_t dronelink_transport_rx_dropped(void);
  * @return O contador.
  */
 uint32_t dronelink_transport_tx_dropped(void);
+
+/** @brief Evento de recepção da HAL (linha ociosa, metade ou fim do DMA); ignora outras UARTs. Interrupção. */
+void dronelink_transport_rx_event(UART_HandleTypeDef *uart, uint16_t position);
+
+/** @brief Fim de transmissão da HAL; ignora outras UARTs. Interrupção. */
+void dronelink_transport_tx_done(UART_HandleTypeDef *uart);
+
+/** @brief Erro da HAL; ignora outras UARTs. Interrupção. */
+void dronelink_transport_uart_error(UART_HandleTypeDef *uart);
 
 #endif

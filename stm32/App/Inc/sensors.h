@@ -14,7 +14,7 @@
  * Cada módulo é dono do seu periférico, então os dois são iniciados
  * independentemente: a falha de um não impede o outro, e o log mostra qual
  * faltou. A combinação das leituras fica no controle de voo
- * (control/meas.h).
+ *.
  *
  * Chamada em MX_FREERTOS_Init(), antes de o scheduler iniciar.
  *

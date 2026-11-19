@@ -1,0 +1,9 @@
+# Etapa 3: girar no lugar (90° para a direita e de volta) sem sair do ponto.
+#   ~/drone/dronectl mission ~/drone/rpi/missions/stage3_yaw.txt --record
+takeoff 30
+wait 5
+yaw 90
+wait 5
+yaw -90
+wait 5
+land

@@ -10,9 +10,6 @@
 
 /** Máscara com todos os motores. */
 #define ALL_MOTORS ((uint8_t)((1U << MOTOR_ARB_COUNT) - 1U))
-/** Faixa de aceleração do DShot (48..2047). */
-#define DSHOT_SPAN (DSHOT_THROTTLE_MAX - DSHOT_THROTTLE_MIN)
-
 /** @brief Diz se o motor @p i está na máscara. */
 static bool in_mask(uint8_t mask, uint32_t i) {
   return (((uint32_t)mask >> i) & 1U) != 0U;
@@ -22,29 +19,16 @@ static bool in_mask(uint8_t mask, uint32_t i) {
 static bool all_zero(const motor_arb_t *a) {
   bool zero = true;
   for (uint32_t i = 0U; i < MOTOR_ARB_COUNT; ++i) {
-    if ((a->target[i] != 0U) || (a->current[i] != 0U)) {
+    if ((a->target[i] != 0U) || (a->current[i] != 0U) || (a->sent_dshot[i] != 0U)) {
       zero = false;
     }
   }
   return zero;
 }
 
-/** @brief Desarmado, parado e sem comando especial pendente. */
+/** @brief Desarmado, com alvos/rampa em zero e último quadro lógico em zero. */
 static bool idle(const motor_arb_t *a) {
   return (a->owner == MOTOR_ARB_OWNER_NONE) && all_zero(a);
-}
-
-/** @brief Converte a fração 0..1 do voo no valor DShot com resolução total. */
-static uint16_t dshot_from_fraction(float fraction) {
-  uint16_t value = 0U;
-  if (fraction > 0.0F) { /* também descarta NaN */
-    const float f = (fraction > 1.0F) ? 1.0F : fraction;
-    const uint32_t span = DSHOT_SPAN;
-    const float steps = (f * (float)span) + 0.5F;
-    const uint32_t whole = (uint32_t)steps;
-    value = (uint16_t)(DSHOT_THROTTLE_MIN + whole);
-  }
-  return value;
 }
 
 /** @brief Põe um comando no fim da fila. */
@@ -59,21 +43,22 @@ void motor_arb_init(motor_arb_t *a, uint32_t now_ms) {
   a->owner = MOTOR_ARB_OWNER_NONE;
   a->rate = MOTOR_ARB_DEFAULT_RATE;
   a->cap = MOTOR_ARB_BENCH_DEFAULT_CAP;
-  a->flight_ms = now_ms;
+  a->ctrl_cap = MOTOR_ARB_CONTROL_DEFAULT_CAP;
   a->bench_alive_ms = now_ms;
+  a->ctrl_alive_ms = now_ms;
   a->sweep_note = -2;
 }
 
 bool motor_arb_arm(motor_arb_t *a, motor_arb_owner_t owner, uint32_t now_ms) {
   bool ok = false;
-  if (((owner == MOTOR_ARB_OWNER_BENCH) || (owner == MOTOR_ARB_OWNER_FLIGHT)) && idle(a) &&
+  if (((owner == MOTOR_ARB_OWNER_BENCH) || (owner == MOTOR_ARB_OWNER_CONTROL)) && idle(a) &&
       (a->queue_len == 0U)) {
     a->owner = owner;
     a->sweep.active = false;
-    a->flight_ms = now_ms;
     a->bench_alive_ms = now_ms;
+    a->ctrl_alive_ms = now_ms;
     for (uint32_t i = 0U; i < MOTOR_ARB_COUNT; ++i) {
-      a->flight_throttle[i] = 0.0F;
+      a->target[i] = 0U;
     }
     ok = true;
   }
@@ -88,21 +73,35 @@ void motor_arb_disarm(motor_arb_t *a) {
   for (uint32_t i = 0U; i < MOTOR_ARB_COUNT; ++i) {
     a->target[i] = 0U;
     a->current[i] = 0U;
-    a->flight_throttle[i] = 0.0F;
-  }
-}
-
-void motor_arb_set_flight(motor_arb_t *a, const float throttle[MOTOR_ARB_COUNT], uint32_t now_ms) {
-  if (a->owner == MOTOR_ARB_OWNER_FLIGHT) {
-    for (uint32_t i = 0U; i < MOTOR_ARB_COUNT; ++i) {
-      a->flight_throttle[i] = throttle[i];
-    }
-    a->flight_ms = now_ms;
   }
 }
 
 void motor_arb_bench_keepalive(motor_arb_t *a, uint32_t now_ms) {
   a->bench_alive_ms = now_ms;
+}
+
+bool motor_arb_control_set(motor_arb_t *a, const uint16_t permille[MOTOR_ARB_COUNT],
+                           uint32_t now_ms) {
+  bool ok = false;
+  if (a->owner == MOTOR_ARB_OWNER_CONTROL) {
+    for (uint32_t i = 0U; i < MOTOR_ARB_COUNT; ++i) {
+      a->target[i] = (permille[i] > a->ctrl_cap) ? a->ctrl_cap : permille[i];
+    }
+    a->ctrl_alive_ms = now_ms;
+    ok = true;
+  }
+  return ok;
+}
+
+uint16_t motor_arb_control_cap(motor_arb_t *a, uint16_t permille) {
+  a->ctrl_cap = (permille > MOTOR_ARB_BENCH_HARD_MAX) ? (uint16_t)MOTOR_ARB_BENCH_HARD_MAX
+                                                      : permille;
+  for (uint32_t i = 0U; i < MOTOR_ARB_COUNT; ++i) {
+    if (a->target[i] > a->ctrl_cap) {
+      a->target[i] = a->ctrl_cap;
+    }
+  }
+  return a->ctrl_cap;
 }
 
 bool motor_arb_bench_set(motor_arb_t *a, uint8_t mask, uint16_t permille) {
@@ -136,6 +135,9 @@ uint16_t motor_arb_bench_cap(motor_arb_t *a, uint16_t permille) {
   for (uint32_t i = 0U; i < MOTOR_ARB_COUNT; ++i) {
     if (a->target[i] > a->cap) {
       a->target[i] = a->cap;
+    }
+    if ((a->owner == MOTOR_ARB_OWNER_BENCH) && (a->current[i] > ((uint32_t)a->cap * 1000U))) {
+      a->current[i] = (uint32_t)a->cap * 1000U;
     }
   }
   if (a->sweep.max > a->cap) {
@@ -185,7 +187,7 @@ bool motor_arb_set_direction(motor_arb_t *a, uint8_t mask, uint8_t reversed, boo
   const uint8_t m = mask & ALL_MOTORS;
   const uint32_t needed = save ? 2U : 1U;
   bool ok = false;
-  if ((m != 0U) && idle(a) && ((a->queue_len + needed) <= MOTOR_ARB_QUEUE_LEN)) {
+  if ((m != 0U) && idle(a) && (a->queue_len == 0U) && (needed <= MOTOR_ARB_QUEUE_LEN)) {
     motor_arb_cmd_t dir = {.frames = MOTOR_ARB_CMD_FRAMES, .gap = MOTOR_ARB_DIR_GAP_FRAMES};
     motor_arb_cmd_t store = {.frames = MOTOR_ARB_CMD_FRAMES, .gap = MOTOR_ARB_SAVE_GAP_FRAMES};
     for (uint32_t i = 0U; i < MOTOR_ARB_COUNT; ++i) {
@@ -202,7 +204,9 @@ bool motor_arb_set_direction(motor_arb_t *a, uint8_t mask, uint8_t reversed, boo
       enqueue(a, &store);
     }
     a->reversed = (uint8_t)((a->reversed & (uint8_t)~m) | (reversed & m));
-    a->reversed_known |= m;
+    /* Pedido não é confirmação: o ESC pode ignorar o comando. */
+    a->reversed_known &= (uint8_t)~m;
+    a->direction_transmitted &= (uint8_t)~m;
     ok = true;
   }
   return ok;
@@ -242,6 +246,15 @@ static void sweep_step(motor_arb_t *a, uint32_t now_ms) {
   }
 }
 
+/** @brief Quadro do controle: o alvo vale direto, sem rampa. */
+static void control_frame(motor_arb_t *a, motor_arb_frame_t *f) {
+  for (uint32_t i = 0U; i < MOTOR_ARB_COUNT; ++i) {
+    a->current[i] = (uint32_t)a->target[i] * 1000U;
+    a->sent_permille[i] = a->target[i];
+    f->value[i] = dshot_from_permille(a->sent_permille[i]);
+  }
+}
+
 /** @brief Quadro desarmado: zeros ou o comando especial da vez. */
 static void idle_frame(motor_arb_t *a, motor_arb_frame_t *f) {
   for (uint32_t i = 0U; i < MOTOR_ARB_COUNT; ++i) {
@@ -256,6 +269,14 @@ static void idle_frame(motor_arb_t *a, motor_arb_frame_t *f) {
       }
       f->telemetry = true;
       cmd->frames--;
+      if (cmd->frames == 0U) {
+        for (uint32_t i = 0U; i < MOTOR_ARB_COUNT; ++i) {
+          if ((cmd->value[i] == MOTOR_ARB_CMD_DIR_NORMAL) ||
+              (cmd->value[i] == MOTOR_ARB_CMD_DIR_REVERSED)) {
+            a->direction_transmitted |= (uint8_t)(1U << i);
+          }
+        }
+      }
     } else if (cmd->gap > 0U) {
       cmd->gap--;
     } else {
@@ -285,50 +306,51 @@ static void bench_frame(motor_arb_t *a, uint32_t now_ms, motor_arb_frame_t *f) {
   }
 }
 
-/** @brief Quadro do voo: fração pedida pelo controle. */
-static void flight_frame(motor_arb_t *a, motor_arb_frame_t *f) {
-  for (uint32_t i = 0U; i < MOTOR_ARB_COUNT; ++i) {
-    f->value[i] = dshot_from_fraction(a->flight_throttle[i]);
-    const float pm = a->flight_throttle[i] * 1000.0F;
-    float clamped = pm;
-    if (!(pm > 0.0F)) {
-      clamped = 0.0F;
-    } else if (pm > 1000.0F) {
-      clamped = 1000.0F;
-    } else {
-      /* dentro da faixa */
-    }
-    a->sent_permille[i] = (uint16_t)clamped;
-    a->current[i] = (uint32_t)a->sent_permille[i] * 1000U;
-  }
-}
-
 motor_arb_frame_t motor_arb_frame(motor_arb_t *a, uint32_t now_ms, const char *stop) {
   motor_arb_frame_t f = {.telemetry = false, .stopped = NULL};
   if (stop != NULL) {
     motor_arb_disarm(a);
     f.stopped = stop;
-  } else if ((a->owner == MOTOR_ARB_OWNER_FLIGHT) &&
-             ((now_ms - a->flight_ms) >= MOTOR_ARB_FLIGHT_TIMEOUT_MS)) {
-    motor_arb_disarm(a);
-    f.stopped = "controle de voo sem atualizacao por 100 ms";
-  } else if ((a->owner == MOTOR_ARB_OWNER_BENCH) &&
+  } else if ((a->owner != MOTOR_ARB_OWNER_NONE) &&
              ((now_ms - a->bench_alive_ms) >= MOTOR_ARB_BENCH_KEEPALIVE_MS)) {
     motor_arb_disarm(a);
     f.stopped = "bancada sem keepalive por 300 ms";
+  } else if ((a->owner == MOTOR_ARB_OWNER_CONTROL) &&
+             ((now_ms - a->ctrl_alive_ms) >= MOTOR_ARB_CONTROL_TIMEOUT_MS)) {
+    motor_arb_disarm(a);
+    f.stopped = "controle sem atualizacao por 100 ms";
   } else {
     /* segue armado ou desarmado */
   }
 
-  if (a->owner == MOTOR_ARB_OWNER_FLIGHT) {
-    flight_frame(a, &f);
-  } else if (a->owner == MOTOR_ARB_OWNER_BENCH) {
+  if (a->owner == MOTOR_ARB_OWNER_BENCH) {
     bench_frame(a, now_ms, &f);
+  } else if (a->owner == MOTOR_ARB_OWNER_CONTROL) {
+    control_frame(a, &f);
   } else {
     idle_frame(a, &f);
   }
   for (uint32_t i = 0U; i < MOTOR_ARB_COUNT; ++i) {
     a->sent_dshot[i] = f.value[i];
+  }
+  return f;
+}
+
+motor_arb_frame_t motor_arb_submit(motor_arb_t *a, uint32_t now_ms, const char *stop,
+                                   motor_arb_send_fn send) {
+  motor_arb_t candidate = *a;
+  motor_arb_frame_t f = {0};
+  f = motor_arb_frame(&candidate, now_ms, stop);
+  f.accepted = send(f.value, f.telemetry);
+  if (f.accepted) {
+    *a = candidate;
+  } else {
+    /* Não avançar fila nem publicar quadro que o DMA não aceitou.
+     * Falha de saída invalida a sessão: o próximo quadro tenta enviar zero.
+     * Preservar sent_* permite mostrar o último quadro aceito, não zero fictício. */
+    motor_arb_disarm(a);
+    f.stopped = "falha de envio DShot; exige novo armamento";
+    a->tx_failures++;
   }
   return f;
 }

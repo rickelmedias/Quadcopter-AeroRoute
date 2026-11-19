@@ -25,13 +25,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "control/flight_ctrl.h"
-#include "dronelink/dronelink_app.h"
-#include "motors.h"
-#include "power.h"
-#include "sensors.h"
-#include "sensor_log.h"
-#include "usb_console.h"
+#include "app/startup.h"
 #include "usb_device.h"
 /* USER CODE END Includes */
 
@@ -143,14 +137,8 @@ void MX_FREERTOS_Init(void) {
   defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
-  /* Ordem: log, sensores, motores e voo antes de quem os comanda (console
-     USB e DroneLink). Nenhuma task roda antes de o scheduler iniciar. */
-  if (!sensor_log_start() || !sensors_init() || !power_start() || !motors_start() ||
-      !flight_ctrl_start() || !usb_console_start())
-  {
-    Error_Handler();
-  }
-  if (!dronelink_app_init())
+  /* A composição bench/control fica fora do código gerado pelo CubeMX. */
+  if (!app_services_start())
   {
     Error_Handler();
   }
@@ -186,4 +174,3 @@ void StartDefaultTask(void *argument)
 /* USER CODE BEGIN Application */
 
 /* USER CODE END Application */
-

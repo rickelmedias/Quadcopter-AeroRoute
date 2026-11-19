@@ -20,3 +20,10 @@ uint16_t dshot_from_permille(uint16_t permille) {
   }
   return value;
 }
+
+void dshot_packets(const uint16_t value[4], uint8_t telemetry_mask, uint16_t packet[4]) {
+  for (uint32_t i = 0U; i < 4U; ++i) {
+    const bool telemetry = (((uint32_t)telemetry_mask >> i) & 1U) != 0U;
+    packet[i] = dshot_packet(value[i], telemetry);
+  }
+}

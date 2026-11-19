@@ -16,8 +16,11 @@
  *   pendente.
  * - A bancada nunca passa do limite ajustável (::motor_arb_bench_cap), que
  *   começa em ::MOTOR_ARB_BENCH_DEFAULT_CAP e vai até ::MOTOR_ARB_BENCH_HARD_MAX.
- * - A bancada desarma sem keepalive por ::MOTOR_ARB_BENCH_KEEPALIVE_MS e o
- *   voo sem atualização por ::MOTOR_ARB_FLIGHT_TIMEOUT_MS.
+ * - A bancada desarma sem keepalive por ::MOTOR_ARB_BENCH_KEEPALIVE_MS.
+ * - O controle (dono ::MOTOR_ARB_OWNER_CONTROL) escreve os quatro motores
+ *   direto, sem rampa, limitado a ::motor_arb_control_cap. Desarma sem
+ *   atualização do controle por ::MOTOR_ARB_CONTROL_TIMEOUT_MS e também sem o
+ *   keepalive da bancada (HEARTBEAT da IHM).
  */
 #ifndef MOTOR_ARBITER_H
 #define MOTOR_ARBITER_H
@@ -33,10 +36,12 @@
 #define MOTOR_ARB_BENCH_DEFAULT_CAP  400U
 /** Sem keepalive da bancada por este tempo, em ms, desarma. */
 #define MOTOR_ARB_BENCH_KEEPALIVE_MS 300U
-/** Sem atualização do controle de voo por este tempo, em ms, desarma. */
-#define MOTOR_ARB_FLIGHT_TIMEOUT_MS  100U
 /** Rampa padrão da bancada, em décimos de por cento por segundo (20 %/s). */
 #define MOTOR_ARB_DEFAULT_RATE       200U
+/** Limite do controle ao ligar, em décimos de por cento (950 = 95 %; com hover perto de 70 %, 80 % deixava pouca folga). */
+#define MOTOR_ARB_CONTROL_DEFAULT_CAP 950U
+/** Sem atualização do controle por este tempo, em ms, desarma. */
+#define MOTOR_ARB_CONTROL_TIMEOUT_MS  100U
 /** Comandos especiais na fila. */
 #define MOTOR_ARB_QUEUE_LEN          4U
 
@@ -57,7 +62,7 @@
 typedef enum {
   MOTOR_ARB_OWNER_NONE = 0, /**< Desarmado: só zeros. */
   MOTOR_ARB_OWNER_BENCH,    /**< Teste de bancada (console USB ou IHM). */
-  MOTOR_ARB_OWNER_FLIGHT    /**< Controle de voo. */
+  MOTOR_ARB_OWNER_CONTROL   /**< Controle LQR (modo de teste com cabo). */
 } motor_arb_owner_t;
 
 /** @brief Varredura automática da bancada. */
@@ -87,14 +92,16 @@ typedef struct {
   uint32_t rate;                     /**< Rampa, décimos de % por segundo. */
   uint16_t cap;                      /**< Limite ajustável da bancada. */
   motor_arb_sweep_t sweep;
-  float flight_throttle[MOTOR_ARB_COUNT]; /**< Pedido do voo, 0..1. */
-  uint32_t flight_ms;                     /**< Última atualização do voo. */
-  uint32_t bench_alive_ms;                /**< Último keepalive da bancada. */
+  uint32_t bench_alive_ms; /**< Último keepalive da bancada. */
+  uint16_t ctrl_cap;       /**< Limite do controle, décimos de %. */
+  uint32_t ctrl_alive_ms;  /**< Última atualização do controle. */
   motor_arb_cmd_t queue[MOTOR_ARB_QUEUE_LEN];
   uint32_t queue_head;
   uint32_t queue_len;
-  uint8_t reversed;       /**< Último sentido pedido (bit i = motor i+1 invertido). */
-  uint8_t reversed_known; /**< Motores cujo sentido foi pedido desde o boot. */
+  uint8_t reversed;              /**< Último sentido pedido, não confirmado (bit i). */
+  uint8_t direction_transmitted; /**< Pedido de sentido repetido por completo (bit i). */
+  uint8_t reversed_known;        /**< Confirmação do ESC; permanece 0 sem readback. */
+  uint32_t tx_failures;          /**< Quadros recusados pelo transporte DShot. */
   uint16_t sent_dshot[MOTOR_ARB_COUNT];
   uint16_t sent_permille[MOTOR_ARB_COUNT];
   int32_t sweep_note; /**< Degrau novo (>= 0), fim (-1) ou nada (-2). */
@@ -104,6 +111,7 @@ typedef struct {
 typedef struct {
   uint16_t value[MOTOR_ARB_COUNT]; /**< Valor DShot de 11 bits de cada motor. */
   bool telemetry;                  /**< Bit de telemetria (exigido nos comandos). */
+  bool accepted;                   /**< Preenchido por motor_arb_submit: DMA aceitou. */
   const char *stopped;             /**< Motivo se desarmou neste quadro, senão NULL. */
 } motor_arb_frame_t;
 
@@ -120,10 +128,25 @@ bool motor_arb_arm(motor_arb_t *a, motor_arb_owner_t owner, uint32_t now_ms);
 void motor_arb_disarm(motor_arb_t *a);
 
 /** @brief Pedido do controle de voo (só com dono voo). Valores fora de 0..1 são limitados. */
-void motor_arb_set_flight(motor_arb_t *a, const float throttle[MOTOR_ARB_COUNT], uint32_t now_ms);
-
-/** @brief Renova o keepalive da bancada. */
+/** @brief Renova ao receber ping válido; nunca renovar só porque a porta está aberta. */
 void motor_arb_bench_keepalive(motor_arb_t *a, uint32_t now_ms);
+
+/**
+ * @brief Aceleração direta dos quatro motores pelo controle, limitada ao limite do controle.
+ *
+ * Também renova o prazo de ::MOTOR_ARB_CONTROL_TIMEOUT_MS.
+ *
+ * @param[in] permille  Décimos de por cento de M1..M4.
+ * @return false se o controle não é o dono.
+ */
+bool motor_arb_control_set(motor_arb_t *a, const uint16_t permille[MOTOR_ARB_COUNT],
+                           uint32_t now_ms);
+
+/**
+ * @brief Limite do controle, limitado a ::MOTOR_ARB_BENCH_HARD_MAX.
+ * @return O limite aplicado.
+ */
+uint16_t motor_arb_control_cap(motor_arb_t *a, uint16_t permille);
 
 /**
  * @brief Alvo de bancada dos motores da máscara, limitado ao limite ativo.
@@ -162,14 +185,27 @@ bool motor_arb_beep(motor_arb_t *a, uint8_t mask);
  * @param[in] mask      Motores a configurar.
  * @param[in] reversed  Bit i = motor i+1 invertido (só os bits de @p mask contam).
  * @param[in] save      Também grava na EEPROM do ESC (senão volta ao ligar).
- * @return false se armado, algo não está parado ou a fila está cheia.
+ * @return false se armado, algo não está parado ou há comando pendente.
  */
 bool motor_arb_set_direction(motor_arb_t *a, uint8_t mask, uint8_t reversed, bool save);
 
 /**
- * @brief Calcula o quadro deste milissegundo e aplica os failsafes.
+ * @brief Avança um quadro lógico (testes puros). Não prova envio físico.
+ * Em produção usar motor_arb_submit, que só confirma estado após aceitação.
  * @param[in] stop  Pedido de parada (motivo) ou NULL.
  */
 motor_arb_frame_t motor_arb_frame(motor_arb_t *a, uint32_t now_ms, const char *stop);
+
+/** Envio não bloqueante: true somente se aceito para transmissão. */
+typedef bool (*motor_arb_send_fn)(const uint16_t value[MOTOR_ARB_COUNT], bool telemetry);
+
+/**
+ * @brief Prepara quadro e confirma estado somente se o transporte aceitar.
+ * Quem chama deve serializar acesso ao árbitro e ao transporte durante a função.
+ * Recusa desarma, cancela comandos e preserva o último quadro aceito no status.
+ * Aceitação do DMA não confirma recepção nem execução pelo ESC.
+ */
+motor_arb_frame_t motor_arb_submit(motor_arb_t *a, uint32_t now_ms, const char *stop,
+                                   motor_arb_send_fn send);
 
 #endif

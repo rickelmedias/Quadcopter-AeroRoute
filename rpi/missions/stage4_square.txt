@@ -1,0 +1,7 @@
+# Etapa 4: decola a 30 cm, percorre o quadrado de 40 cm de missions/points.txt
+# (ordem pelo algoritmo genético; cada ponto = girar de frente e andar), volta à
+# partida e pousa.
+#   ~/drone/dronectl mission ~/drone/rpi/missions/stage4_square.txt --record
+takeoff 30
+route
+land

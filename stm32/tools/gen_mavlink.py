@@ -1,16 +1,16 @@
-"""Gera os headers C do MAVLink a partir de protocol/drone_controller.xml.
+"""Gera os headers C do MAVLink a partir de ../protocol/drone_controller.xml.
 
 Usa o gerador oficial (pymavlink.tools.mavgen) e os XMLs padrão que vêm com a
 mesma versão do pymavlink (common.xml, standard.xml, minimal.xml). O
 resultado substitui Middlewares/Third_Party/mavlink por completo, para que
 todos os headers saiam da mesma versão do gerador.
 
-Uso (no PC, com ``pip install pymavlink``):
+Uso (no PC, no ambiente conda ``aeroroute``, que já tem o pymavlink):
 
-    python tools/gen_mavlink.py
+    cd stm32 && conda run -n aeroroute python tools/gen_mavlink.py
 
-Depois de mudar o XML, gere também o lado da Raspberry Pi a partir do mesmo
-arquivo; a ferramenta tools/pi/dronectl faz isso sozinha a cada execução.
+O lado da Raspberry Pi (rpi/dronectl) gera o próprio módulo Python a partir do
+mesmo XML sempre que ele muda.
 """
 import shutil
 import subprocess
@@ -18,10 +18,10 @@ import sys
 import tempfile
 from pathlib import Path
 
-#: Raiz do projeto.
+#: Raiz do firmware (stm32/).
 ROOT = Path(__file__).resolve().parents[1]
-#: Dialeto do projeto.
-DIALECT = ROOT / 'protocol/drone_controller.xml'
+#: Dialeto do projeto, compartilhado com a Raspberry Pi.
+DIALECT = ROOT.parent / 'protocol/drone_controller.xml'
 #: Destino dos headers C.
 OUTPUT = ROOT / 'Middlewares/Third_Party/mavlink'
 
@@ -42,7 +42,8 @@ def main():
         subprocess.run([sys.executable, '-m', 'pymavlink.tools.mavgen', '--lang=C',
                         '--wire-protocol=2.0', '-o', str(out), str(tmp / DIALECT.name)],
                        check=True)
-        shutil.rmtree(OUTPUT)
+        if OUTPUT.exists():
+            shutil.rmtree(OUTPUT)
         shutil.copytree(out, OUTPUT)
     print(f'headers gerados em {OUTPUT.relative_to(ROOT)} (pymavlink {pymavlink.__version__})')
 

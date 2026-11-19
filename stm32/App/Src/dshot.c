@@ -50,11 +50,17 @@ void dshot_init(void) {
 }
 
 bool dshot_write(const uint16_t value[4], bool telemetry) {
+  return dshot_write_mask(value, telemetry ? 0x0FU : 0U);
+}
+
+bool dshot_write_mask(const uint16_t value[4], uint8_t telemetry_mask) {
   DMA_Stream_TypeDef *s = hdma_tim4_up.Instance;
   if (s->CR & DMA_SxCR_EN)
     return false; /* quadro anterior em andamento */
+  uint16_t packets[4];
+  dshot_packets(value, telemetry_mask, packets);
   for (unsigned m = 0; m < 4U; ++m) {
-    uint16_t p = dshot_packet(value[m], telemetry);
+    uint16_t p = packets[m];
     for (unsigned b = 0; b < FRAME_BITS; ++b) {
       frame[b * 4U + m] = (p & (0x8000U >> b)) ? t1h : t0h;
     }

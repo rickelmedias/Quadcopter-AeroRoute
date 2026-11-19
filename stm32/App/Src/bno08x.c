@@ -8,7 +8,7 @@
  */
 #include "bno08x.h"
 #include "bno_i2c_header.h"
-#include "sensor_log.h"
+#include "telemetry.h"
 #include "FreeRTOS.h"
 #include "task.h"
 #include "i2c.h"
@@ -387,8 +387,13 @@ static void sensor_event(void *cookie, sh2_SensorEvent_t *e) {
     ++sample.errors;
     return;
   }
-  if (v.sensorId == SH2_ROTATION_VECTOR) {
-    sh2_RotationVectorWAcc_t *q = &v.un.rotationVector;
+  /* Game rotation vector (acelerômetro + giroscópio, sem magnetômetro): o rotation
+     vector puxa a guinada para o norte magnético e, com os motores ligando, ela
+     saltou 29° em 0,4 s sem o drone girar; o controle girou o drone de verdade para
+     "corrigir" (ensaio de 12/11, 17:49). A guinada que o controle usa é relativa ao
+     armamento, então a deriva lenta do giroscópio não importa. */
+  if (v.sensorId == SH2_GAME_ROTATION_VECTOR) {
+    sh2_RotationVector_t *q = &v.un.gameRotationVector;
     /* Um quatérnio muito longe da esfera unitária está corrompido, não só
        impreciso. */
     float norm = q->real * q->real + q->i * q->i + q->j * q->j + q->k * q->k;
@@ -427,7 +432,7 @@ static void sensor_event(void *cookie, sh2_SensorEvent_t *e) {
 static bool configure(void) {
   sh2_SensorConfig_t c = {0};
   c.reportInterval_us = REPORT_INTERVAL_US;
-  return sh2_setSensorConfig(SH2_ROTATION_VECTOR, &c) == SH2_OK &&
+  return sh2_setSensorConfig(SH2_GAME_ROTATION_VECTOR, &c) == SH2_OK &&
          sh2_setSensorConfig(SH2_GYROSCOPE_CALIBRATED, &c) == SH2_OK &&
          /* Aceleração linear em vez do acelerômetro bruto: o hub remove a
             gravidade usando a própria solução de atitude, o que é melhor que
@@ -529,7 +534,7 @@ static void bno_task(void *argument) {
           publish();
           if (sample.rotation.count != last_rotation) {
             last_rotation = sample.rotation.count;
-            log_bno(&sample);
+            telemetry_bno(&sample);
             if (listener)
               xTaskNotifyGive(listener);
           }

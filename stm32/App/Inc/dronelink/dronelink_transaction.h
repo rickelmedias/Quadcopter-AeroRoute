@@ -79,9 +79,9 @@ uint32_t dronelink_transaction_hash(const uint8_t *data, uint16_t length);
  *                           guardado quando o resultado é DUPLICATE.
  * @return NEW, DUPLICATE ou COLLISION.
  */
-dronelink_transaction_lookup_t dronelink_transaction_find(uint32_t mission_id, uint32_t command_id,
-                                                          uint32_t payload_hash,
-                                                          dronelink_transaction_record_t *record);
+dronelink_transaction_lookup_t dronelink_transaction_find(
+    uint32_t mission_id, uint32_t command_id, uint32_t payload_hash,
+    dronelink_transaction_record_t *record);
 
 /**
  * @brief Guarda uma transação, sobrescrevendo a mais antiga se o histórico
@@ -106,8 +106,9 @@ void dronelink_transaction_store(const dronelink_transaction_record_t *record);
  *                                 já atualizado.
  * @return false se a transação não estiver no histórico.
  */
-bool dronelink_transaction_update(uint32_t mission_id, uint32_t command_id, uint8_t result,
-                                  uint16_t reason, uint8_t progress, uint8_t flight_state,
+bool dronelink_transaction_update(uint32_t mission_id, uint32_t command_id,
+                                  uint8_t result, uint16_t reason,
+                                  uint8_t progress, uint8_t flight_state,
                                   float remaining_distance, uint32_t eta_ms,
                                   dronelink_transaction_record_t *updated_record);
 

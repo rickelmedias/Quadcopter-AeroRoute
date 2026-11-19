@@ -42,9 +42,9 @@ uint32_t dronelink_transaction_hash(const uint8_t *data, uint16_t length) {
 }
 
 /** @brief Procura uma transação e compara o conteúdo (ver dronelink_transaction.h). */
-dronelink_transaction_lookup_t dronelink_transaction_find(uint32_t mission_id, uint32_t command_id,
-                                                          uint32_t payload_hash,
-                                                          dronelink_transaction_record_t *record) {
+dronelink_transaction_lookup_t dronelink_transaction_find(
+    uint32_t mission_id, uint32_t command_id, uint32_t payload_hash,
+    dronelink_transaction_record_t *record) {
   taskENTER_CRITICAL();
   for (uint8_t index = 0U; index < DRONELINK_TRANSACTION_HISTORY; ++index) {
     if (!history[index].valid || history[index].record.mission_id != mission_id ||
@@ -78,8 +78,9 @@ void dronelink_transaction_store(const dronelink_transaction_record_t *record) {
 }
 
 /** @brief Atualiza uma transação guardada (ver dronelink_transaction.h). */
-bool dronelink_transaction_update(uint32_t mission_id, uint32_t command_id, uint8_t result,
-                                  uint16_t reason, uint8_t progress, uint8_t flight_state,
+bool dronelink_transaction_update(uint32_t mission_id, uint32_t command_id,
+                                  uint8_t result, uint16_t reason,
+                                  uint8_t progress, uint8_t flight_state,
                                   float remaining_distance, uint32_t eta_ms,
                                   dronelink_transaction_record_t *updated_record) {
   taskENTER_CRITICAL();

@@ -8,7 +8,7 @@
 #include "mtf01.h"
 #include "dma_ring.h"
 #include "mtf_parser.h"
-#include "sensor_log.h"
+#include "telemetry.h"
 #include "FreeRTOS.h"
 #include "task.h"
 #include "stream_buffer.h"
@@ -108,7 +108,7 @@ static void mtf_task(void *argument) {
         parser.sample.received_us = HAL_GetTick() * 1000U;
         parser.sample.uart_errors = errors;
         parser.sample.dropped_bytes = dropped;
-        log_mtf(&parser.sample);
+        telemetry_mtf(&parser.sample);
       }
     }
     parser.sample.uart_errors = errors;

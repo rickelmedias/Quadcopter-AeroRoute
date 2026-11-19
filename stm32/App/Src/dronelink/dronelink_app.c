@@ -4,29 +4,27 @@
  */
 #include "dronelink/dronelink_app.h"
 
-#include "FreeRTOS.h"
-#include "task.h"
-
+#include "app/startup.h"
+#include "dronelink/flight_command_api.h"
 #include "dronelink/dronelink_boot_identity.h"
 #include "dronelink/dronelink_protocol.h"
 #include "dronelink/dronelink_transport.h"
+#include "FreeRTOS.h"
+#include "task.h"
 #include "usart.h"
 
 /** Pilha da task, em words. */
 #define DRONELINK_TASK_STACK_WORDS 1024U
-/** Prioridade da task (a mesma dos sensores). */
+/** Prioridade da task (abaixo do controle e dos motores). */
 #define DRONELINK_TASK_PRIORITY    (tskIDLE_PRIORITY + 2U)
 
-/** Handle da task criada. */
-static TaskHandle_t dronelink_task_handle;
+static StaticTask_t dronelink_tcb;
+static StackType_t dronelink_stack[DRONELINK_TASK_STACK_WORDS];
 
 /**
- * @brief Task do DroneLink: inicia transporte, identidade de boot e
- *        protocolo, e então atende o enlace continuamente.
+ * @brief Inicia transporte, identidade de boot e protocolo; depois atende o enlace.
  *
  * Se o transporte não puder ser iniciado, a task se apaga.
- *
- * @param[in] argument  Não usado.
  */
 static void dronelink_task(void *argument) {
   (void)argument;
@@ -38,6 +36,8 @@ static void dronelink_task(void *argument) {
   uint32_t boot_id = 0U;
   const bool boot_id_is_persistent = dronelink_boot_identity_init(&boot_id);
   dronelink_protocol_init(boot_id, boot_id_is_persistent);
+  /* A Pi vê o boot novo pelo boot_id; este texto diz por que ele aconteceu. */
+  flight_push_text(app_reset_cause(), false);
 
   for (;;) {
     const size_t received = dronelink_transport_receive(input, sizeof(input), 5U);
@@ -49,8 +49,7 @@ static void dronelink_task(void *argument) {
   }
 }
 
-/** @brief Cria a task do DroneLink (ver dronelink_app.h). */
 bool dronelink_app_init(void) {
-  return xTaskCreate(dronelink_task, "DroneLink", DRONELINK_TASK_STACK_WORDS, NULL,
-                     DRONELINK_TASK_PRIORITY, &dronelink_task_handle) == pdPASS;
+  return xTaskCreateStatic(dronelink_task, "DroneLink", DRONELINK_TASK_STACK_WORDS, NULL,
+                           DRONELINK_TASK_PRIORITY, dronelink_stack, &dronelink_tcb) != NULL;
 }

@@ -1,5 +1,0 @@
-# Ferramenta dronectl (Raspberry Pi). Instalar num venv:
-#   python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
-pymavlink>=2.4.40
-pyserial>=3.5
-numpy>=1.21

@@ -10,18 +10,17 @@
  *   motor segue um alvo em décimos de por cento, com rampa limitada, ou uma
  *   varredura, nunca acima do limite ajustável (40 % ao ligar, até 100 %). Desarma sem
  *   ::motors_bench_keepalive() por 300 ms.
- * - ::MOTORS_OWNER_FLIGHT: o controle de voo (control/flight_ctrl.h), que
- *   escreve a aceleração dos quatro motores a cada passo do LQG.
  *
- * ::motors_stop() pode ser chamada de qualquer task e zera tudo no próximo
- * quadro. No voo, a saída também desarma se não receber atualização do controle
+ * - ::MOTORS_OWNER_CONTROL: a task de controle escreve os quatro motores a cada
+ *   10 ms com ::motors_control_set(), sem rampa, até o limite do controle
+ *   (80 % ao ligar). Desarma sem atualização por 100 ms e sem o keepalive da IHM.
+ *
+ * ::motors_stop() pode ser chamada de qualquer task e pede zero no próximo
+ * quadro. Se o DMA recusar, desarma e repete zero; status preserva o último
+ * quadro aceito. No voo, também desarma se não receber atualização do controle
  * por 100 ms. O dono atual percebe a parada por ::motors_owner().
  *
- * Numeração: M1..M4 = PB6..PB9, a numeração física do drone (frente = M2 e
- * M4, trás = M1 e M3, direita = M1 e M2, esquerda = M3 e M4; M1 e M4 têm
- * hélice amarela, invertida). As colunas da matriz B do modelo seguem outra
- * ordem: control/mixer.h faz a conversão antes de chamar
- * ::motors_set_flight_throttle().
+ * Numeração: M1..M4 = PB6..PB9, a numeração física do drone.
  */
 #ifndef MOTORS_H
 #define MOTORS_H
@@ -39,11 +38,11 @@
 /** @brief Quem está com a saída armada. */
 typedef motor_arb_owner_t motors_owner_t;
 /** Desarmado: só zeros. */
-#define MOTORS_OWNER_NONE   MOTOR_ARB_OWNER_NONE
+#define MOTORS_OWNER_NONE  MOTOR_ARB_OWNER_NONE
 /** Teste de bancada (console USB ou IHM). */
-#define MOTORS_OWNER_BENCH  MOTOR_ARB_OWNER_BENCH
-/** Controle de voo. */
-#define MOTORS_OWNER_FLIGHT MOTOR_ARB_OWNER_FLIGHT
+#define MOTORS_OWNER_BENCH MOTOR_ARB_OWNER_BENCH
+/** Controle LQR (modo de teste com cabo, task de controle a 100 Hz). */
+#define MOTORS_OWNER_CONTROL MOTOR_ARB_OWNER_CONTROL
 
 /** @brief Fotografia da saída, para status e log. */
 typedef struct {
@@ -51,7 +50,7 @@ typedef struct {
   motors_owner_t owner;
   /** Aceleração atual de cada motor, em décimos de por cento. */
   uint16_t permille[MOTORS_COUNT];
-  /** Valor DShot de 11 bits enviado no último quadro. */
+  /** Valor DShot de 11 bits do último quadro aceito pelo DMA (não é ACK do ESC). */
   uint16_t dshot[MOTORS_COUNT];
   /** Alvo da bancada, em décimos de por cento. */
   uint16_t bench_target[MOTORS_COUNT];
@@ -63,10 +62,14 @@ typedef struct {
   uint16_t bench_cap;
   /** Último sentido pedido: bit i = motor i+1 invertido. */
   uint8_t reversed;
-  /** Motores cujo sentido foi pedido desde o boot (os outros: o do ESC). */
+  /** Direção confirmada pelo ESC: 0 enquanto não houver readback. */
   uint8_t reversed_known;
+  /** Pedido de direção transmitido por completo; não é confirmação do ESC. */
+  uint8_t direction_transmitted;
   /** Comandos especiais (beep, sentido) ainda na fila. */
   uint8_t commands_pending;
+  /** Quadros recusados pelo DMA; o árbitro desarma em cada falha. */
+  uint32_t tx_failures;
 } motors_status_t;
 
 /**
@@ -80,30 +83,19 @@ bool motors_start(void);
  *
  * Recusa se já houver dono ou se algum motor não estiver em zero.
  *
- * @param[in] owner  ::MOTORS_OWNER_BENCH ou ::MOTORS_OWNER_FLIGHT.
+ * @param[in] owner  ::MOTORS_OWNER_BENCH.
  * @return true se armou.
  */
 bool motors_arm(motors_owner_t owner);
 
 /**
- * @brief Zera e desarma no próximo quadro. Pode ser chamada de qualquer task.
+ * @brief Pede zero e desarma na próxima iteração. Não usar em interrupção.
  * @param[in] why  Motivo, registrado no log (texto fixo, não é copiado).
  */
 void motors_stop(const char *why);
 
 /** @brief Dono atual (::MOTORS_OWNER_NONE se desarmado). */
 motors_owner_t motors_owner(void);
-
-/**
- * @brief Aceleração de cada motor pedida pelo controle de voo.
- *
- * Só tem efeito enquanto o dono é ::MOTORS_OWNER_FLIGHT. Os valores são
- * limitados a [0, 1] e convertidos com a resolução total do DShot (2000
- * degraus).
- *
- * @param[in] throttle  Fração 0..1 de cada motor.
- */
-void motors_set_flight_throttle(const float throttle[MOTORS_COUNT]);
 
 /**
  * @brief Alvo de bancada de um ou mais motores.
@@ -137,8 +129,8 @@ bool motors_beep(uint8_t mask);
 /**
  * @brief Renova o keepalive da bancada.
  *
- * Quem armou a bancada precisa chamar isto a cada < 300 ms (console: enquanto
- * a porta tem DTR; IHM: a cada heartbeat). Sem isso a saída desarma.
+ * Chamar somente ao receber um ping/heartbeat válido do cliente a cada < 300 ms.
+ * DTR ativo não renova o prazo. Sem mensagens a saída desarma.
  */
 void motors_bench_keepalive(void);
 
@@ -156,6 +148,19 @@ uint16_t motors_bench_cap(uint16_t permille);
  * @return false se armado, girando ou com fila cheia.
  */
 bool motors_set_direction(uint8_t mask, uint8_t reversed, bool save);
+
+/**
+ * @brief Aceleração direta dos quatro motores pelo controle (só com dono controle).
+ * @param[in] permille  Décimos de por cento de M1..M4, limitados ao limite do controle.
+ * @return false se o controle não está armado.
+ */
+bool motors_control_set(const uint16_t permille[MOTORS_COUNT]);
+
+/**
+ * @brief Limite do controle (até ::MOTORS_BENCH_MAX_PERMILLE).
+ * @return O limite aplicado, em décimos de por cento.
+ */
+uint16_t motors_control_cap(uint16_t permille);
 
 /** @brief Copia o estado atual. */
 void motors_get_status(motors_status_t *out);

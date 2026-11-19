@@ -34,6 +34,15 @@ Sobre o "better": `hover-lqg-pi-better` tinha o mesmo commit que `hover-lqg-pi`.
 
 ## Fase 2 (a partir de 2026-11-11)
 
+Escopo atualizado: `phase2/01-bench-hmi` é uma fundação nova e limpa para
+bancada, sensores, atuação, capturas persistentes e IHM USB. Esta branch não
+carrega control, DroneLink/MAVLink, Pi, ensaios ou o modelo Simulink antigo.
+O export antigo foi movido localmente para `references/legacy-simulink/`, fora
+do build; ele será substituído quando o controle novo for construído. A IHM
+(`hmi/`), gravação/replay e o USB binário bench-link v1 foram implementados e
+testados só no host e no simulador; falta validar na placa. O legado continua
+acessível nas branches históricas.
+
 Temos cerca de um mês até a entrega oficial final. O `main` deve terminar como a versão que funciona como queríamos. Tudo o que existe até a submissão é a última versão do TCC; daqui em diante são melhorias.
 
 Objetivo de voo: decolar mantendo XY, atingir a altura definida, pairar, voltar ao ponto após perturbações e depois executar uma sequência de pontos.
@@ -61,7 +70,7 @@ ESC: Skystars KM55A II 4 em 1, AM32 Turbo (2024), MCU AT32F421, 3S–6S, DShot30
 
 **TX do ESC (telemetria KISS, conferido no código do AM32 em `references/AM32`):** quadro de 10 bytes a 115200 baud com temperatura (°C), tensão (cV), corrente (cA), consumo (mAh), eRPM/100 e CRC8. O ESC responde quando o pacote DShot do motor tem o bit de telemetria ligado. Os quatro ESCs da placa 4 em 1 dividem uma linha, por isso os pedidos são feitos um motor por vez.
 - Não há RX de UART livre. A USART6 só tem RX no PA12 (USB) ou no PC7 (não existe na Black Pill), e a USART1 só tem RX no PA10 ou no PB3 (BNO).
-- Na bancada, sem a Pi, ligar o TX do ESC no PA10 (USART1_RX) no lugar do TX da Pi. Não muda pino e só troca quem interpreta a USART1.
+- Proposta para a bancada, sem a Pi: TX do ESC no PA10 (USART1_RX), no lugar do TX da Pi. **Implementado, não validado no hardware:** a USART1 é exclusiva da telemetria KISS na bancada (`actuators/esc_kiss.c`, `esc_telem.c`); pedidos um motor por vez, ligados pela IHM.
 - Para o voo com a Pi, usar o DShot bidirecional com EDT (Extended DShot Telemetry) do AM32. Ele traz eRPM a cada quadro e temperatura, tensão e corrente, sem fio extra, mas exige reescrever o `dshot.c` para captura de entrada no TIM4.
 
 **CURR:** saída analógica do sensor de corrente total da placa. Vai no PB0 (ADC1, canal 8), já previsto em `power.c`. Cada placa tem uma escala, e a do KM55A II não está documentada: calibrar comparando com a corrente da telemetria KISS ou com um multímetro. A vantagem sobre a telemetria é a taxa (o ADC pode ler a 1 kHz).
@@ -71,4 +80,4 @@ ESC: Skystars KM55A II 4 em 1, AM32 Turbo (2024), MCU AT32F421, 3S–6S, DShot30
 ## Acesso
 
 - Pi: `ssh r1ddax@r1ddax.local`, programa em `~/drone`, ensaios em `~/drone/ensaios`.
-- Gravação do STM32: DFU por USB com `STM32_Programmer_CLI -c port=USB1 -w build/Release/DroneController.hex -v -g`, recuperado do histórico das sessões. O "usb0" de que a equipe lembrava é o `USB1` do CubeProgrammer. Procedimento completo: skill `stm32-flash`.
+- Gravação do STM32: DFU por USB, primeiro dispositivo `USB1` do CubeProgrammer. Na Fase 2 o artefato correto é `build/Release/DroneController.hex`, produzido pelo build bench. Não usar artefatos de branches antigas. Procedimento completo: skill `stm32-flash`.

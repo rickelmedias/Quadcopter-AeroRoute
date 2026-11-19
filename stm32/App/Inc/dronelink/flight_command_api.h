@@ -4,8 +4,8 @@
  *
  * O protocolo chama estas funções para armar, executar trechos, cancelar,
  * segurar posição e pousar, e para ler o estado do voo. A implementação fica
- * em App/Src/control/flight_command.c e repassa tudo para
- * control/flight_ctrl.h.
+ * em App/Src/dronelink/flight_command.c: ela executa os trechos sobre a task de
+ * controle (app/control_task.h), que é a mesma usada pela IHM de bancada.
  *
  * Os valores dos enums são os mesmos do dialeto MAVLink
  * (protocol/drone_controller.xml) e vão direto para a Pi.
@@ -15,6 +15,7 @@
 
 #include "attitude.h"
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 /**
@@ -36,7 +37,7 @@ typedef enum {
 } flight_action_t;
 
 /** Referencial do corpo: x frente, y direita, z baixo (MAV_FRAME_BODY_FRD). */
-#define FLIGHT_FRAME_BODY_FRD  12U
+#define FLIGHT_FRAME_BODY_FRD 12U
 /** Referencial local fixo no ponto em que armou (MAV_FRAME_LOCAL_FRD). */
 #define FLIGHT_FRAME_LOCAL_FRD 20U
 
@@ -186,13 +187,8 @@ typedef struct {
   float vy;
   /** Velocidade Z local, em m/s. */
   float vz;
-  /** Atitude em Euler ZYX, em radianos. É esta representação que o futuro
-      controlador de espaço de estados deve expor e consumir. */
+  /** Atitude em Euler ZYX (φ, θ, ψ do modelo), em radianos. */
   euler_t attitude;
-  /** Representação interna equivalente como quatérnio w,x,y,z. Mantida para
-      telemetria MAVLink, interpolação e rotação de vetores; o LQR não precisa
-      consumi-la. */
-  float q[4];
   /** Velocidade angular p do corpo, em rad/s. Próximo do hover, p ~= roll_dot. */
   float roll_speed;
   /** Velocidade angular q do corpo, em rad/s. Próximo do hover, q ~= pitch_dot. */
@@ -215,8 +211,9 @@ typedef struct {
  * @brief Pede para armar ou desarmar os motores.
  *
  * O protocolo já recusa armar sem identidade de boot persistente ou sem
- * autorização do operador. Armar exige sensores saudáveis; com FLT_DRY_RUN
- * ligado, o voo arma sem girar os motores (ensaio a seco).
+ * autorização do operador. Armar exige sensores saudáveis, saída dos motores
+ * livre e tensão acima do mínimo calibrado; com FLT_SIM o voo arma com os
+ * motores reais em zero.
  *
  * @param[in] arm  true para armar, false para desarmar.
  * @return Resultado do pedido.
@@ -264,7 +261,9 @@ flight_request_result_t flight_request_land(flight_reason_t reason);
  * @brief Lê o estado atual do voo.
  *
  * Posição, velocidade, atitude e velocidades angulares vêm da estimativa
- * x̂ do Kalman, no referencial local (NED a partir de onde armou).
+ * x̂ do EKF, no referencial local (NED, origem e guinada do armamento; x e y
+ * fixados na primeira medida de fluxo acima de 10 cm). z é relativo ao chão
+ * do armamento (0 no chão, −h a h metros).
  *
  * @param[out] snapshot  Destino (NULL é ignorado).
  */
@@ -273,7 +272,7 @@ void flight_get_snapshot(flight_snapshot_t *snapshot);
 /**
  * @brief Informa se os motores podem ser acionados.
  *
- * @return true se LQG_FLIGHT_ENABLED = 1 e FLT_DRY_RUN = 0.
+ * @return false com FLT_SIM (planta simulada, motores reais em zero).
  */
 bool flight_actuation_is_available(void);
 
@@ -285,5 +284,25 @@ bool flight_actuation_is_available(void);
  * @return true se havia um resultado pendente.
  */
 bool flight_poll_leg_result(flight_request_status_t *status, flight_reason_t *reason);
+
+/**
+ * @brief Acompanha o trecho ativo (conclusão, tempo esgotado, decolagem
+ *        pendente) e renova o prazo do árbitro de motores num voo da Pi.
+ *
+ * Chamada pela task do DroneLink a cada volta (alguns ms).
+ */
+void flight_command_tick(uint32_t now_ms);
+
+/**
+ * @brief Próximo texto do voo para a Pi (STATUSTEXT): avisos do controle e dos trechos.
+ * @param[out] out       Destino, terminado em zero.
+ * @param[in]  size      Tamanho do destino.
+ * @param[out] critical  true para corte de motores ou falha.
+ * @return false se não há texto novo.
+ */
+bool flight_take_text(char *out, size_t size, bool *critical);
+
+/** @brief Põe um texto na fila de STATUSTEXT para a Pi (copiado). */
+void flight_push_text(const char *text, bool critical);
 
 #endif

@@ -74,7 +74,8 @@ static void release_flash(void) {
  * @return true se a transferência terminou sem erro.
  */
 static bool transmit(const uint8_t *data, uint16_t length) {
-  return HAL_SPI_Transmit(&hspi1, (uint8_t *)data, length, FLASH_IO_TIMEOUT_MS) == HAL_OK;
+  return HAL_SPI_Transmit(&hspi1, (uint8_t *)data, length,
+                          FLASH_IO_TIMEOUT_MS) == HAL_OK;
 }
 
 /**
@@ -86,7 +87,8 @@ static bool read_status(uint8_t *status) {
   const uint8_t command = FLASH_CMD_READ_STATUS_1;
   select_flash();
   const bool sent = transmit(&command, 1U);
-  const bool received = sent && HAL_SPI_Receive(&hspi1, status, 1U, FLASH_IO_TIMEOUT_MS) == HAL_OK;
+  const bool received = sent &&
+      HAL_SPI_Receive(&hspi1, status, 1U, FLASH_IO_TIMEOUT_MS) == HAL_OK;
   release_flash();
   return received;
 }
@@ -139,8 +141,8 @@ static bool read_data(uint32_t address, void *destination, uint16_t length) {
   };
   select_flash();
   const bool sent = transmit(command, sizeof(command));
-  const bool received =
-      sent && HAL_SPI_Receive(&hspi1, destination, length, FLASH_IO_TIMEOUT_MS) == HAL_OK;
+  const bool received = sent &&
+      HAL_SPI_Receive(&hspi1, destination, length, FLASH_IO_TIMEOUT_MS) == HAL_OK;
   release_flash();
   return received;
 }
@@ -228,7 +230,8 @@ static bool record_is_blank(const boot_record_t *record) {
  */
 static bool record_is_valid(const boot_record_t *record) {
   return record->magic == BOOT_RECORD_MAGIC && record->boot_id != 0U &&
-         record->boot_id_inverse == ~record->boot_id && record->checksum == checksum(record);
+         record->boot_id_inverse == ~record->boot_id &&
+         record->checksum == checksum(record);
 }
 
 /**
@@ -240,8 +243,8 @@ static bool flash_is_supported(void) {
   uint8_t id[3] = {0U};
   select_flash();
   const bool sent = transmit(&command, 1U);
-  const bool received =
-      sent && HAL_SPI_Receive(&hspi1, id, sizeof(id), FLASH_IO_TIMEOUT_MS) == HAL_OK;
+  const bool received = sent &&
+      HAL_SPI_Receive(&hspi1, id, sizeof(id), FLASH_IO_TIMEOUT_MS) == HAL_OK;
   release_flash();
   return received && id[0] == FLASH_JEDEC_WINBOND && id[2] == FLASH_JEDEC_W25Q64;
 }
@@ -258,7 +261,8 @@ bool dronelink_boot_identity_init(uint32_t *boot_id) {
 
   uint32_t newest_id = 0U;
   uint32_t write_address = 0U;
-  for (uint32_t offset = 0U; offset < FLASH_SECTOR_SIZE; offset += sizeof(boot_record_t)) {
+  for (uint32_t offset = 0U; offset < FLASH_SECTOR_SIZE;
+       offset += sizeof(boot_record_t)) {
     boot_record_t record;
     if (!read_data(FLASH_JOURNAL_ADDRESS + offset, &record, sizeof(record))) {
       return false;

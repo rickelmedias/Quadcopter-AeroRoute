@@ -1,4 +1,4 @@
-# Host (PC) environment. The Raspberry Pi keeps its own venv (rpi/tools/pi/requirements.txt).
+# Host (PC) environment for the bench build and checks.
 #   conda env create -f environment.yml
 #   conda env update -f environment.yml --prune
 # Only conda-forge is used. If conda complains about the Anaconda channels' Terms of
@@ -11,11 +11,6 @@ dependencies:
   - clang-format=19
   - cppcheck
   - ruff
+  - pyserial
   - numpy
   - scipy
-  - matplotlib
-  - pyserial
-  - pip
-  - pip:
-      - pymavlink>=2.4.40
-      - control

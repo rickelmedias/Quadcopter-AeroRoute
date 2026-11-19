@@ -2,8 +2,8 @@
 
 Uso (Windows ou Linux, com o STM32CubeIDE instalado):
 
-    python tools/build.py              # build/Release (firmware normal)
-    python tools/build.py --debug      # build/Debug
+    python tools/build.py                     # build/Release
+    python tools/build.py --debug             # build/Debug
     python tools/build.py --gcc "C:\\caminho\\arm-none-eabi-gcc.exe"
 
 Gera ELF, HEX, BIN, mapa de memória e um manifest.json com o hash dos fontes e
@@ -31,7 +31,19 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--gcc', help='Path to arm-none-eabi-gcc.exe')
     parser.add_argument('--debug', action='store_true')
+    parser.add_argument(
+        '--sim',
+        action='store_true',
+        help='FLT_SIM=1: planta simulada no lugar do BNO/MTF, motores reais em zero',
+    )
+    parser.add_argument(
+        '--no-cg-trim',
+        action='store_true',
+        help='LQG_CG_TRIM_ENABLE=0 (variante NoTrim): quatro motores com a mesma base, para comparar',
+    )
     args = parser.parse_args()
+    if args.no_cg_trim and (args.sim or args.debug):
+        parser.error('--no-cg-trim só vale na variante Release')
     gcc = args.gcc or shutil.which('arm-none-eabi-gcc')
     if not gcc:
         candidates = list(
@@ -40,7 +52,12 @@ def main():
         if not candidates:
             parser.error('Pass --gcc with your ARM compiler path')
         gcc = str(sorted(candidates)[-1])
-    variant = 'Debug' if args.debug else 'Release'
+    # A variante vai no HELLO (8 caracteres): Sim/DebugSim mostram na IHM que é FLT_SIM.
+    variant = ('Debug' if args.debug else ('' if args.sim else 'Release')) + (
+        'Sim' if args.sim else ''
+    )
+    if args.no_cg_trim:
+        variant = 'NoTrim'  # no HELLO (8 caracteres): a IHM mostra que o trim do CG está desligado
     out = ROOT / 'build' / variant
     out.mkdir(parents=True, exist_ok=True)
     includes = [
@@ -53,11 +70,11 @@ def main():
         'Middlewares/Third_Party/FreeRTOS/Source/include',
         'Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2',
         'Middlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM4F',
-        'Middlewares/Third_Party/mavlink',
         'USB_DEVICE/App',
         'USB_DEVICE/Target',
         'Middlewares/ST/STM32_USB_Device_Library/Core/Inc',
         'Middlewares/ST/STM32_USB_Device_Library/Class/CDC/Inc',
+        'Middlewares/Third_Party/mavlink',
     ]
     patterns = [
         'Core/Src/*.c',
@@ -79,7 +96,7 @@ def main():
     for inc in includes:
         inputs.update((ROOT / inc).rglob('*.h'))
     inputs.update([ROOT / 'tools/build.py', ROOT / 'STM32F411CEUX_FLASH.ld'])
-    fingerprint = hashlib.sha256(variant.encode())
+    fingerprint = hashlib.sha256(f'phase2-bench/{variant}'.encode())
     for path in sorted(inputs):
         fingerprint.update(path.relative_to(ROOT).as_posix().encode() + b'\0')
         fingerprint.update(path.read_bytes())
@@ -89,6 +106,11 @@ def main():
         '-std=gnu11',
         '-DUSE_HAL_DRIVER',
         '-DSTM32F411xE',
+        # Identidade enviada no HELLO do bench-link: liga a sessão gravada ao manifest.
+        f'-DAEROROUTE_FIRMWARE_ID="{source_hash[:24]}"',
+        f'-DAEROROUTE_BUILD_VARIANT="{variant}"',
+        f'-DFLT_SIM={1 if args.sim else 0}',
+        f'-DLQG_CG_TRIM_ENABLE={0 if args.no_cg_trim else 1}',
         '-g3',
         '-O0' if args.debug else '-Os',
         '-ffunction-sections',
@@ -157,6 +179,8 @@ def main():
     subprocess.run([str(Path(gcc).with_name('arm-none-eabi-size' + suffix)), str(elf)], check=True)
     manifest = {
         'variant': variant,
+        'profile': 'bench',
+        'capabilities': {'manual_motors': True, 'usb_protocol': 'bench-link-v1'},
         'firmware_id': source_hash[:24],
         'source_sha256': source_hash,
         'compiler': str(gcc),

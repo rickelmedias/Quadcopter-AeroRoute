@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AeroRoute · Bancada</title>
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">AeroRoute <span>bancada</span></div>
+    <div class="pill" id="source-pill" title="Fonte de dados">—</div>
+    <div class="meta" id="fw-info">firmware —</div>
+    <div class="meta" id="link-info">enlace —</div>
+    <div class="spacer"></div>
+    <div class="control" id="control-box">
+      <span id="control-state">somente leitura</span>
+      <button id="btn-claim" class="ghost">Assumir controle</button>
+    </div>
+    <button id="btn-marker" class="ghost" title="Marcador na gravação (tecla M)">Marcador</button>
+    <button id="btn-rec" class="rec" title="Gravar sessão">● Gravar</button>
+    <button id="btn-stop" class="stop" title="Para todos os motores (Espaço ou Esc)">STOP</button>
+  </header>
+
+  <div class="banner" id="warnings" hidden></div>
+  <div class="banner" id="banner" hidden></div>
+
+  <nav class="tabs">
+    <button data-tab="panel" class="active">Painel</button>
+    <button data-tab="control">Controle</button>
+    <button data-tab="analysis">Análise (FFT)</button>
+    <button data-tab="session">Fonte e sessões</button>
+    <button data-tab="config">Calibração</button>
+    <span class="hint">Clique num valor para congelá-lo · Espaço/Esc = STOP · M = marcador · F = congelar tudo</span>
+  </nav>
+
+  <main>
+    <!-- ======================= PAINEL ======================= -->
+    <section class="tab" id="tab-panel">
+      <div class="layout">
+        <div class="col-live">
+          <div class="toolbar">
+            <button id="btn-freeze-all">❄ Congelar tudo</button>
+            <input id="freeze-label" placeholder="rótulo da próxima amostra (ex.: ESC ligado, motores parados)">
+            <label class="check"><input type="checkbox" id="show-all"> mostrar todos os sinais</label>
+          </div>
+          <div id="groups" class="groups"></div>
+        </div>
+
+        <div class="col-side">
+          <div class="card" id="motor-card">
+            <div class="card-head">
+              <h2>Motores</h2>
+              <span class="badge" id="arm-badge">desarmado</span>
+              <span class="badge muted" id="hb-badge">heartbeat —</span>
+            </div>
+            <label class="check danger"><input type="checkbox" id="safe-ack"> Sem hélices, ou drone preso em suporte fixo e protegido</label>
+            <div class="row">
+              <button id="btn-arm" class="arm">Armar</button>
+              <button id="btn-disarm">Desarmar</button>
+              <button id="btn-zero">Zerar alvos</button>
+            </div>
+            <div class="slider-row">
+              <label>Limite (cap)</label>
+              <input type="range" id="cap" min="0" max="100" step="1" value="40">
+              <output id="cap-out">40 %</output>
+            </div>
+            <div class="slider-row">
+              <label>Rampa</label>
+              <input type="range" id="rate" min="1" max="100" step="1" value="20">
+              <output id="rate-out">20 %/s</output>
+            </div>
+            <div class="motors" id="motors"></div>
+            <div class="slider-row group-row">
+              <label>Grupo ☑</label>
+              <input type="range" id="group-slider" min="0" max="40" step="0.5" value="0">
+              <output id="group-out">0 %</output>
+            </div>
+            <details>
+              <summary>Sentido de rotação (só desarmado)</summary>
+              <p class="small" id="dir-ref"></p>
+              <div class="row" id="dir-toggles"></div>
+              <div class="row">
+                <button id="btn-dir">Aplicar sentido (RAM do ESC)</button>
+                <button id="btn-dir-save" class="warn">Aplicar e gravar no ESC</button>
+                <button id="btn-beep">Beep ☑</button>
+              </div>
+              <p class="small" id="dir-state"></p>
+            </details>
+            <details>
+              <summary>Teste em degraus (motores ☑)</summary>
+              <div class="grid3">
+                <label>máximo % <input type="number" id="sw-max" value="30" min="0" max="100" step="1"></label>
+                <label>passo % <input type="number" id="sw-step" value="5" min="0.1" max="100" step="0.5"></label>
+                <label>espera s <input type="number" id="sw-hold" value="3" min="0.1" max="30" step="0.5"></label>
+              </div>
+              <button id="btn-sweep">Iniciar degraus</button>
+            </details>
+            <details>
+              <summary>Telemetria do ESC (KISS no PA10)</summary>
+              <label class="check"><input type="checkbox" id="esc-enable"> pedir telemetria (um motor por vez)</label>
+              <div class="grid3">
+                <label>período ms <input type="number" id="esc-period" value="10" min="4" max="1000"></label>
+                <label>polos do motor <input type="number" id="poles" value="14" min="2" step="2"></label>
+                <button id="btn-esc">Aplicar</button>
+              </div>
+              <p class="small">RPM = eRPM ÷ (polos ÷ 2). Sem o fio TX do ESC ligado ao PA10 só aparecem timeouts.</p>
+            </details>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <h2>Gráficos</h2>
+              <select id="chart-window"><option value="5">5 s</option><option value="10" selected>10 s</option><option value="30">30 s</option></select>
+              <button id="btn-chart-clear" class="ghost">limpar</button>
+            </div>
+            <p class="small" id="chart-empty">Use 📈 ao lado de um valor para acompanhar.</p>
+            <div id="charts"></div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><h2>Mensagens</h2></div>
+            <div class="log" id="log"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card frozen-card">
+        <div class="card-head">
+          <h2>Amostras congeladas</h2>
+          <span class="small">Δ = ao vivo − congelado · destaque quando |Δ| &gt; 3σ (σ de 1 s da amostra)</span>
+          <div class="spacer"></div>
+          <button id="btn-compare" class="ghost" disabled>Comparar 2 selecionadas</button>
+          <button id="btn-freeze-clear" class="ghost">Apagar todas</button>
+        </div>
+        <div id="compare"></div>
+        <div id="frozen"></div>
+      </div>
+    </section>
+
+    <!-- ======================= CONTROLE ======================= -->
+    <section class="tab" id="tab-control" hidden>
+      <div class="layout">
+        <div class="col-live">
+          <div class="card">
+            <div class="card-head">
+              <h2>Controle LQR + Kalman · teste com cabo</h2>
+              <span class="badge" id="ct-state">desarmado</span>
+              <span class="badge muted" id="ct-hb">heartbeat —</span>
+            </div>
+            <label class="check danger"><input type="checkbox" id="ct-ack"> Drone preso por cabo, área livre, hélices só se o cabo e o local forem seguros. Eu estou com a mão no STOP (Espaço).</label>
+            <div class="ct-buttons">
+              <button id="ct-arm" class="arm">Armar</button>
+              <button id="ct-takeoff" class="arm">Decolar</button>
+              <button id="ct-land">Pousar</button>
+              <button id="ct-disarm">Desarmar</button>
+              <button id="ct-stop" class="stop big">PARAR (Espaço)</button>
+            </div>
+            <p class="small" id="ct-hint">Armar mede o chão e deixa os motores em zero. Decolar sobe a aceleração até o drone descolar e então segura a altura.</p>
+            <div class="ct-big">
+              <div><span class="ct-label">altura estimada</span><span class="ct-num" id="ct-h-est">—</span></div>
+              <div><span class="ct-label">referência</span><span class="ct-num" id="ct-h-ref">—</span></div>
+              <div><span class="ct-label">altura medida</span><span class="ct-num" id="ct-h-meas">—</span></div>
+              <div><span class="ct-label">aceleração base</span><span class="ct-num" id="ct-base">—</span></div>
+              <div><span class="ct-label">ajuste do hover</span><span class="ct-num" id="ct-trim">—</span></div>
+            </div>
+            <div class="ct-motors" id="ct-motors"></div>
+            <div class="ct-flags" id="ct-flags"></div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><h2>Medidas que o controle recebe</h2></div>
+            <p class="small">NED/FRD, SI. Antes de decolar, com o drone desarmado, incline-o à mão e confira os sinais: lado direito para baixo → φ positivo · nariz para cima → θ positivo · giro horário visto de cima → ψ positivo. Sinal trocado faz o controle piorar a inclinação.</p>
+            <table class="table" id="ct-meas"></table>
+          </div>
+        </div>
+
+        <div class="col-side">
+          <div class="card">
+            <div class="card-head"><h2>Parâmetros</h2></div>
+            <div class="grid2">
+              <label>altura do hover (cm) <input type="number" id="cp-height" step="1" min="10" max="80"></label>
+              <label>aceleração de hover (%) <input type="number" id="cp-hover" step="0.5" min="10" max="90"></label>
+              <label>limite dos motores (%) <input type="number" id="cp-cap" step="1" min="20" max="100"></label>
+              <label>rampa até descolar (%/s) <input type="number" id="cp-spool" step="0.5" min="0.5" max="20"></label>
+              <label>subida (cm/s) <input type="number" id="cp-climb" step="1" min="2" max="50"></label>
+              <label>descida (cm/s) <input type="number" id="cp-land" step="1" min="2" max="50"></label>
+              <label>ganho do ajuste do hover (%/(m·s)) <input type="number" id="cp-ki" step="0.5" min="0" max="20"></label>
+              <label>integrador XY (1/s) <input type="number" id="cp-kixy" step="0.01" min="0" max="0.5"></label>
+              <label>integrador de guinada (1/s) <input type="number" id="cp-kiyaw" step="0.05" min="0" max="2"></label>
+              <label class="check"><input type="checkbox" id="cp-autotrim"> ajuste automático do hover</label>
+              <label class="check"><input type="checkbox" id="cp-ekf"> usar EKF (desligado: Kalman estacionário do Simulink)</label>
+            </div>
+            <div class="row">
+              <button id="cp-apply">Aplicar parâmetros</button>
+              <span class="small" id="cp-state"></span>
+            </div>
+            <p class="small">Valem na hora, inclusive em voo (a altura muda a referência aos poucos). O limite dos motores vale só para o controle; o limite de 40 % da aba Painel é da bancada. A escolha do EKF vale a partir do próximo Armar; os ganhos dos integradores valem na hora. O hover digitado só decide até onde a rampa sobe rápido: no ar, a base parte da aceleração em que o drone de fato descolou e o ajuste automático acha o resto (“ajuste do hover”). O ganho do ajuste é limitado a 10 % do limite de estabilidade com os ganhos de altura em uso (≈0,26 %/(m·s) com 1×, ≈13 com altura P 10× e D 5×). Com o divisor no PA1 calibrado, a saída é corrigida pela tensão da bateria (hover vale a 3,9 V por célula).</p>
+          </div>
+          <div class="card">
+            <div class="card-head"><h2>Ganhos do LQR</h2><span class="small" id="cg-state"></span></div>
+            <p class="small">Multiplicadores dos ganhos gerados no MATLAB (1 = original). Valem na hora, inclusive em voo, e só com o EKF ligado. P = posição/ângulo, D = velocidade/taxa. A coluna “efeito” é a mudança de aceleração de cada motor por unidade de erro. Posição XY P e D multiplicam junto com Rolagem/arfagem P: com atitude 5× e XY 1× a posição fica como no projeto.</p>
+            <table class="table" id="cg-table"></table>
+            <div class="row">
+              <button id="cg-apply">Aplicar ganhos</button>
+              <button id="cg-reset" class="ghost">Voltar tudo para 1×</button>
+            </div>
+            <p class="small">Mude um grupo por vez, em passos pequenos, e grave a sessão. Atitude acima de ~2× pode oscilar (o simulador não tem atraso de motor). Altura: começar por P 5× e D 3×.</p>
+          </div>
+          <div class="card">
+            <div class="card-head"><h2>Estimativa do Kalman</h2></div>
+            <table class="table" id="ct-est"></table>
+          </div>
+          <div class="card">
+            <div class="card-head"><h2>Mensagens</h2></div>
+            <div class="log" id="ct-log"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================= ANÁLISE ======================= -->
+    <section class="tab" id="tab-analysis" hidden>
+      <div class="card">
+        <div class="card-head">
+          <h2>Espectro (FFT, janela de Hann)</h2>
+          <select id="fft-signal"></select>
+          <select id="fft-window"><option value="2">2 s</option><option value="4" selected>4 s</option><option value="10">10 s</option></select>
+          <label class="check"><input type="checkbox" id="fft-log"> escala log</label>
+          <label class="check"><input type="checkbox" id="fft-run" checked> atualizar</label>
+        </div>
+        <canvas id="fft-canvas" height="380"></canvas>
+        <p class="small" id="fft-info"></p>
+        <p class="small">Marcadores: rotação medida pelo ESC (KISS) de cada motor e sua 2ª harmônica. Comando de aceleração nunca é usado como RPM.</p>
+      </div>
+    </section>
+
+    <!-- ======================= SESSÃO ======================= -->
+    <section class="tab" id="tab-session" hidden>
+      <div class="layout2">
+        <div class="card">
+          <div class="card-head"><h2>Fonte de dados</h2></div>
+          <div class="row">
+            <select id="ports"></select>
+            <button id="btn-ports" class="ghost">atualizar</button>
+            <button id="btn-connect">Conectar à placa</button>
+          </div>
+          <div class="row">
+            <button id="btn-sim">Usar simulador</button>
+            <button id="btn-none" class="ghost">Desconectar</button>
+          </div>
+          <p class="small">Conectar abre a porta com DTR e inicia uma sessão nova no STM32 (motores parados). O simulador é um STM32 falso em Python, só para testar a IHM.</p>
+          <div id="replay-box" hidden>
+            <h3>Replay</h3>
+            <div class="row">
+              <button id="btn-play">⏯ Pausar/continuar</button>
+              <select id="replay-speed"><option>0.5</option><option selected>1</option><option>2</option><option>5</option></select>
+              <span id="replay-pos"></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h2>Gravação</h2></div>
+          <div class="grid2">
+            <label>nome <input id="rec-name" value="ruido_bno_mtf"></label>
+            <label>superfície <input id="rec-surface" placeholder="ex.: MDF fosco"></label>
+            <label>iluminação <input id="rec-light" placeholder="ex.: LED teto"></label>
+            <label>altura inicial do sensor (m) <input id="rec-height" type="number" step="0.001"></label>
+            <label>hélices <select id="rec-props"><option>sem</option><option>com, suporte fixo</option></select></label>
+            <label>ESC <select id="rec-esc"><option>desligado</option><option>energizado</option></select></label>
+          </div>
+          <label>notas <textarea id="rec-notes" rows="3"></textarea></label>
+          <div class="row">
+            <button id="btn-notes" class="ghost">Salvar notas na sessão</button>
+            <span class="small" id="rec-path"></span>
+          </div>
+        </div>
+
+        <div class="card wide">
+          <div class="card-head"><h2>Sessões gravadas</h2><button id="btn-sessions" class="ghost">atualizar</button></div>
+          <table class="table" id="sessions"></table>
+          <p class="small">Cada sessão tem raw.blr (bytes para replay), um CSV por mensagem com unidades no cabeçalho, events.jsonl (comandos, marcadores, congelamentos), meta.json e freezes.json.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================= CALIBRAÇÃO ======================= -->
+    <section class="tab" id="tab-config" hidden>
+      <div class="layout2">
+        <div class="card">
+          <div class="card-head"><h2>Bateria e corrente (ADC)</h2></div>
+          <div class="grid2">
+            <label>ganho do divisor PA1 (V/V) <input type="number" id="cal-vgain" step="0.001" min="0"></label>
+            <label>tensão mínima para armar (V, 0 = sem) <input type="number" id="cal-vmin" step="0.1" min="0"></label>
+            <label>corrente CURR (A/V) <input type="number" id="cal-again" step="0.01" min="0"></label>
+            <label>offset CURR (V) <input type="number" id="cal-aoff" step="0.001"></label>
+          </div>
+          <button id="btn-cal">Aplicar calibração</button>
+          <h3>Assistente</h3>
+          <div class="grid2">
+            <label>tensão medida no multímetro (V) <input type="number" id="cal-vmeas" step="0.01"></label>
+            <button id="btn-cal-vgain" class="ghost">Calcular ganho com PA1 atual</button>
+            <button id="btn-cal-zero" class="ghost">Offset = PB0 atual (corrente zero)</button>
+            <label>corrente conhecida (A) <input type="number" id="cal-ameas" step="0.01"></label>
+            <button id="btn-cal-again" class="ghost">Calcular A/V com PB0 atual</button>
+          </div>
+          <p class="small" id="cal-live"></p>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h2>Estimativa no PC</h2></div>
+          <p class="small">Altura = distância·cosφ·cosθ filtrada; velocidade = (fluxo − k·ω)·altura/100. k depende da montagem: gire sem transladar e ajuste até o fluxo compensado ficar parado.</p>
+          <div class="grid2">
+            <label>k fluxo x × giro y <input type="number" id="est-kx" step="0.1"></label>
+            <label>k fluxo y × giro x <input type="number" id="est-ky" step="0.1"></label>
+            <label>τ altura (s) <input type="number" id="est-tau" step="0.01" min="0"></label>
+            <label>qualidade mínima <input type="number" id="est-q" step="1" min="0" max="255"></label>
+          </div>
+          <div class="row">
+            <button id="btn-est">Aplicar</button>
+            <button id="btn-est-reset" class="ghost">Zerar deslocamento</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h2>Fluxo de dados</h2></div>
+          <div class="grid2">
+            <label class="check"><input type="checkbox" id="stream-on" checked> IMU, MTF e motores</label>
+            <label>divisor do IMU (1 = 400 Hz) <input type="number" id="stream-div" min="1" max="16" value="1"></label>
+          </div>
+          <button id="btn-stream">Aplicar</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+</body>
+</html>

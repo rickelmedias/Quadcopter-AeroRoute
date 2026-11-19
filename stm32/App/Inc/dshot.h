@@ -58,6 +58,16 @@ uint16_t dshot_packet(uint16_t value, bool telemetry);
 bool dshot_write(const uint16_t value[4], bool telemetry);
 
 /**
+ * @brief Envia quadro com pedido de telemetria individual (bit i = motor i+1).
+ * A seleção individual evita respostas simultâneas na linha KISS compartilhada.
+ * Isto não implementa recepção KISS nem troca a posse da USART1.
+ */
+bool dshot_write_mask(const uint16_t value[4], uint8_t telemetry_mask);
+
+/** @brief Monta quatro pacotes, com seleção individual do bit de telemetria. */
+void dshot_packets(const uint16_t value[4], uint8_t telemetry_mask, uint16_t packet[4]);
+
+/**
  * @brief Converte décimos de por cento (0..1000) em valor DShot.
  *
  * 0 vira 0 (parado); 1..1000 vira 48..2047, linear.

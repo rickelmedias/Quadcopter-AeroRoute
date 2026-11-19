@@ -1,0 +1,181 @@
+{
+ "_nota": "Massas da tabela informada (551 g, não conferidas na balança). Posições: centro de massa de cada peça em mm, FRD, origem no centro dos 4 motores. Substitua os null.",
+ "components": [
+  {
+   "name": "Carcaça e estrutura",
+   "mass_g": 119,
+   "shape": "box",
+   "pos_mm": [
+    null,
+    null,
+    null
+   ],
+   "dims_mm": [
+    null,
+    null,
+    null
+   ]
+  },
+  {
+   "name": "Bateria 3S 2200 mAh",
+   "mass_g": 145,
+   "shape": "box",
+   "pos_mm": [
+    null,
+    null,
+    null
+   ],
+   "dims_mm": [
+    null,
+    null,
+    null
+   ]
+  },
+  {
+   "name": "Contrapeso esquerdo",
+   "mass_g": 63,
+   "shape": "box",
+   "pos_mm": [
+    null,
+    null,
+    null
+   ],
+   "dims_mm": [
+    null,
+    null,
+    null
+   ]
+  },
+  {
+   "name": "Contrapeso direito",
+   "mass_g": 63,
+   "shape": "box",
+   "pos_mm": [
+    null,
+    null,
+    null
+   ],
+   "dims_mm": [
+    null,
+    null,
+    null
+   ]
+  },
+  {
+   "name": "Raspberry Pi Zero W",
+   "mass_g": 12,
+   "shape": "box",
+   "pos_mm": [
+    null,
+    null,
+    null
+   ],
+   "dims_mm": [
+    null,
+    null,
+    null
+   ]
+  },
+  {
+   "name": "MTF-01",
+   "mass_g": 15,
+   "shape": "box",
+   "pos_mm": [
+    null,
+    null,
+    null
+   ],
+   "dims_mm": [
+    null,
+    null,
+    null
+   ]
+  },
+  {
+   "name": "STM32 + BNO085 + placa",
+   "mass_g": 7,
+   "shape": "box",
+   "pos_mm": [
+    null,
+    null,
+    null
+   ],
+   "dims_mm": [
+    null,
+    null,
+    null
+   ]
+  },
+  {
+   "name": "ESC 4 em 1",
+   "mass_g": 17,
+   "shape": "box",
+   "pos_mm": [
+    null,
+    null,
+    null
+   ],
+   "dims_mm": [
+    null,
+    null,
+    null
+   ]
+  },
+  {
+   "name": "Outros: cabos, protoboard, parafusos",
+   "mass_g": 14,
+   "shape": "box",
+   "pos_mm": [
+    null,
+    null,
+    null
+   ],
+   "dims_mm": [
+    null,
+    null,
+    null
+   ],
+   "note": "65 g de eletrônica, sensores e cabos menos Pi 12, MTF 15, STM32 7 e ESC 17"
+  },
+  {
+   "name": "Motor + hélice u1 (frente-esquerda)",
+   "mass_g": 24,
+   "shape": "point",
+   "pos_mm": [
+    50.2,
+    -50.2,
+    0
+   ]
+  },
+  {
+   "name": "Motor + hélice u2 (frente-direita)",
+   "mass_g": 24,
+   "shape": "point",
+   "pos_mm": [
+    50.2,
+    50.2,
+    0
+   ]
+  },
+  {
+   "name": "Motor + hélice u3 (trás-direita)",
+   "mass_g": 24,
+   "shape": "point",
+   "pos_mm": [
+    -50.2,
+    50.2,
+    0
+   ]
+  },
+  {
+   "name": "Motor + hélice u4 (trás-esquerda)",
+   "mass_g": 24,
+   "shape": "point",
+   "pos_mm": [
+    -50.2,
+    -50.2,
+    0
+   ]
+  }
+ ]
+}
