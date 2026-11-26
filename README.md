@@ -1,5 +1,9 @@
 # DroneController
 
+<p align="center">
+  <img src="docs/images/drone_de_cima.jpeg" alt="Protótipo do drone visto de cima: Raspberry Pi Zero, STM32 Black Pill, bateria e quatro motores" width="480">
+</p>
+
 Firmware de uma controladora de drone baseada na **STM32F411CEU6 Black Pill**.
 Ele roda o controle apresentado no TCC — **Filtro de Kalman + LQR, simulado e
 validado no MATLAB/Simulink** e exportado como `STM32_ert_rtw` — sobre o
