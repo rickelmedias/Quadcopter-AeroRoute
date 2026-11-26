@@ -1,8 +1,12 @@
 # QUALIFY: controle LQG qualificado (05/11/2026)
 
-Este documento registra a versão do controle que a equipe aprovou nos ensaios
-de 05/11/2026 (commit `e0606d1`, tag `lqg-melhorado-aprovado`, branch
+Este documento registra a versão do controle que a equipe testou nos ensaios
+de 05/11/2026 (commit `7032a0f`, tag `lqg-improved-v1`, branch
 `controle-lqi`), o que mudou do projeto do MATLAB/Simulink do TCC até ela, por
+
+> **Checkpoint, não versão final.** Esta é uma melhoria implementada sobre a
+> primeira entrega: os resultados foram melhores que os dela, mas o controle
+> ainda precisa de ajustes para atingir o desempenho que buscamos.
 que cada mudança foi feita e como os testes foram conduzidos.
 
 Resumo: o drone voa **estável em atitude e altura**, sem tombar, inclusive
@@ -693,7 +697,7 @@ melhorado; o `CTL_FF_TH` fixo faz o papel com um valor medido e conhecido.
 ## 8. Como reproduzir
 
 ```
-git checkout lqg-melhorado-aprovado
+git checkout lqg-improved-v1
 python3 tools/build.py            # firmware em build/Release/
 sh tests/run.sh                   # testes, simulação e conferência das tabelas
 python3 tools/lqg_ajustado.py     # regenera Kd/Kfd ajustados e o estimador

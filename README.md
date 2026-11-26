@@ -142,8 +142,8 @@ TCC no lugar dos sensores. Detalhes: [`docs/teste_comunicacao.md`](docs/teste_co
 
 ## Estado da branch `controle-lqg-posicao` (07/11/2026)
 
-Esta branch parte do **LQG melhorado** aprovado em 05/11 (tag
-`lqg-melhorado-aprovado`, ver [`QUALIFY.md`](QUALIFY.md)) e liga o **XY do LQG
+Esta branch parte do **LQG melhorado** de 05/11 (checkpoint, ainda não é a versão final) (tag
+`lqg-improved-v1`, ver [`QUALIFY.md`](QUALIFY.md)) e liga o **XY do LQG
 do TCC**: o drone deve segurar o ponto de decolagem (0, 0), subir até a altura
 pedida e aceitar um setpoint X, Y, Z e guinada. Ela fica parada aqui enquanto a
 equipe trabalha em outra branch; esta seção é o ponto de retomada.

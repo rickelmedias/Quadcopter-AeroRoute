@@ -3,7 +3,7 @@
 > **Removido em 06/11/2026.** O LQI saiu do firmware, do painel e das
 > ferramentas (`CTL_LQI`, `lqi_*.c`, `tools/lqi`, `tools/lqi_projeto.py`). Este
 > texto fica como registro dos ensaios; o código está no histórico do git (tag
-> `lqg-melhorado-aprovado`).
+> `lqg-improved-v1`).
 
 ## Por que
 
