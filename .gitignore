@@ -66,3 +66,16 @@ Desktop.ini
 
 # Logs dos ensaios do painel de controle (tools/controle_gui.py).
 # tools/logs/
+
+# Espelhos de terceiros, dados de sessão e builds locais ---------------------
+/references/
+/hmi/data/
+/stm32/build/
+
+# Arquivos de assistentes/IDE de IA não fazem parte do projeto --------------
+.claude/
+CLAUDE.md
+AGENTS.md
+.cursor/
+.cursorrules
+.github/copilot-instructions.md
