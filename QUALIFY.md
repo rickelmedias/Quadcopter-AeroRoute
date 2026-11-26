@@ -3,11 +3,11 @@
 Este documento registra a versão do controle que a equipe testou nos ensaios
 de 05/11/2026 (commit `7032a0f`, tag `lqg-improved-v1`, branch
 `controle-lqi`), o que mudou do projeto do MATLAB/Simulink do TCC até ela, por
+que cada mudança foi feita e como os testes foram conduzidos.
 
 > **Checkpoint, não versão final.** Esta é uma melhoria implementada sobre a
 > primeira entrega: os resultados foram melhores que os dela, mas o controle
 > ainda precisa de ajustes para atingir o desempenho que buscamos.
-que cada mudança foi feita e como os testes foram conduzidos.
 
 Resumo: o drone voa **estável em atitude e altura**, sem tombar, inclusive
 fora da jaula e depois de puxões com a mão. Ainda **não segura a posição
