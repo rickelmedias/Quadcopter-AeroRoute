@@ -1,5 +1,9 @@
 # Quadcopter AeroRoute
 
+<p align="center">
+  <img src="latex/images/hardware/prototipo/drone_de_cima.jpeg" alt="Quadcopter prototype seen from above: Raspberry Pi Zero W, STM32 Black Pill, battery and four motors" width="480">
+</p>
+
 Experimental quadcopter developed for the UniFacens Computer Engineering thesis by Rickelme Gabriel Dias and Thalison Rosa (2026).
 
 The STM32F411 runs FreeRTOS, sensor acquisition, LQG control (LQR plus linear Kalman estimation), motor mixing, DShot and failsafes. The Raspberry Pi Zero W runs the Python mission computer and a genetic algorithm that minimizes the **total Euclidean distance of a closed 3D route**. DroneLink is the project application protocol over MAVLink 2 framing and UART. Minimum distance is the objective; minimum travel time, obstacle avoidance and energy optimization are not implemented objectives.

@@ -14,3 +14,12 @@ latex/*.lot
 latex/*.loq
 latex/*.fls
 latex/*.fdb_latexmk
+
+# AI assistant files are not part of the project
+.claude/
+CLAUDE.md
+AGENTS.md
+.opencode/
+opencode.jsonc
+.cursor/
+.cursorrules
